@@ -21,6 +21,16 @@ void Engine::init() {
   for (FrameData &frame : frame_data) {
     CreateFrameData(context, frame);
   }
+  VkExtent3D draw_image_extent = {
+      1600,
+      900,
+      1,
+  };
+  CreateAllocatedImage(
+      context, draw_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+      VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
+          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      draw_image);
   GraphicsPipelineBuilder graphics_builder;
   pipeline::SetShaders(context, "triangle.vert.spv", "triangle.frag.spv",
                        graphics_builder);
@@ -77,17 +87,8 @@ void Engine::run() {
     TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
                     swapchain.images[swapchain_image_index]);
 
-    VkClearColorValue clear_value{};
-    static float color;
-    color += 0.005f;
-    clear_value = {0.0f, 0.0f, std::abs(std::sin(color)), 1.0f};
-
-    VkImageSubresourceRange clear_range =
-        vkinit::ImageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
-
-    vkCmdClearColorImage(cmd, swapchain.images[swapchain_image_index],
-                         VK_IMAGE_LAYOUT_GENERAL, &clear_value, 1,
-                         &clear_range);
+    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+                    draw_image.image);
 
     TransitionImage(cmd, VK_IMAGE_LAYOUT_GENERAL,
                     VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
@@ -141,6 +142,8 @@ void Engine::destroy() {
   for (FrameData &frame : frame_data) {
     DestroyFrameData(context, frame);
   }
+
+  DestroyAllocatedImage(context, draw_image);
 
   pipeline::DestroyPipeline(context, triangle_pipeline);
 

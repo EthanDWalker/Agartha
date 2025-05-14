@@ -1,4 +1,6 @@
 #include "init.h"
+#include <numbers>
+#include <vulkan/vulkan_core.h>
 
 namespace vkinit {
 VkCommandBufferBeginInfo
@@ -47,6 +49,36 @@ VkSubmitInfo2 SubmitInfo(VkCommandBufferSubmitInfo *cmd,
   info.signalSemaphoreInfoCount = signal_semaphore_info ? 1 : 0;
   info.pWaitSemaphoreInfos = wait_semaphore_info;
   info.waitSemaphoreInfoCount = wait_semaphore_info ? 1 : 0;
+  return info;
+}
+
+VkImageCreateInfo ImageCI(VkFormat format, VkImageUsageFlags usage_flags,
+                          VkExtent3D extent) {
+  VkImageCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  info.extent = extent;
+  info.format = format;
+  info.imageType = VK_IMAGE_TYPE_2D;
+  info.mipLevels = 1;
+  info.arrayLayers = 1;
+  info.samples = VK_SAMPLE_COUNT_1_BIT;
+  info.tiling = VK_IMAGE_TILING_OPTIMAL;
+  info.usage = usage_flags;
+  return info;
+}
+
+VkImageViewCreateInfo
+ImageViewCI(VkFormat format, VkImageAspectFlags aspect_flags, VkImage image) {
+  VkImageViewCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  info.image = image;
+  info.format = format;
+  info.subresourceRange.baseMipLevel = 0;
+  info.subresourceRange.levelCount = 1;
+  info.subresourceRange.baseArrayLayer = 0;
+  info.subresourceRange.layerCount = 1;
+  info.subresourceRange.aspectMask = aspect_flags;
   return info;
 }
 } // namespace vkinit
