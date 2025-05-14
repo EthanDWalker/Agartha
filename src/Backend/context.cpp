@@ -55,10 +55,6 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   context.graphics_queue_index =
       vkb_device.get_queue_index(vkb::QueueType::graphics).value();
 
-  context.compute_queue = vkb_device.get_queue(vkb::QueueType::compute).value();
-  context.compute_queue_index =
-      vkb_device.get_queue_index(vkb::QueueType::compute).value();
-
   VmaAllocatorCreateInfo allocator_ci{};
   allocator_ci.device = context.device;
   allocator_ci.instance = context.instance;

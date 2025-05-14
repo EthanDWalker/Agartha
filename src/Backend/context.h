@@ -12,9 +12,7 @@ struct VulkanContext {
   VmaAllocator allocator;
   VkDebugUtilsMessengerEXT debug_messenger;
   VkQueue graphics_queue;
-  VkQueue compute_queue;
   uint32_t graphics_queue_index;
-  uint32_t compute_queue_index;
 };
 
 void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context);
