@@ -5,7 +5,7 @@ namespace vkinit {
 VkCommandBufferBeginInfo
 CommandBufferBeginInfo(VkCommandBufferUsageFlags flags);
 VkImageSubresourceRange ImageSubresourceRange(VkImageAspectFlags aspect_mask);
-VkSemaphoreSubmitInfo SemaphoreSumbitInfo(VkPipelineStageFlags2 stage_mask,
+VkSemaphoreSubmitInfo SemaphoreSubmitInfo(VkPipelineStageFlags2 stage_mask,
                                           VkSemaphore semaphore);
 VkCommandBufferSubmitInfo CommandBufferSubmitInfo(VkCommandBuffer cmd);
 VkSubmitInfo2 SubmitInfo(VkCommandBufferSubmitInfo *cmd,

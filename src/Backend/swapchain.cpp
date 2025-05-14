@@ -2,6 +2,7 @@
 #include <VkBootstrap.h>
 #include <cstdint>
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 void CreateVulkanSwapchain(VulkanContext &vulkan_context, uint32_t width,
                      uint32_t height, Swapchain &swapchain) {
@@ -18,7 +19,7 @@ void CreateVulkanSwapchain(VulkanContext &vulkan_context, uint32_t width,
           .set_desired_format(VkSurfaceFormatKHR{
               .format = swapchain.format,
               .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
-          .set_desired_present_mode(VK_PRESENT_MODE_MAILBOX_KHR)
+          .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
           .set_desired_extent(width, height)
           .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
           .build()

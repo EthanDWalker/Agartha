@@ -3,11 +3,14 @@
 #include "Backend/frame_data.h"
 #include "Backend/image.h"
 #include "Backend/init.h"
+#include "Backend/pipeline.h"
 #include "Backend/swapchain.h"
 #include "Backend/util.h"
+#include "fmt/base.h"
 #include <GLFW/glfw3.h>
 #include <cstdint>
 #include <limits>
+#include <vulkan/vulkan_core.h>
 
 void Engine::init() {
   glfwInit();
@@ -18,6 +21,18 @@ void Engine::init() {
   for (FrameData &frame : frame_data) {
     CreateFrameData(context, frame);
   }
+  GraphicsPipelineBuilder graphics_builder;
+  pipeline::SetShaders(context, "triangle.vert.spv", "triangle.frag.spv",
+                       graphics_builder);
+  pipeline::SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE,
+                        graphics_builder);
+  pipeline::SetPolygonMode(VK_POLYGON_MODE_FILL, graphics_builder);
+  pipeline::SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                             graphics_builder);
+  pipeline::SetNoBlending(graphics_builder);
+  pipeline::SetNoDepthTest(graphics_builder);
+  pipeline::SetNoMultisampling(graphics_builder);
+  pipeline::BuildGraphicsPipeline(context, graphics_builder, triangle_pipeline);
 }
 
 void Engine::run() {
@@ -64,7 +79,7 @@ void Engine::run() {
 
     VkClearColorValue clear_value{};
     static float color;
-    color += 0.0005f;
+    color += 0.005f;
     clear_value = {0.0f, 0.0f, std::abs(std::sin(color)), 1.0f};
 
     VkImageSubresourceRange clear_range =
@@ -82,12 +97,12 @@ void Engine::run() {
 
     VkCommandBufferSubmitInfo cmd_info = vkinit::CommandBufferSubmitInfo(cmd);
 
-    VkSemaphoreSubmitInfo wait_semaphore_info = vkinit::SemaphoreSumbitInfo(
+    VkSemaphoreSubmitInfo wait_semaphore_info = vkinit::SemaphoreSubmitInfo(
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR,
         frame_data[frame_index].swapchain_semaphore);
 
     VkSemaphoreSubmitInfo signal_semaphore_info =
-        vkinit::SemaphoreSumbitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+        vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
                                     frame_data[frame_index].render_semaphore);
 
     VkSubmitInfo2 submit_info = vkinit::SubmitInfo(
@@ -108,6 +123,7 @@ void Engine::run() {
       VkResult e = vkQueuePresentKHR(context.graphics_queue, &present_info);
       if (e == VK_ERROR_OUT_OF_DATE_KHR) {
         int32_t width, height;
+        fmt::println("{}", static_cast<int>(e));
         glfwGetWindowSize(window, &width, &height);
         vkDeviceWaitIdle(context.device);
         DestroyVulkanSwapchain(context, swapchain);
@@ -125,6 +141,8 @@ void Engine::destroy() {
   for (FrameData &frame : frame_data) {
     DestroyFrameData(context, frame);
   }
+
+  pipeline::DestroyPipeline(context, triangle_pipeline);
 
   DestroyVulkanSwapchain(context, swapchain);
   DestroyVulkanContext(context);

@@ -19,7 +19,7 @@ VkImageSubresourceRange ImageSubresourceRange(VkImageAspectFlags aspect_mask) {
   return info;
 }
 
-VkSemaphoreSubmitInfo SemaphoreSumbitInfo(VkPipelineStageFlags2 stage_mask,
+VkSemaphoreSubmitInfo SemaphoreSubmitInfo(VkPipelineStageFlags2 stage_mask,
                                           VkSemaphore semaphore) {
   VkSemaphoreSubmitInfo info{};
   info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
