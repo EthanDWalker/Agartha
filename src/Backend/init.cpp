@@ -81,4 +81,32 @@ ImageViewCI(VkFormat format, VkImageAspectFlags aspect_flags, VkImage image) {
   info.subresourceRange.aspectMask = aspect_flags;
   return info;
 }
+
+VkRenderingAttachmentInfo AttachmentInfo(VkImageView view, VkClearValue *clear,
+                                         VkImageLayout layout) {
+  VkRenderingAttachmentInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+  info.imageLayout = layout;
+  info.imageView = view;
+  if (clear) {
+    info.clearValue = *clear;
+  }
+  info.loadOp =
+      clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+  info.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  return info;
+}
+
+VkRenderingInfo RenderingInfo(VkExtent2D render_extent,
+                              VkRenderingAttachmentInfo *color_attachment,
+                              VkRenderingAttachmentInfo *depth_attachment) {
+  VkRenderingInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+  info.renderArea = VkRect2D{VkOffset2D{0, 0}, render_extent};
+  info.layerCount = 1;
+  info.pColorAttachments = color_attachment;
+  info.colorAttachmentCount = color_attachment ? 1 : 0;
+  info.pDepthAttachment = depth_attachment;
+  return info;
+}
 } // namespace vkinit

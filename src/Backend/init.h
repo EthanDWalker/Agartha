@@ -15,4 +15,9 @@ VkImageCreateInfo ImageCI(VkFormat format, VkImageUsageFlags usage_flags,
                           VkExtent3D extent);
 VkImageViewCreateInfo
 ImageViewCI(VkFormat format, VkImageAspectFlags aspect_flags, VkImage image);
+VkRenderingAttachmentInfo AttachmentInfo(VkImageView view, VkClearValue *clear,
+                                         VkImageLayout layout);
+VkRenderingInfo RenderingInfo(VkExtent2D render_extent,
+                              VkRenderingAttachmentInfo *color_attachment,
+                              VkRenderingAttachmentInfo *depth_attachment);
 } // namespace vkinit

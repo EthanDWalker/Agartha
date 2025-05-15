@@ -1,10 +1,11 @@
 #pragma once
 #include "context.h"
 #include <string>
+#include <vector>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-constexpr std::string shader_file_path = "../shaders/";
+const std::string shader_file_path = "../shaders/";
 
 struct Pipeline {
   VkPipeline obj;
@@ -12,6 +13,7 @@ struct Pipeline {
 };
 
 struct GraphicsPipelineBuilder {
+  std::vector<VkPushConstantRange> push_constant_ranges{};
   VkPipelineInputAssemblyStateCreateInfo input_assembly{};
   VkPipelineTessellationStateCreateInfo tessellation{};
   VkPipelineViewportStateCreateInfo viewport{};
@@ -40,32 +42,26 @@ struct GraphicsPipelineBuilder {
         VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
   }
+
+  void SetShaders(VulkanContext &context, std::string vert, std::string frag);
+
+  void SetInputTopology(VkPrimitiveTopology topology);
+
+  void SetPolygonMode(VkPolygonMode mode);
+
+  void SetCullMode(VkCullModeFlags cull_mode, VkFrontFace front_face);
+
+  void SetNoMultisampling();
+
+  void SetNoBlending();
+
+  void SetColorAttachmentFormat(VkFormat format);
+
+  void SetNoDepthTest();
+
+  void AddPushConstantRange(VkShaderStageFlags stage_flags, uint32_t size);
+
+  void Build(VulkanContext &context, Pipeline &pipeline);
 };
 
-namespace pipeline {
-void SetShaders(VulkanContext &context, std::string vert, std::string frag,
-                GraphicsPipelineBuilder &builder);
-
-void SetInputTopology(VkPrimitiveTopology topology,
-                      GraphicsPipelineBuilder &builder);
-
-void SetPolygonMode(VkPolygonMode mode, GraphicsPipelineBuilder &builder);
-
-void SetCullMode(VkCullModeFlags cull_mode, VkFrontFace front_face,
-                 GraphicsPipelineBuilder &builder);
-
-void SetNoMultisampling(GraphicsPipelineBuilder &builder);
-
-void SetNoBlending(GraphicsPipelineBuilder &builder);
-
-void SetColorAttachmentFormat(VkFormat format,
-                              GraphicsPipelineBuilder &builder);
-
-void SetNoDepthTest(GraphicsPipelineBuilder &builder);
-
-void BuildGraphicsPipeline(VulkanContext &context,
-                           GraphicsPipelineBuilder &builder,
-                           Pipeline &pipeline);
-
 void DestroyPipeline(VulkanContext &context, Pipeline &pipeline);
-} // namespace pipeline

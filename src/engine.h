@@ -3,9 +3,11 @@
 #include "Backend/context.h"
 #include "Backend/frame_data.h"
 #include "Backend/image.h"
+#include "Backend/immediate_submit.h"
 #include "Backend/swapchain.h"
 #include "Backend/pipeline.h"
 #include "GLFW/glfw3.h"
+#include "mesh.h"
 #include <cstdint>
 
 #if defined(DEBUG)
@@ -17,10 +19,12 @@ constexpr bool DEBUG = false;
 constexpr uint8_t FRAME_OVERLAP = 2;
 
 struct Engine {
+  Mesh rectangle_mesh;
   VulkanContext context;
   Swapchain swapchain;
   AllocatedImage draw_image;
-  Pipeline triangle_pipeline;
+  ImmediateSubmit immediate_submit;
+  Pipeline mesh_pipeline;
   FrameData frame_data[FRAME_OVERLAP];
   GLFWwindow *window;
 

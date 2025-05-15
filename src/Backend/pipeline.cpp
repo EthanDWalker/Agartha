@@ -1,16 +1,18 @@
 #include "pipeline.h"
 #include "context.h"
 #include "util.h"
+#include <cstdint>
 #include <cstring>
 #include <fmt/base.h>
 #include <fstream>
+#include <vector>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
 bool LoadShaderModule(std::string_view file_path, VkDevice device,
                       VkShaderModule *out_shader_module) {
   // open the file. With cursor at the end
-  std::ifstream file(file_path.cbegin(), std::ios::ate | std::ios::binary);
+  std::ifstream file(file_path.data(), std::ios::ate | std::ios::binary);
 
   if (!file.is_open()) {
     return false;
@@ -53,79 +55,89 @@ bool LoadShaderModule(std::string_view file_path, VkDevice device,
   return true;
 }
 
-namespace pipeline {
-void SetShaders(VulkanContext &context, std::string vert, std::string frag,
-                GraphicsPipelineBuilder &builder) {
+void GraphicsPipelineBuilder::SetShaders(VulkanContext &context,
+                                         std::string vert, std::string frag) {
   if (!LoadShaderModule(shader_file_path + vert, context.device,
-                        &builder.vert_shader)) {
+                        &vert_shader)) {
     fmt::println("[ERROR] failed to load {}", vert);
   }
   if (!LoadShaderModule(shader_file_path + frag, context.device,
-                        &builder.frag_shader)) {
+                        &frag_shader)) {
     fmt::println("[ERROR] failed to load {}", frag);
   }
 }
 
-void SetInputTopology(VkPrimitiveTopology topology,
-                      GraphicsPipelineBuilder &builder) {
-  builder.input_assembly.topology = topology;
-  builder.input_assembly.primitiveRestartEnable = VK_FALSE;
+void GraphicsPipelineBuilder::SetInputTopology(VkPrimitiveTopology topology) {
+  input_assembly.topology = topology;
+  input_assembly.primitiveRestartEnable = VK_FALSE;
 }
 
-void SetPolygonMode(VkPolygonMode mode, GraphicsPipelineBuilder &builder) {
-  builder.rasterization.polygonMode = mode;
-  builder.rasterization.lineWidth = 1.0f;
+void GraphicsPipelineBuilder::SetPolygonMode(VkPolygonMode mode) {
+  rasterization.polygonMode = mode;
+  rasterization.lineWidth = 1.0f;
 }
 
-void SetCullMode(VkCullModeFlags cull_mode, VkFrontFace front_face,
-                 GraphicsPipelineBuilder &builder) {
-  builder.rasterization.cullMode = cull_mode;
-  builder.rasterization.frontFace = front_face;
+void GraphicsPipelineBuilder::SetCullMode(VkCullModeFlags cull_mode,
+                                          VkFrontFace front_face) {
+  rasterization.cullMode = cull_mode;
+  rasterization.frontFace = front_face;
 }
 
-void SetNoMultisampling(GraphicsPipelineBuilder &builder) {
-  builder.multisample.sampleShadingEnable = VK_FALSE;
+void GraphicsPipelineBuilder::SetNoMultisampling() {
+  multisample.sampleShadingEnable = VK_FALSE;
   // multisampling defaulted to no multisampling (1 sample per pixel)
-  builder.multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-  builder.multisample.minSampleShading = 1.0f;
-  builder.multisample.pSampleMask = nullptr;
+  multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+  multisample.minSampleShading = 1.0f;
+  multisample.pSampleMask = nullptr;
   // no alpha to coverage either
-  builder.multisample.alphaToCoverageEnable = VK_FALSE;
-  builder.multisample.alphaToOneEnable = VK_FALSE;
+  multisample.alphaToCoverageEnable = VK_FALSE;
+  multisample.alphaToOneEnable = VK_FALSE;
 }
 
-void SetNoBlending(GraphicsPipelineBuilder &builder) {
-  builder.color_attachment.colorWriteMask =
+void GraphicsPipelineBuilder::SetNoBlending() {
+  color_attachment.colorWriteMask =
       VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
       VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-  builder.color_attachment.blendEnable = VK_FALSE;
+  color_attachment.blendEnable = VK_FALSE;
 }
 
-void SetColorAttachmentFormat(VkFormat format,
-                              GraphicsPipelineBuilder &builder) {
-  builder.color_attachment_format = format;
-  builder.render_info.colorAttachmentCount = 1;
-  builder.render_info.pColorAttachmentFormats =
-      &builder.color_attachment_format;
+void GraphicsPipelineBuilder::SetColorAttachmentFormat(VkFormat format) {
+  color_attachment_format = format;
+  render_info.colorAttachmentCount = 1;
+  render_info.pColorAttachmentFormats = &color_attachment_format;
 }
 
-void SetNoDepthTest(GraphicsPipelineBuilder &builder) {
-  builder.depth_stencil.depthTestEnable = VK_FALSE;
-  builder.depth_stencil.depthWriteEnable = VK_FALSE;
-  builder.depth_stencil.depthCompareOp = VK_COMPARE_OP_NEVER;
-  builder.depth_stencil.depthBoundsTestEnable = VK_FALSE;
-  builder.depth_stencil.stencilTestEnable = VK_FALSE;
-  builder.depth_stencil.front = {};
-  builder.depth_stencil.back = {};
-  builder.depth_stencil.minDepthBounds = 0.f;
-  builder.depth_stencil.maxDepthBounds = 1.f;
+void GraphicsPipelineBuilder::SetNoDepthTest() {
+  depth_stencil.depthTestEnable = VK_FALSE;
+  depth_stencil.depthWriteEnable = VK_FALSE;
+  depth_stencil.depthCompareOp = VK_COMPARE_OP_NEVER;
+  depth_stencil.depthBoundsTestEnable = VK_FALSE;
+  depth_stencil.stencilTestEnable = VK_FALSE;
+  depth_stencil.front = {};
+  depth_stencil.back = {};
+  depth_stencil.minDepthBounds = 0.f;
+  depth_stencil.maxDepthBounds = 1.f;
 }
 
-void BuildGraphicsPipeline(VulkanContext &context,
-                           GraphicsPipelineBuilder &builder,
-                           Pipeline &pipeline) {
+void GraphicsPipelineBuilder::AddPushConstantRange(
+    VkShaderStageFlags stage_flags, uint32_t size) {
+  VkPushConstantRange range{};
+  uint32_t offset = 0;
+  for (auto range : push_constant_ranges) {
+    offset += range.size;
+  }
+  range.offset = offset;
+  range.size = size;
+  range.stageFlags = stage_flags;
+  push_constant_ranges.push_back(range);
+}
+
+void GraphicsPipelineBuilder::Build(VulkanContext &context,
+                                    Pipeline &pipeline) {
   VkPipelineLayoutCreateInfo pipeline_layout_ci{};
   pipeline_layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipeline_layout_ci.pushConstantRangeCount = push_constant_ranges.size();
+  pipeline_layout_ci.pPushConstantRanges = push_constant_ranges.data();
 
   VK_CHECK(vkCreatePipelineLayout(context.device, &pipeline_layout_ci, nullptr,
                                   &pipeline.layout));
@@ -148,7 +160,7 @@ void BuildGraphicsPipeline(VulkanContext &context,
   color_blending.logicOpEnable = VK_FALSE;
   color_blending.logicOp = VK_LOGIC_OP_COPY;
   color_blending.attachmentCount = 1;
-  color_blending.pAttachments = &builder.color_attachment;
+  color_blending.pAttachments = &color_attachment;
 
   // completely clear VertexInputStateCreateInfo, as we have no need for it
   VkPipelineVertexInputStateCreateInfo vertex_input_info{};
@@ -161,27 +173,27 @@ void BuildGraphicsPipeline(VulkanContext &context,
   VkGraphicsPipelineCreateInfo pipeline_ci = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
   // connect the renderInfo to the pNext extension mechanism
-  pipeline_ci.pNext = &builder.render_info;
+  pipeline_ci.pNext = &render_info;
 
-  std::array<VkPipelineShaderStageCreateInfo, 2> shader_stages = {};
+  VkPipelineShaderStageCreateInfo shader_stages[2] = {};
   shader_stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   shader_stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   shader_stages[0].pName = "main";
   shader_stages[1].pName = "main";
   shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-  shader_stages[0].module = builder.vert_shader;
+  shader_stages[0].module = vert_shader;
   shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-  shader_stages[1].module = builder.frag_shader;
+  shader_stages[1].module = frag_shader;
 
   pipeline_ci.stageCount = 2;
-  pipeline_ci.pStages = shader_stages.cbegin();
+  pipeline_ci.pStages = shader_stages;
   pipeline_ci.pVertexInputState = &vertex_input_info;
-  pipeline_ci.pInputAssemblyState = &builder.input_assembly;
+  pipeline_ci.pInputAssemblyState = &input_assembly;
   pipeline_ci.pViewportState = &viewport_state;
-  pipeline_ci.pRasterizationState = &builder.rasterization;
-  pipeline_ci.pMultisampleState = &builder.multisample;
+  pipeline_ci.pRasterizationState = &rasterization;
+  pipeline_ci.pMultisampleState = &multisample;
   pipeline_ci.pColorBlendState = &color_blending;
-  pipeline_ci.pDepthStencilState = &builder.depth_stencil;
+  pipeline_ci.pDepthStencilState = &depth_stencil;
   pipeline_ci.layout = pipeline.layout;
 
   VkDynamicState state[] = {VK_DYNAMIC_STATE_VIEWPORT,
@@ -198,12 +210,11 @@ void BuildGraphicsPipeline(VulkanContext &context,
     fmt::println("[ERROR] failed to create pipeline");
   }
 
-  vkDestroyShaderModule(context.device, builder.vert_shader, nullptr);
-  vkDestroyShaderModule(context.device, builder.frag_shader, nullptr);
+  vkDestroyShaderModule(context.device, vert_shader, nullptr);
+  vkDestroyShaderModule(context.device, frag_shader, nullptr);
 }
 
 void DestroyPipeline(VulkanContext &context, Pipeline &pipeline) {
   vkDestroyPipelineLayout(context.device, pipeline.layout, nullptr);
   vkDestroyPipeline(context.device, pipeline.obj, nullptr);
 }
-} // namespace pipeline

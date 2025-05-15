@@ -7,10 +7,53 @@
 #include "Backend/swapchain.h"
 #include "Backend/util.h"
 #include "fmt/base.h"
+#include "mesh.h"
 #include <GLFW/glfw3.h>
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <vulkan/vulkan_core.h>
+
+void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline,
+              AllocatedImage &draw_image, Mesh &mesh) {
+  VkRenderingAttachmentInfo attachment_info = vkinit::AttachmentInfo(
+      draw_image.image_view, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+  VkRenderingInfo rendering_info =
+      vkinit::RenderingInfo({draw_image.extent.width, draw_image.extent.height},
+                            &attachment_info, nullptr);
+
+  vkCmdBeginRendering(cmd, &rendering_info);
+
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.obj);
+  VkViewport viewport = {};
+  viewport.x = 0;
+  viewport.y = 0;
+  viewport.width = draw_image.extent.width;
+  viewport.height = draw_image.extent.height;
+  viewport.minDepth = 0.f;
+  viewport.maxDepth = 1.f;
+
+  vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+  VkRect2D scissor = {};
+  scissor.offset.x = 0;
+  scissor.offset.y = 0;
+  scissor.extent.width = draw_image.extent.width;
+  scissor.extent.height = draw_image.extent.height;
+
+  vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+  vkCmdPushConstants(cmd, pipeline.layout,
+                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                     0, sizeof(VkDeviceAddress), &mesh.vertex_address);
+
+  vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+  vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
+
+  vkCmdEndRendering(cmd);
+}
 
 void Engine::init() {
   glfwInit();
@@ -18,31 +61,51 @@ void Engine::init() {
   window = glfwCreateWindow(1600, 900, "Engine", nullptr, nullptr);
   InitVulkanContext(window, DEBUG, context);
   CreateVulkanSwapchain(context, 1600, 900, swapchain);
+
   for (FrameData &frame : frame_data) {
     CreateFrameData(context, frame);
   }
-  VkExtent3D draw_image_extent = {
-      1600,
-      900,
+
+  VkExtent3D draw_image_extent_3d = {
+      swapchain.extent.width,
+      swapchain.extent.height,
       1,
   };
+
   CreateAllocatedImage(
-      context, draw_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+      context, draw_image_extent_3d, VK_FORMAT_R16G16B16A16_SFLOAT,
       VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
       draw_image);
-  GraphicsPipelineBuilder graphics_builder;
-  pipeline::SetShaders(context, "triangle.vert.spv", "triangle.frag.spv",
-                       graphics_builder);
-  pipeline::SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE,
-                        graphics_builder);
-  pipeline::SetPolygonMode(VK_POLYGON_MODE_FILL, graphics_builder);
-  pipeline::SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-                             graphics_builder);
-  pipeline::SetNoBlending(graphics_builder);
-  pipeline::SetNoDepthTest(graphics_builder);
-  pipeline::SetNoMultisampling(graphics_builder);
-  pipeline::BuildGraphicsPipeline(context, graphics_builder, triangle_pipeline);
+  immediate_submit.Create(context);
+
+  GraphicsPipelineBuilder pipeline_builder;
+  pipeline_builder.SetShaders(context, "mesh.vert.spv", "mesh.frag.spv");
+  pipeline_builder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+  pipeline_builder.SetPolygonMode(VK_POLYGON_MODE_FILL);
+  pipeline_builder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+  pipeline_builder.SetNoBlending();
+  pipeline_builder.SetNoDepthTest();
+  pipeline_builder.SetNoMultisampling();
+  pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_FRAGMENT_BIT |
+                                            VK_SHADER_STAGE_VERTEX_BIT,
+                                        sizeof(VkDeviceAddress));
+  pipeline_builder.Build(context, mesh_pipeline);
+
+  std::array<Vertex, 4> vertices;
+  vertices[0].position = {0.5, -0.5, 0};
+  vertices[1].position = {0.5, 0.5, 0};
+  vertices[2].position = {-0.5, -0.5, 0};
+  vertices[3].position = {-0.5, 0.5, 0};
+
+  vertices[0].color = {0, 0, 0, 1};
+  vertices[1].color = {0.5, 0.5, 0.5, 1};
+  vertices[2].color = {1, 0, 0, 1};
+  vertices[3].color = {0, 1, 0, 1};
+
+  std::array<uint32_t, 6> indices = {0, 1, 2, 2, 1, 3};
+
+  CreateMesh(context, immediate_submit, indices, vertices, rectangle_mesh);
 }
 
 void Engine::run() {
@@ -84,13 +147,23 @@ void Engine::run() {
 
     VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, draw_image.image);
+
+    DrawMesh(cmd, mesh_pipeline, draw_image, rectangle_mesh);
+
+    TransitionImage(cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, draw_image.image);
+
+    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     swapchain.images[swapchain_image_index]);
 
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-                    draw_image.image);
+    CopyImageToImage(
+        cmd, draw_image.image, swapchain.images[swapchain_image_index],
+        {draw_image.extent.width, draw_image.extent.height}, swapchain.extent);
 
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_GENERAL,
+    TransitionImage(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                     swapchain.images[swapchain_image_index]);
 
@@ -124,7 +197,6 @@ void Engine::run() {
       VkResult e = vkQueuePresentKHR(context.graphics_queue, &present_info);
       if (e == VK_ERROR_OUT_OF_DATE_KHR) {
         int32_t width, height;
-        fmt::println("{}", static_cast<int>(e));
         glfwGetWindowSize(window, &width, &height);
         vkDeviceWaitIdle(context.device);
         DestroyVulkanSwapchain(context, swapchain);
@@ -143,9 +215,13 @@ void Engine::destroy() {
     DestroyFrameData(context, frame);
   }
 
+  immediate_submit.Destroy(context);
+
+  DestroyMesh(context, rectangle_mesh);
+
   DestroyAllocatedImage(context, draw_image);
 
-  pipeline::DestroyPipeline(context, triangle_pipeline);
+  DestroyPipeline(context, mesh_pipeline);
 
   DestroyVulkanSwapchain(context, swapchain);
   DestroyVulkanContext(context);
