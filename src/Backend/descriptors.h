@@ -62,6 +62,32 @@ private:
     size_t operator()(const DescriptorLayoutInfo &k) const { return k.hash(); }
   };
 
-  std::unordered_map<DescriptorLayoutInfo, VkDescriptorSetLayout, DescriptorLayoutHash> layout_cache;
-  VkDevice device;
+  std::unordered_map<DescriptorLayoutInfo, VkDescriptorSetLayout,
+                     DescriptorLayoutHash>
+      m_layout_cache;
+  VkDevice m_device;
+};
+
+class DescriptorBuilder {
+public:
+  static DescriptorBuilder Begin(DescriptorLayoutCache *layout_cache,
+                                 DescriptorAllocatator *allocator);
+
+  DescriptorBuilder &BindBuffer(uint32_t binding,
+                                VkDescriptorBufferInfo *buffer_info,
+                                VkDescriptorType type,
+                                VkShaderStageFlags stage_flags);
+  DescriptorBuilder &BindImage(uint32_t binding,
+                               VkDescriptorImageInfo *image_info,
+                               VkDescriptorType type,
+                               VkShaderStageFlags stage_flags);
+
+  bool Build(VkDescriptorSet &set, VkDescriptorSetLayout &layout);
+
+private:
+  std::vector<VkWriteDescriptorSet> m_writes;
+  std::vector<VkDescriptorSetLayoutBinding> m_bindings;
+
+  DescriptorLayoutCache *m_cache;
+  DescriptorAllocatator *m_allocator;
 };

@@ -1,4 +1,5 @@
 #pragma once
+#include <vulkan/vulkan.h>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
@@ -8,4 +9,8 @@ struct Vertex {
   glm::vec3 normal;
   float uv_y;
   glm::vec4 color;
+};
+
+struct PushConstantData {
+  VkDeviceAddress vertex_buffer;
 };

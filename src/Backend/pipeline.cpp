@@ -132,12 +132,19 @@ void GraphicsPipelineBuilder::AddPushConstantRange(
   push_constant_ranges.push_back(range);
 }
 
+void GraphicsPipelineBuilder::AddDescriptorSetLayout(
+    VkDescriptorSetLayout layout) {
+  descriptor_set_layouts.push_back(layout);
+}
+
 void GraphicsPipelineBuilder::Build(VulkanContext &context,
                                     Pipeline &pipeline) {
   VkPipelineLayoutCreateInfo pipeline_layout_ci{};
   pipeline_layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipeline_layout_ci.pushConstantRangeCount = push_constant_ranges.size();
   pipeline_layout_ci.pPushConstantRanges = push_constant_ranges.data();
+  pipeline_layout_ci.pushConstantRangeCount = push_constant_ranges.size();
+  pipeline_layout_ci.pSetLayouts = descriptor_set_layouts.data();
+  pipeline_layout_ci.setLayoutCount = descriptor_set_layouts.size();
 
   VK_CHECK(vkCreatePipelineLayout(context.device, &pipeline_layout_ci, nullptr,
                                   &pipeline.layout));
@@ -177,13 +184,14 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
 
   VkPipelineShaderStageCreateInfo shader_stages[2] = {};
   shader_stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  shader_stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  shader_stages[0].pName = "main";
-  shader_stages[1].pName = "main";
   shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
   shader_stages[0].module = vert_shader;
+  shader_stages[0].pName = "main";
+
+  shader_stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
   shader_stages[1].module = frag_shader;
+  shader_stages[1].pName = "main";
 
   pipeline_ci.stageCount = 2;
   pipeline_ci.pStages = shader_stages;

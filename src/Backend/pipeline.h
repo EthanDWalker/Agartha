@@ -14,6 +14,7 @@ struct Pipeline {
 
 struct GraphicsPipelineBuilder {
   std::vector<VkPushConstantRange> push_constant_ranges{};
+  std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};
   VkPipelineInputAssemblyStateCreateInfo input_assembly{};
   VkPipelineTessellationStateCreateInfo tessellation{};
   VkPipelineViewportStateCreateInfo viewport{};
@@ -60,6 +61,8 @@ struct GraphicsPipelineBuilder {
   void SetNoDepthTest();
 
   void AddPushConstantRange(VkShaderStageFlags stage_flags, uint32_t size);
+
+  void AddDescriptorSetLayout(VkDescriptorSetLayout layout);
 
   void Build(VulkanContext &context, Pipeline &pipeline);
 };

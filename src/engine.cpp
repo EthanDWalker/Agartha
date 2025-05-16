@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "Backend/context.h"
+#include "Backend/descriptors.h"
 #include "Backend/frame_data.h"
 #include "Backend/image.h"
 #include "Backend/init.h"
@@ -8,6 +9,7 @@
 #include "Backend/util.h"
 #include "fmt/base.h"
 #include "mesh.h"
+#include "types.h"
 #include <GLFW/glfw3.h>
 #include <array>
 #include <cstdint>
@@ -44,9 +46,12 @@ void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline,
 
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
+  PushConstantData data{};
+  data.vertex_buffer = mesh.vertex_address;
+
   vkCmdPushConstants(cmd, pipeline.layout,
                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                     0, sizeof(VkDeviceAddress), &mesh.vertex_address);
+                     0, sizeof(data), &data);
 
   vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
@@ -55,7 +60,7 @@ void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline,
   vkCmdEndRendering(cmd);
 }
 
-void Engine::init() {
+void Engine::Init() {
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_FALSE);
   window = glfwCreateWindow(1600, 900, "Engine", nullptr, nullptr);
@@ -79,6 +84,11 @@ void Engine::init() {
       draw_image);
   immediate_submit.Create(context);
 
+  descriptor_allocator.Init(context);
+  descriptor_layout_cache.Init(context);
+
+  VkDescriptorSetLayoutCreateInfo ci{};
+
   GraphicsPipelineBuilder pipeline_builder;
   pipeline_builder.SetShaders(context, "mesh.vert.spv", "mesh.frag.spv");
   pipeline_builder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
@@ -87,9 +97,9 @@ void Engine::init() {
   pipeline_builder.SetNoBlending();
   pipeline_builder.SetNoDepthTest();
   pipeline_builder.SetNoMultisampling();
-  pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_FRAGMENT_BIT |
-                                            VK_SHADER_STAGE_VERTEX_BIT,
-                                        sizeof(VkDeviceAddress));
+  pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
+                                            VK_SHADER_STAGE_FRAGMENT_BIT,
+                                        sizeof(PushConstantData));
   pipeline_builder.Build(context, mesh_pipeline);
 
   std::array<Vertex, 4> vertices;
@@ -108,7 +118,7 @@ void Engine::init() {
   CreateMesh(context, immediate_submit, indices, vertices, rectangle_mesh);
 }
 
-void Engine::run() {
+void Engine::Run() {
   uint8_t frame_index = 0;
 
   while (!glfwWindowShouldClose(window)) {
@@ -208,7 +218,7 @@ void Engine::run() {
   }
 }
 
-void Engine::destroy() {
+void Engine::Destroy() {
   vkDeviceWaitIdle(context.device);
 
   for (FrameData &frame : frame_data) {
@@ -216,6 +226,9 @@ void Engine::destroy() {
   }
 
   immediate_submit.Destroy(context);
+
+  descriptor_allocator.Cleanup();
+  descriptor_layout_cache.Cleanup();
 
   DestroyMesh(context, rectangle_mesh);
 

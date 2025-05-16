@@ -30,8 +30,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glfw)
 
-find_package(Vulkan REQUIRED)
-
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
@@ -39,18 +37,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
-FetchContent_Declare(
-    fastgltf
-    GIT_REPOSITORY https://github.com/spnda/fastgltf.git
-    GIT_TAG d4734a7e55d8d25155e755d895e018e423845cd0
-)
-FetchContent_MakeAvailable(fastgltf)
-
 file(GLOB IMGUI_SOURCES
     ${imgui_SOURCE_DIR}/*.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
 )
+
+find_package(Vulkan REQUIRED)
 
 add_library(imgui STATIC ${IMGUI_SOURCES})
 
@@ -68,8 +61,9 @@ add_executable(engine ${SOURCES})
 
 target_include_directories(engine PUBLIC 
     ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/ext/
     ${Vulkan_INCLUDE_DIR}
     imgui
 )
 
-target_link_libraries(engine PRIVATE imgui fastgltf::fastgltf ${Vulkan_LIBRARY} glfw fmt::fmt vk-bootstrap::vk-bootstrap)
+target_link_libraries(engine PRIVATE imgui ${Vulkan_LIBRARY} glfw fmt::fmt vk-bootstrap::vk-bootstrap)

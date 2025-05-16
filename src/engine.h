@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Backend/context.h"
+#include "Backend/descriptors.h"
 #include "Backend/frame_data.h"
 #include "Backend/image.h"
 #include "Backend/immediate_submit.h"
@@ -20,6 +21,8 @@ constexpr uint8_t FRAME_OVERLAP = 2;
 
 struct Engine {
   Mesh rectangle_mesh;
+  DescriptorAllocatator descriptor_allocator;
+  DescriptorLayoutCache descriptor_layout_cache;
   VulkanContext context;
   Swapchain swapchain;
   AllocatedImage draw_image;
@@ -28,9 +31,9 @@ struct Engine {
   FrameData frame_data[FRAME_OVERLAP];
   GLFWwindow *window;
 
-  void init();
+  void Init();
 
-  void run();
+  void Run();
 
-  void destroy();
+  void Destroy();
 };

@@ -3,9 +3,9 @@
 int main() {
   Engine engine{};
 
-  engine.init();
+  engine.Init();
 
-  engine.run();
+  engine.Run();
 
-  engine.destroy();
+  engine.Destroy();
 }
