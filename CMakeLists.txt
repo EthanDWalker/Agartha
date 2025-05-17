@@ -67,3 +67,28 @@ target_include_directories(engine PUBLIC
 )
 
 target_link_libraries(engine PRIVATE imgui ${Vulkan_LIBRARY} glfw fmt::fmt vk-bootstrap::vk-bootstrap)
+
+file(GLOB SHADER_SRC
+    ${CMAKE_SOURCE_DIR}/assets/shaders/*.frag 
+    ${CMAKE_SOURCE_DIR}/assets/shaders/*.vert 
+    ${CMAKE_SOURCE_DIR}/assets/shaders/*.comp
+)
+
+set(COMPILED_SHADERS)
+
+foreach(SHADER ${SHADER_SRC})
+  get_filename_component(FILE_NAME ${SHADER} NAME)
+  set(COMPILED_FILE ${CMAKE_SOURCE_DIR}/assets/shaders/${FILE_NAME}.spv)
+
+  add_custom_command(
+      OUTPUT ${COMPILED_FILE}
+      COMMAND ${Vulkan_GLSLC_EXECUTABLE} ${SHADER} -o ${COMPILED_FILE}
+      DEPENDS ${SHADER}
+      COMMENT "Compiling shader ${FILE_NAME}"
+      VERBATIM
+  )
+
+  list(APPEND COMPILED_SHADERS ${COMPILED_FILE})
+endforeach()
+
+add_custom_target(compile_shaders ALL DEPENDS ${COMPILED_SHADERS})

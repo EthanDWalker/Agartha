@@ -1,5 +1,6 @@
 #pragma once
 #include "Backend/context.h"
+#include "Backend/immediate_submit.h"
 #include <vma/vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
@@ -11,9 +12,19 @@ struct AllocatedImage {
   VkFormat format;
 };
 
+void CreateImageSampler(VulkanContext &context, VkSampler &sampler);
+
+void DestroyImageSampler(VulkanContext &context, VkSampler &sampler);
+
 void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
-                          VkFormat format, VkImageUsageFlags flags,
+                          VkFormat format, VkImageUsageFlags usage_flags,
                           AllocatedImage &image);
+
+void CreateAllocatedImageData(VulkanContext &context,
+                              ImmediateSubmit immediate_submit, void *data,
+                              VkExtent3D size, VkFormat format,
+                              VkImageUsageFlags usage_flags,
+                              AllocatedImage &image);
 
 void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_format,
                      VkImageLayout new_format, VkImage image);

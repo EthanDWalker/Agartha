@@ -1,13 +1,31 @@
 #include "mesh.h"
-#include <cassert>
-#include <cstdint>
-#include <fmt/core.h>
 #include "Backend/buffer.h"
 #include "Backend/context.h"
-#include "fmt/base.h"
+#include "Backend/pipeline.h"
+#include "types.h"
+#include <cassert>
+#include <cstdint>
 #include <cstring>
+#include <fmt/core.h>
 #define VMA_IMPLEMENTATION
 #include <vma/vk_mem_alloc.h>
+
+void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline, glm::mat4 world_matrix,
+              glm::vec3 view_pos, Mesh &mesh) {
+  PushConstantData data{};
+  data.world_matrix = world_matrix;
+  data.vertex_buffer = mesh.vertex_address;
+  data.view_pos = view_pos;
+
+  vkCmdPushConstants(cmd, pipeline.layout,
+                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                     0, sizeof(data), &data);
+
+  vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+  vkCmdDrawIndexed(cmd, mesh.index_buffer.info.size / sizeof(uint32_t), 1, 0, 0,
+                   0);
+}
 
 void CreateMesh(VulkanContext &context, ImmediateSubmit immediate_submit,
                 std::span<uint32_t> indices, std::span<Vertex> vertices,
@@ -38,7 +56,6 @@ void CreateMesh(VulkanContext &context, ImmediateSubmit immediate_submit,
   CreateBuffer(context, vertex_buffer_size + index_buffer_size,
                VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY,
                staging_buffer);
-
 
   void *data = staging_buffer.allocation->GetMappedData();
 

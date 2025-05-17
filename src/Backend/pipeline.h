@@ -5,7 +5,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-const std::string shader_file_path = "../shaders/";
+const std::string shader_file_path = "../assets/shaders/";
 
 struct Pipeline {
   VkPipeline obj;
