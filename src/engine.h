@@ -2,6 +2,7 @@
 
 #include "Backend/buffer.h"
 #include "Backend/context.h"
+#include "Backend/descriptors.h"
 #include "Backend/frame_data.h"
 #include "Backend/image.h"
 #include "Backend/immediate_submit.h"
@@ -26,6 +27,7 @@ struct Engine {
   Swapchain swapchain;
   ImmediateSubmit immediate_submit;
   Camera camera;
+  DesciptorBuilder descriptor_builder;
   FrameData frame_data[FRAME_OVERLAP];
   GLFWwindow *window;
 
@@ -40,7 +42,6 @@ struct Engine {
   Pipeline mesh_pipeline;
   Pipeline light_pipeline;
 
-  VkDescriptorPool descriptor_pool;
   VkDescriptorSet descriptor_set;
   VkDescriptorSetLayout descriptor_layout;
 

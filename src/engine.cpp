@@ -1,6 +1,7 @@
 #include "engine.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
+#include "Backend/descriptors.h"
 #include "Backend/frame_data.h"
 #include "Backend/image.h"
 #include "Backend/init.h"
@@ -120,116 +121,13 @@ void Engine::Init() {
   CreateBufferData(context, immediate_submit, &material, sizeof(Material),
                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, material_buffer);
 
-  {
-    VkDescriptorPoolSize image_sampler_pool_size{};
-    image_sampler_pool_size.descriptorCount = 1;
-    image_sampler_pool_size.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-
-    VkDescriptorPoolSize uniform_pool_size{};
-    uniform_pool_size.descriptorCount = 2;
-    uniform_pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-
-    VkDescriptorPoolSize pool_sizes[] = {
-        image_sampler_pool_size,
-        uniform_pool_size,
-    };
-
-    VkDescriptorPoolCreateInfo descriptor_pool_ci{};
-    descriptor_pool_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptor_pool_ci.pPoolSizes = pool_sizes;
-    descriptor_pool_ci.poolSizeCount = 2;
-    descriptor_pool_ci.maxSets = 1;
-
-    vkCreateDescriptorPool(context.device, &descriptor_pool_ci, nullptr,
-                           &descriptor_pool);
-  }
-
-  {
-    VkDescriptorSetLayoutBinding binding_image{};
-    binding_image.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    binding_image.binding = 0;
-    binding_image.descriptorCount = 1;
-    binding_image.stageFlags =
-        VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutBinding binding_uniform{};
-    binding_uniform.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    binding_uniform.binding = 1;
-    binding_uniform.descriptorCount = 1;
-    binding_uniform.stageFlags =
-        VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutBinding binding_uniform_2{};
-    binding_uniform_2.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    binding_uniform_2.binding = 2;
-    binding_uniform_2.descriptorCount = 1;
-    binding_uniform_2.stageFlags =
-        VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutBinding bindings[] = {binding_image, binding_uniform,
-                                               binding_uniform_2};
-
-    VkDescriptorSetLayoutCreateInfo descriptor_layout_ci{};
-    descriptor_layout_ci.sType =
-        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptor_layout_ci.pBindings = bindings;
-    descriptor_layout_ci.bindingCount = 3;
-    vkCreateDescriptorSetLayout(context.device, &descriptor_layout_ci, nullptr,
-                                &descriptor_layout);
-
-    VkDescriptorSetAllocateInfo descriptor_set_alloc_info{};
-    descriptor_set_alloc_info.sType =
-        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptor_set_alloc_info.descriptorPool = descriptor_pool;
-    descriptor_set_alloc_info.pSetLayouts = &descriptor_layout;
-    descriptor_set_alloc_info.descriptorSetCount = 1;
-
-    vkAllocateDescriptorSets(context.device, &descriptor_set_alloc_info,
-                             &descriptor_set);
-
-    VkDescriptorImageInfo image_info{};
-    image_info.imageView = wall_texture.image.image_view;
-    image_info.sampler = sampler;
-    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-    VkWriteDescriptorSet write_image{};
-    write_image.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write_image.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    write_image.descriptorCount = 1;
-    write_image.dstBinding = 0;
-    write_image.dstSet = descriptor_set;
-    write_image.pImageInfo = &image_info;
-
-    VkDescriptorBufferInfo buffer_info{};
-    buffer_info.buffer = point_light_buffer.buffer;
-    buffer_info.offset = 0;
-    buffer_info.range = VK_WHOLE_SIZE;
-
-    VkWriteDescriptorSet write_buffer{};
-    write_buffer.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write_buffer.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    write_buffer.descriptorCount = 1;
-    write_buffer.dstBinding = 1;
-    write_buffer.dstSet = descriptor_set;
-    write_buffer.pBufferInfo = &buffer_info;
-
-    VkDescriptorBufferInfo buffer_info_2{};
-    buffer_info_2.buffer = material_buffer.buffer;
-    buffer_info_2.offset = 0;
-    buffer_info_2.range = VK_WHOLE_SIZE;
-
-    VkWriteDescriptorSet write_buffer_2{};
-    write_buffer_2.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write_buffer_2.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    write_buffer_2.descriptorCount = 1;
-    write_buffer_2.dstBinding = 2;
-    write_buffer_2.dstSet = descriptor_set;
-    write_buffer_2.pBufferInfo = &buffer_info_2;
-
-    VkWriteDescriptorSet writes[] = {write_buffer, write_image, write_buffer_2};
-
-    vkUpdateDescriptorSets(context.device, 3, writes, 0, nullptr);
-  }
+  descriptor_builder.Init(context);
+  descriptor_builder.BindImage(0, wall_texture.image.image_view, sampler);
+  descriptor_builder.BindBuffer(1, point_light_buffer.buffer);
+  descriptor_builder.BindBuffer(2, material_buffer.buffer);
+  descriptor_builder.Build(
+      context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
+      descriptor_set, descriptor_layout);
 
   {
     GraphicsPipelineBuilder pipeline_builder;
@@ -386,7 +284,7 @@ void Engine::Destroy() {
     DestroyFrameData(context, frame);
   }
 
-  vkDestroyDescriptorPool(context.device, descriptor_pool, nullptr);
+  descriptor_builder.Destroy(context);
   vkDestroyDescriptorSetLayout(context.device, descriptor_layout, nullptr);
 
   DestroyImageSampler(context, sampler);
