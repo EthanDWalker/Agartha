@@ -32,10 +32,10 @@ struct Engine {
   GLFWwindow *window;
 
   Texture wall_texture;
+  Texture specular_wall_texture;
   VkSampler sampler;
   AllocatedImage draw_image;
   AllocatedBuffer point_light_buffer;
-  AllocatedBuffer material_buffer;
 
   Mesh rectangle_mesh;
 

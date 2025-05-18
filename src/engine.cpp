@@ -23,16 +23,9 @@
 static PointLight point_light{
     .color = {1.0, 1.0, 1.0, 2.0},
     .position = {-1.0, 2.0, 2.0},
-};
-
-static Material material[] = {
-    Material{
-        .ambient = {0.1f, 0.1f, 0.1f},
-        .shininess = 32.0f,
-        .diffuse = {0.8f, 0.8f, 0.8f},
-        .padding = 0,
-        .specular = {0.1f, 0.1f, 0.1f},
-    },
+    .ambient = {0.2f, 0.2f, 0.2f, 1.0f},
+    .diffuse = {0.5f, 0.5f, 0.5f, 1.0f},
+    .specular = {1.0f, 1.0f, 1.0f, 1.0f},
 };
 
 void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline, Pipeline &light_pipeline,
@@ -115,16 +108,17 @@ void Engine::Init() {
 
   CreateImageSampler(context, sampler);
   CreateTexture(context, immediate_submit, "wall.png", wall_texture);
+  CreateTexture(context, immediate_submit, "specular_wall.png",
+                specular_wall_texture);
 
   CreateBufferData(context, immediate_submit, &point_light, sizeof(PointLight),
                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, point_light_buffer);
-  CreateBufferData(context, immediate_submit, &material, sizeof(Material),
-                   VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, material_buffer);
 
   descriptor_builder.Init(context);
   descriptor_builder.BindImage(0, wall_texture.image.image_view, sampler);
-  descriptor_builder.BindBuffer(1, point_light_buffer.buffer);
-  descriptor_builder.BindBuffer(2, material_buffer.buffer);
+  descriptor_builder.BindImage(1, specular_wall_texture.image.image_view,
+                               sampler);
+  descriptor_builder.BindBuffer(2, point_light_buffer.buffer);
   descriptor_builder.Build(
       context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
       descriptor_set, descriptor_layout);
@@ -290,8 +284,9 @@ void Engine::Destroy() {
   DestroyImageSampler(context, sampler);
 
   DestroyTexture(context, wall_texture);
+  DestroyTexture(context, specular_wall_texture);
+
   DestroyBuffer(context, point_light_buffer);
-  DestroyBuffer(context, material_buffer);
 
   immediate_submit.Destroy(context);
 

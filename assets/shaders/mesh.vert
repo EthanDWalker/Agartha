@@ -5,6 +5,9 @@
 struct PointLight {
   vec4 color;
   vec3 position;
+  vec4 ambient;
+  vec4 diffuse;
+  vec4 specular;
 };
 
 struct Vertex {
@@ -19,7 +22,7 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer{
 	Vertex vertices[];
 };
 
-layout(std140, binding = 1) uniform LightUBO {
+layout(std140, binding = 2) uniform LightUBO {
   PointLight light;
 } lightData;
 

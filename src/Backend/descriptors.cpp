@@ -44,7 +44,11 @@ void DesciptorBuilder::BindImage(uint32_t binding, VkImageView image_view,
   image_writes[binding] = image_write;
 }
 
-void DesciptorBuilder::Reset() { bindings.clear(); }
+void DesciptorBuilder::Reset() {
+  bindings.clear();
+  buffer_writes.clear();
+  image_writes.clear();
+}
 
 void DesciptorBuilder::Build(VulkanContext &context,
                              VkShaderStageFlags stage_flags,

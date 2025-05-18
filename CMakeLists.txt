@@ -59,14 +59,17 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.cpp)
 
 add_executable(engine ${SOURCES})
 
+set(ASSIMP_DIR "C:/Program Files/Assimp")
+
 target_include_directories(engine PUBLIC 
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/ext/
     ${Vulkan_INCLUDE_DIR}
+    ${ASSIMP_DIR}/include
     imgui
 )
 
-target_link_libraries(engine PRIVATE imgui ${Vulkan_LIBRARY} glfw fmt::fmt vk-bootstrap::vk-bootstrap)
+target_link_libraries(engine PRIVATE imgui ${ASSIMP_DIR}/lib ${Vulkan_LIBRARY} glfw fmt::fmt vk-bootstrap::vk-bootstrap)
 
 file(GLOB SHADER_SRC
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.frag 
