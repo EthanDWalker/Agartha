@@ -17,6 +17,8 @@ VkImageViewCreateInfo
 ImageViewCI(VkFormat format, VkImageAspectFlags aspect_flags, VkImage image);
 VkRenderingAttachmentInfo AttachmentInfo(VkImageView view, VkClearValue *clear,
                                          VkImageLayout layout);
+VkRenderingAttachmentInfo DepthAttachmentInfo(VkImageView image_view,
+                                              VkImageLayout layout);
 VkRenderingInfo RenderingInfo(VkExtent2D render_extent,
                               VkRenderingAttachmentInfo *color_attachment,
                               VkRenderingAttachmentInfo *depth_attachment);

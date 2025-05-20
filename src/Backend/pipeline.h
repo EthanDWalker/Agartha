@@ -60,6 +60,10 @@ struct GraphicsPipelineBuilder {
 
   void SetNoDepthTest();
 
+  void SetDepthTest(bool depth_write_enable, VkCompareOp op);
+
+  void SetDepthFormat(VkFormat format);
+
   void AddPushConstantRange(VkShaderStageFlags stage_flags, uint32_t size);
 
   void AddDescriptorSetLayout(VkDescriptorSetLayout layout);

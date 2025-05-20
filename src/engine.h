@@ -31,10 +31,10 @@ struct Engine {
   FrameData frame_data[FRAME_OVERLAP];
   GLFWwindow *window;
 
-  Texture wall_texture;
-  Texture specular_wall_texture;
+  Texture box_texture;
   VkSampler sampler;
   AllocatedImage draw_image;
+  AllocatedImage depth_image;
   AllocatedBuffer point_light_buffer;
 
   Mesh rectangle_mesh;

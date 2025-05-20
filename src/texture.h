@@ -6,10 +6,15 @@
 static const std::string texture_file_path = "../assets/textures/";
 
 struct Texture {
-  AllocatedImage image;
+  AllocatedImage albedo;
+  AllocatedImage specular; // TEMP
+  AllocatedImage immission;
+
+  std::array<AllocatedImage, 3> ToArray();
 };
 
 void CreateTexture(VulkanContext &context, ImmediateSubmit immediate_submit,
-                   std::string file_path, Texture &texture);
+                   std::string file_name, std::string file_type,
+                   Texture &texture);
 
 void DestroyTexture(VulkanContext &context, Texture &texture);

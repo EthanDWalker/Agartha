@@ -8,7 +8,9 @@
 #include "Backend/pipeline.h"
 #include "Backend/swapchain.h"
 #include "Backend/util.h"
+#include "Loaders/gltf.h"
 #include "cube_data.h"
+#include "fmt/base.h"
 #include "mesh.h"
 #include "texture.h"
 #include "types.h"
@@ -21,7 +23,7 @@
 #include <glm/gtx/transform.hpp>
 
 static PointLight point_light{
-    .color = {1.0, 1.0, 1.0, 2.0},
+    .color = {1.0, 1.0, 1.0, 1.0},
     .position = {-1.0, 2.0, 2.0},
     .ambient = {0.2f, 0.2f, 0.2f, 1.0f},
     .diffuse = {0.5f, 0.5f, 0.5f, 1.0f},
@@ -29,8 +31,9 @@ static PointLight point_light{
 };
 
 void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline, Pipeline &light_pipeline,
-              AllocatedImage &draw_image, Mesh &mesh, glm::mat4 camera_matrix,
-              glm::vec3 view_pos, VkDescriptorSet *descriptor_set) {
+              AllocatedImage &draw_image, AllocatedImage &depth_image,
+              Mesh &mesh, glm::mat4 camera_matrix, glm::vec3 view_pos,
+              VkDescriptorSet *descriptor_set) {
   VkClearColorValue clear_color_value{};
   clear_color_value = {0.0f, 0.0f, 0.0f};
 
@@ -41,9 +44,12 @@ void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline, Pipeline &light_pipeline,
       vkinit::AttachmentInfo(draw_image.image_view, &clear_value,
                              VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
+  VkRenderingAttachmentInfo depth_attachment_info = vkinit::DepthAttachmentInfo(
+      depth_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+
   VkRenderingInfo rendering_info =
       vkinit::RenderingInfo({draw_image.extent.width, draw_image.extent.height},
-                            &attachment_info, nullptr);
+                            &attachment_info, &depth_attachment_info);
 
   vkCmdBeginRendering(cmd, &rendering_info);
 
@@ -53,8 +59,8 @@ void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline, Pipeline &light_pipeline,
   viewport.y = 0;
   viewport.width = draw_image.extent.width;
   viewport.height = draw_image.extent.height;
-  viewport.minDepth = 0.f;
-  viewport.maxDepth = 1.f;
+  viewport.minDepth = 1.0f;
+  viewport.maxDepth = 0.0f;
 
   vkCmdSetViewport(cmd, 0, 1, &viewport);
 
@@ -104,21 +110,23 @@ void Engine::Init() {
           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
       draw_image);
 
+  CreateAllocatedImage(context, draw_image_extent_3d, VK_FORMAT_D32_SFLOAT,
+                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                       depth_image);
+
   immediate_submit.Create(context);
 
   CreateImageSampler(context, sampler);
-  CreateTexture(context, immediate_submit, "wall.png", wall_texture);
-  CreateTexture(context, immediate_submit, "specular_wall.png",
-                specular_wall_texture);
+  CreateTexture(context, immediate_submit, "box", "png", box_texture);
 
   CreateBufferData(context, immediate_submit, &point_light, sizeof(PointLight),
                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, point_light_buffer);
 
+  auto box_texure_images = box_texture.ToArray();
   descriptor_builder.Init(context);
-  descriptor_builder.BindImage(0, wall_texture.image.image_view, sampler);
-  descriptor_builder.BindImage(1, specular_wall_texture.image.image_view,
-                               sampler);
-  descriptor_builder.BindBuffer(2, point_light_buffer.buffer);
+  descriptor_builder.BindBuffer(0, point_light_buffer.buffer);
+  descriptor_builder.BindSampler(1, sampler);
+  descriptor_builder.BindImages(2, box_texure_images);
   descriptor_builder.Build(
       context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
       descriptor_set, descriptor_layout);
@@ -130,7 +138,8 @@ void Engine::Init() {
     pipeline_builder.SetPolygonMode(VK_POLYGON_MODE_FILL);
     pipeline_builder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     pipeline_builder.SetNoBlending();
-    pipeline_builder.SetNoDepthTest();
+    pipeline_builder.SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+    pipeline_builder.SetDepthFormat(depth_image.format);
     pipeline_builder.SetNoMultisampling();
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -146,7 +155,8 @@ void Engine::Init() {
     pipeline_builder.SetPolygonMode(VK_POLYGON_MODE_FILL);
     pipeline_builder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     pipeline_builder.SetNoBlending();
-    pipeline_builder.SetNoDepthTest();
+    pipeline_builder.SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+    pipeline_builder.SetDepthFormat(depth_image.format);
     pipeline_builder.SetNoMultisampling();
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -158,6 +168,8 @@ void Engine::Init() {
   CreateMesh(context, immediate_submit, cube_indices, cube_vertices,
              rectangle_mesh);
   camera.position = {2.0f, 2.0f, 2.0f};
+
+  LoadGltf("DamagedHelmet");
 }
 
 void Engine::Run() {
@@ -204,6 +216,10 @@ void Engine::Run() {
     TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, draw_image.image);
 
+    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                    depth_image.image);
+
     glm::mat4 projection = glm::perspective(
         glm::radians(70.f),
         swapchain.extent.width / static_cast<float>(swapchain.extent.height),
@@ -211,9 +227,9 @@ void Engine::Run() {
 
     projection[1][1] *= -1;
 
-    DrawMesh(cmd, mesh_pipeline, light_pipeline, draw_image, rectangle_mesh,
-             projection * camera.GetViewMatrix(), camera.position,
-             &descriptor_set);
+    DrawMesh(cmd, mesh_pipeline, light_pipeline, draw_image, depth_image,
+             rectangle_mesh, projection * camera.GetViewMatrix(),
+             camera.position, &descriptor_set);
 
     TransitionImage(cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, draw_image.image);
@@ -283,8 +299,7 @@ void Engine::Destroy() {
 
   DestroyImageSampler(context, sampler);
 
-  DestroyTexture(context, wall_texture);
-  DestroyTexture(context, specular_wall_texture);
+  DestroyTexture(context, box_texture);
 
   DestroyBuffer(context, point_light_buffer);
 
@@ -293,6 +308,7 @@ void Engine::Destroy() {
   DestroyMesh(context, rectangle_mesh);
 
   DestroyAllocatedImage(context, draw_image);
+  DestroyAllocatedImage(context, depth_image);
 
   DestroyPipeline(context, mesh_pipeline);
   DestroyPipeline(context, light_pipeline);

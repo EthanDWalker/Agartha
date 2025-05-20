@@ -3,35 +3,31 @@
 #extension GL_EXT_buffer_reference : require
 
 struct PointLight {
-  vec4 color;
-  vec3 position;
-  vec4 ambient;
-  vec4 diffuse;
-  vec4 specular;
+    vec4 color;
+    vec3 position;
+    vec4 ambient;
+    vec4 diffuse;
+    vec4 specular;
 };
 
 struct Vertex {
-	vec3 position;
-	float uv_x;
-	vec3 normal;
-	float uv_y;
-	vec4 color;
-}; 
-
-layout(buffer_reference, std430) readonly buffer VertexBuffer{ 
-	Vertex vertices[];
+    vec3 position;
+    float uv_x;
+    vec3 normal;
+    float uv_y;
+    vec4 color;
 };
 
-layout(std140, binding = 2) uniform LightUBO {
-  PointLight light;
-} lightData;
+layout(buffer_reference, std430) readonly buffer VertexBuffer {
+    Vertex vertices[];
+};
 
-layout( push_constant ) uniform constants
+layout(push_constant) uniform constants
 {
-  mat4 worldMatrix;
-  vec3 viewPos;
-  float padding;
-	VertexBuffer vertexBuffer;
+    mat4 worldMatrix;
+    vec3 viewPos;
+    float padding;
+    VertexBuffer vertexBuffer;
 } PushConstants;
 
 layout(location = 0) out vec3 vertColor;

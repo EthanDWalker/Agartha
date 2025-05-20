@@ -1,18 +1,20 @@
 #pragma once
 #include "Backend/context.h"
-#include "fmt/base.h"
+#include "Backend/image.h"
 #include <array>
 #include <cstdint>
-#include <unordered_map>
+#include <span>
 #include <utility>
 #include <vector>
 #include <vulkan/vulkan.h>
 
 struct DescriptorPool {
-  static constexpr std::array<std::pair<VkDescriptorType, float>, 3>
+  static constexpr std::array<std::pair<VkDescriptorType, float>, 5>
       pool_ratios{{
           {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1.0f},
           {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3.0f},
+          {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 3.0f},
+          {VK_DESCRIPTOR_TYPE_SAMPLER, 0.1f},
           {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1.0f},
       }};
 
@@ -24,7 +26,7 @@ struct DescriptorPool {
   void Init(VulkanContext &context);
 
   void Allocate(VulkanContext &context, VkDescriptorSetLayout &layout,
-                VkDescriptorSet &set);
+                VkDescriptorSet &set, void *pNext = nullptr);
 
   void NewPool(VulkanContext &context);
 
@@ -35,13 +37,15 @@ struct DesciptorBuilder {
   DescriptorPool pool;
 
   std::vector<VkDescriptorSetLayoutBinding> bindings;
-  std::unordered_map<uint32_t, VkDescriptorBufferInfo> buffer_writes;
-  std::unordered_map<uint32_t, VkDescriptorImageInfo> image_writes;
+  std::vector<void *> writes;
 
   void Init(VulkanContext &context);
 
   void BindBuffer(uint32_t binding, VkBuffer buffer);
-  void BindImage(uint32_t binding, VkImageView image_view, VkSampler sampler);
+  void BindCombinedImage(uint32_t binding, VkImageView image_view,
+                         VkSampler sampler);
+  void BindSampler(uint32_t binding, VkSampler sampler);
+  void BindImages(uint32_t binding, std::span<AllocatedImage> image_views);
 
   void Build(VulkanContext &context, VkShaderStageFlags stage_flags,
              VkDescriptorSet &set, VkDescriptorSetLayout &layout);

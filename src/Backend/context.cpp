@@ -3,8 +3,8 @@
 #include <GLFW/glfw3.h>
 #include <VkBootstrap.h>
 #include <cassert>
-#include <vulkan/vulkan.h>
 #include <vma/vk_mem_alloc.h>
+#include <vulkan/vulkan.h>
 
 void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   vkb::InstanceBuilder instance_builder;
@@ -33,6 +33,10 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   features_12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
   features_12.bufferDeviceAddress = true;
   features_12.descriptorIndexing = true;
+  features_12.shaderSampledImageArrayNonUniformIndexing = true;
+  features_12.runtimeDescriptorArray = true;
+  features_12.descriptorBindingVariableDescriptorCount = true;
+  features_12.descriptorBindingPartiallyBound = true;
 
   vkb::PhysicalDeviceSelector physical_device_selector{vkb_instance};
   vkb::PhysicalDevice vkb_physical_device =

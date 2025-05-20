@@ -119,6 +119,23 @@ void GraphicsPipelineBuilder::SetNoDepthTest() {
   depth_stencil.maxDepthBounds = 1.f;
 }
 
+void GraphicsPipelineBuilder::SetDepthTest(bool depth_write_enable,
+                                           VkCompareOp op) {
+  depth_stencil.depthTestEnable = VK_TRUE;
+  depth_stencil.depthWriteEnable = depth_write_enable;
+  depth_stencil.depthCompareOp = op;
+  depth_stencil.depthBoundsTestEnable = VK_FALSE;
+  depth_stencil.stencilTestEnable = VK_FALSE;
+  depth_stencil.front = {};
+  depth_stencil.back = {};
+  depth_stencil.minDepthBounds = 0.f;
+  depth_stencil.maxDepthBounds = 1.f;
+}
+
+void GraphicsPipelineBuilder::SetDepthFormat(VkFormat format) {
+  render_info.depthAttachmentFormat = format;
+}
+
 void GraphicsPipelineBuilder::AddPushConstantRange(
     VkShaderStageFlags stage_flags, uint32_t size) {
   VkPushConstantRange range{};
