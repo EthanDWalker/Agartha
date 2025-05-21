@@ -1,9 +1,9 @@
 #pragma once
 #include "types.h"
-#include <array>
+#include <vector>
 #include <cstdint>
 
-static std::array<Vertex, 24> cube_vertices = {
+static std::vector<Vertex> cube_vertices = {
     // Front face (+Z)
     Vertex{{-0.5f, -0.5f, 0.5f}, 0.0f, {0, 0, 1}, 0.0f, {1, 1, 1, 1}},
     Vertex{{0.5f, -0.5f, 0.5f}, 1.0f, {0, 0, 1}, 0.0f, {1, 1, 1, 1}},
@@ -41,7 +41,7 @@ static std::array<Vertex, 24> cube_vertices = {
     Vertex{{-0.5f, -0.5f, 0.5f}, 0.0f, {0, -1, 0}, 1.0f, {1, 1, 1, 1}},
 };
 
-static std::array<uint32_t, 36> cube_indices = {
+static std::vector<uint32_t> cube_indices = {
     // Front
     0, 1, 2, 2, 3, 0,
     // Back

@@ -1,18 +1,98 @@
-#include "image.h"
+#include "allocated_image.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/immediate_submit.h"
 #include "Backend/init.h"
 #include "Backend/util.h"
+#include "image_format.h"
 #include <cstdint>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
+
+void GenerateMipmaps(VulkanContext &context, ImmediateSubmit &immediate_submit,
+                     uint32_t mipLevels, AllocatedImage &image) {
+
+  immediate_submit.Submit(context, [&](VkCommandBuffer cmd) {
+    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image.image);
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.image = image.image;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.levelCount = 1;
+
+    int32_t mip_width = image.extent.width;
+    int32_t mip_height = image.extent.height;
+
+    for (uint32_t i = 1; i < mipLevels; i++) {
+      barrier.subresourceRange.baseMipLevel = i - 1;
+      barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+      barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+      barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+      barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+      vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                           VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                           nullptr, 1, &barrier);
+
+      VkImageBlit blit{};
+      blit.srcOffsets[0] = {0, 0, 0};
+      blit.srcOffsets[1] = {mip_width, mip_height, 1};
+      blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      blit.srcSubresource.mipLevel = i - 1;
+      blit.srcSubresource.baseArrayLayer = 0;
+      blit.srcSubresource.layerCount = 1;
+
+      blit.dstOffsets[0] = {0, 0, 0};
+      blit.dstOffsets[1] = {mip_width > 1 ? mip_width / 2 : 1,
+                            mip_height > 1 ? mip_height / 2 : 1, 1};
+      blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      blit.dstSubresource.mipLevel = i;
+      blit.dstSubresource.baseArrayLayer = 0;
+      blit.dstSubresource.layerCount = 1;
+
+      vkCmdBlitImage(cmd, image.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                     image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                     &blit, VK_FILTER_LINEAR);
+
+      // Transition previous level to SHADER_READ_ONLY
+      barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+      barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+      barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+      barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+      vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+                           0, nullptr, 1, &barrier);
+
+      mip_width = mip_width > 1 ? mip_width / 2 : 1;
+      mip_height = mip_height > 1 ? mip_height / 2 : 1;
+    }
+
+    // Final level layout transition
+    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+                         0, nullptr, 1, &barrier);
+  });
+}
 
 void CreateImageSampler(VulkanContext &context, VkSampler &sampler) {
   VkSamplerCreateInfo sampler_ci{};
   sampler_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   sampler_ci.magFilter = VK_FILTER_LINEAR;
   sampler_ci.minFilter = VK_FILTER_LINEAR;
+  sampler_ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  sampler_ci.maxLod = 5; // HARDCODE
 
   VK_CHECK(vkCreateSampler(context.device, &sampler_ci, nullptr, &sampler));
 }
@@ -23,11 +103,18 @@ void DestroyImageSampler(VulkanContext &context, VkSampler &sampler) {
 
 void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
                           VkFormat format, VkImageUsageFlags usage_flags,
-                          AllocatedImage &image) {
+                          AllocatedImage &image, uint32_t mip_levels,
+                          bool cube_map) {
   image.format = format;
   image.extent = size;
 
-  VkImageCreateInfo image_ci = vkinit::ImageCI(format, usage_flags, size);
+  VkImageCreateInfo image_ci =
+      vkinit::ImageCI(format, usage_flags, size, mip_levels);
+
+  if (cube_map) {
+    image_ci.arrayLayers = 6;
+    image_ci.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+  }
 
   VmaAllocationCreateInfo alloc_info{};
   alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
@@ -44,6 +131,11 @@ void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
 
   VkImageViewCreateInfo image_view_ci =
       vkinit::ImageViewCI(format, aspect_flags, image.image);
+  if (cube_map) {
+    image_view_ci.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+    image_view_ci.subresourceRange.layerCount = 6;
+  }
+
   VK_CHECK(vkCreateImageView(context.device, &image_view_ci, nullptr,
                              &image.image_view));
 }
@@ -54,7 +146,8 @@ void CreateAllocatedImageData(VulkanContext &context,
                               VkImageUsageFlags usage_flags,
                               AllocatedImage &image) {
   const uint8_t channel_count = 4; // HARDCODE
-  size_t data_size = size.depth * size.width * size.height * channel_count;
+  size_t data_size = size.depth * size.width * size.height * channel_count *
+                     GetFormatComponentSize(format);
 
   AllocatedBuffer upload_buffer;
   CreateBuffer(context, data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,

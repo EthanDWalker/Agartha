@@ -55,6 +55,58 @@ bool LoadShaderModule(std::string_view file_path, VkDevice device,
   return true;
 }
 
+void ComputePipelineBuilder::SetShader(VulkanContext &context,
+                                       std::string comp) {
+  if (!LoadShaderModule(shader_file_path + comp, context.device, &shader)) {
+    fmt::println("[ERROR] failed to load {}", comp);
+  }
+}
+
+void ComputePipelineBuilder::AddPushConstantRange(uint32_t size) {
+  VkPushConstantRange range{};
+  uint32_t offset = 0;
+  for (auto &range : push_constant_ranges) {
+    offset += range.offset;
+  }
+  range.offset = offset;
+  range.size = size;
+  range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+  push_constant_ranges.push_back(range);
+}
+
+void ComputePipelineBuilder::AddDescriptorSetLayout(
+    VkDescriptorSetLayout layout) {
+  descriptor_set_layouts.push_back(layout);
+}
+
+void ComputePipelineBuilder::Build(VulkanContext &context, Pipeline &pipeline) {
+  VkPipelineLayoutCreateInfo pipeline_layout_ci{};
+  pipeline_layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipeline_layout_ci.pPushConstantRanges = push_constant_ranges.data();
+  pipeline_layout_ci.pushConstantRangeCount = push_constant_ranges.size();
+  pipeline_layout_ci.pSetLayouts = descriptor_set_layouts.data();
+  pipeline_layout_ci.setLayoutCount = descriptor_set_layouts.size();
+
+  VK_CHECK(vkCreatePipelineLayout(context.device, &pipeline_layout_ci, nullptr,
+                                  &pipeline.layout));
+
+  VkPipelineShaderStageCreateInfo shader_ci{};
+  shader_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  shader_ci.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+  shader_ci.module = shader;
+  shader_ci.pName = "main";
+
+  VkComputePipelineCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  info.layout = pipeline.layout;
+  info.stage = shader_ci;
+
+  VK_CHECK(vkCreateComputePipelines(context.device, VK_NULL_HANDLE, 1, &info,
+                                    nullptr, &pipeline.obj));
+
+  vkDestroyShaderModule(context.device, shader, nullptr);
+}
+
 void GraphicsPipelineBuilder::SetShaders(VulkanContext &context,
                                          std::string vert, std::string frag) {
   if (!LoadShaderModule(shader_file_path + vert, context.device,

@@ -1,6 +1,6 @@
 #include "descriptors.h"
 #include "Backend/context.h"
-#include "Backend/image.h"
+#include "Backend/allocated_image.h"
 #include "Backend/util.h"
 #include "fmt/base.h"
 #include <array>
@@ -58,6 +58,24 @@ void DesciptorBuilder::BindCombinedImage(uint32_t binding,
   writes.push_back(image_write);
 }
 
+void DesciptorBuilder::BindImage(uint32_t binding, VkImageView image_view) {
+  VkDescriptorSetLayoutBinding new_binding{};
+  new_binding.binding = binding;
+  new_binding.descriptorCount = 1;
+  new_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+
+  bindings.push_back(new_binding);
+
+  VkDescriptorImageInfo *image_write =
+      (VkDescriptorImageInfo *)malloc(sizeof(VkDescriptorImageInfo));
+
+  image_write->imageView = image_view;
+  image_write->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  image_write->sampler = VK_NULL_HANDLE;
+
+  writes.push_back(image_write);
+}
+
 void DesciptorBuilder::BindImages(uint32_t binding,
                                   std::span<AllocatedImage> images) {
   VkDescriptorSetLayoutBinding new_binding{};
@@ -81,6 +99,23 @@ void DesciptorBuilder::BindImages(uint32_t binding,
   writes.push_back(image_write_array);
 }
 
+void DesciptorBuilder::BindStorageImage(uint32_t binding,
+                                        VkImageView image_view) {
+  VkDescriptorSetLayoutBinding new_binding{};
+  new_binding.binding = binding;
+  new_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+  new_binding.descriptorCount = 1;
+
+  bindings.push_back(new_binding);
+
+  VkDescriptorImageInfo *image_write =
+      (VkDescriptorImageInfo *)malloc(sizeof(VkDescriptorImageInfo));
+  memset(image_write, 0, sizeof(VkDescriptorImageInfo));
+  image_write->imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+  image_write->imageView = image_view;
+  writes.push_back(image_write);
+}
+
 void DesciptorBuilder::BindSampler(uint32_t binding, VkSampler sampler) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
@@ -102,6 +137,7 @@ void DesciptorBuilder::Reset() {
   for (auto *write : writes) {
     free(write);
   }
+  writes.clear();
 }
 
 void DesciptorBuilder::Build(VulkanContext &context,
@@ -134,6 +170,7 @@ void DesciptorBuilder::Build(VulkanContext &context,
     switch (binding.descriptorType) {
     case VK_DESCRIPTOR_TYPE_SAMPLER:
     case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
     case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: {
       write.pImageInfo = (VkDescriptorImageInfo *)writes[binding.binding];
       break;

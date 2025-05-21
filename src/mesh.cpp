@@ -10,17 +10,7 @@
 #define VMA_IMPLEMENTATION
 #include <vma/vk_mem_alloc.h>
 
-void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline, glm::mat4 world_matrix,
-              glm::vec3 view_pos, Mesh &mesh) {
-  PushConstantData data{};
-  data.world_matrix = world_matrix;
-  data.vertex_buffer = mesh.vertex_address;
-  data.view_pos = view_pos;
-
-  vkCmdPushConstants(cmd, pipeline.layout,
-                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                     0, sizeof(data), &data);
-
+void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline, Mesh &mesh) {
   vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
   vkCmdDrawIndexed(cmd, mesh.index_buffer.info.size / sizeof(uint32_t), 1, 0, 0,
@@ -28,10 +18,9 @@ void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline, glm::mat4 world_matrix,
 }
 
 void CreateMesh(VulkanContext &context, ImmediateSubmit immediate_submit,
-                std::span<uint32_t> indices, std::span<Vertex> vertices,
-                Mesh &mesh) {
-  const size_t vertex_buffer_size = vertices.size() * sizeof(Vertex);
-  const size_t index_buffer_size = indices.size() * sizeof(uint32_t);
+                MeshData &mesh_data, Mesh &mesh) {
+  const size_t vertex_buffer_size = mesh_data.vertices.size() * sizeof(Vertex);
+  const size_t index_buffer_size = mesh_data.indices.size() * sizeof(uint32_t);
 
   CreateBuffer(context, vertex_buffer_size,
                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
@@ -61,9 +50,10 @@ void CreateMesh(VulkanContext &context, ImmediateSubmit immediate_submit,
 
   assert(staging_buffer.allocation != nullptr);
 
-  memcpy(data, vertices.data(), vertex_buffer_size);
+  memcpy(data, mesh_data.vertices.data(), vertex_buffer_size);
 
-  memcpy((char *)data + vertex_buffer_size, indices.data(), index_buffer_size);
+  memcpy((char *)data + vertex_buffer_size, mesh_data.indices.data(),
+         index_buffer_size);
 
   immediate_submit.Submit(context, [&](VkCommandBuffer cmd) {
     VkBufferCopy vertex_copy{0};

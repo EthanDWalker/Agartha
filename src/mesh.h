@@ -6,8 +6,13 @@
 #include "Backend/pipeline.h"
 #include "types.h"
 #include <cstdint>
-#include <span>
+#include <vector>
 #include <vulkan/vulkan.h>
+
+struct MeshData {
+  std::vector<Vertex> vertices;
+  std::vector<uint32_t> indices;
+};
 
 struct Mesh {
   AllocatedBuffer vertex_buffer;
@@ -17,10 +22,8 @@ struct Mesh {
 };
 
 void CreateMesh(VulkanContext &context, ImmediateSubmit immediate_submit,
-                std::span<uint32_t> indices, std::span<Vertex> vertices,
-                Mesh &mesh);
+                MeshData &mesh_data, Mesh &mesh);
 
-void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline, glm::mat4 world_matrix,
-              glm::vec3 view_pos, Mesh &mesh);
+void DrawMesh(VkCommandBuffer cmd, Pipeline &pipeline, Mesh &mesh);
 
 void DestroyMesh(VulkanContext &context, Mesh &mesh);

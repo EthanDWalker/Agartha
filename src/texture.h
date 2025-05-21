@@ -1,16 +1,19 @@
 #pragma once
 
-#include "Backend/image.h"
+#include "Backend/allocated_image.h"
+#include "Backend/immediate_submit.h"
 #include <string>
 
 static const std::string texture_file_path = "../assets/textures/";
 
 struct Texture {
   AllocatedImage albedo;
-  AllocatedImage specular; // TEMP
-  AllocatedImage immission;
+  AllocatedImage metal_roughness;
+  AllocatedImage emmissive;
+  AllocatedImage normal;
+  AllocatedImage ambient_occlusion;
 
-  std::array<AllocatedImage, 3> ToArray();
+  std::array<AllocatedImage, 5> ToArray();
 };
 
 void CreateTexture(VulkanContext &context, ImmediateSubmit immediate_submit,

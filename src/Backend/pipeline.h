@@ -12,6 +12,19 @@ struct Pipeline {
   VkPipelineLayout layout;
 };
 
+struct ComputePipelineBuilder {
+  std::vector<VkPushConstantRange> push_constant_ranges{};
+  std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};
+  VkShaderModule shader;
+
+  void SetShader(VulkanContext &context, std::string comp);
+
+  void AddPushConstantRange(uint32_t size);
+  void AddDescriptorSetLayout(VkDescriptorSetLayout layout);
+
+  void Build(VulkanContext &context, Pipeline &pipeline);
+};
+
 struct GraphicsPipelineBuilder {
   std::vector<VkPushConstantRange> push_constant_ranges{};
   std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};
