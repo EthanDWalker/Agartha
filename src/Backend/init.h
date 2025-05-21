@@ -13,8 +13,9 @@ VkSubmitInfo2 SubmitInfo(VkCommandBufferSubmitInfo *cmd,
                          VkSemaphoreSubmitInfo *wait_semaphore_info);
 VkImageCreateInfo ImageCI(VkFormat format, VkImageUsageFlags usage_flags,
                           VkExtent3D extent, uint32_t mip_levels = 1);
-VkImageViewCreateInfo
-ImageViewCI(VkFormat format, VkImageAspectFlags aspect_flags, VkImage image);
+VkImageViewCreateInfo ImageViewCI(VkFormat format,
+                                  VkImageAspectFlags aspect_flags,
+                                  VkImage image, uint32_t mip_levels);
 VkRenderingAttachmentInfo AttachmentInfo(VkImageView view, VkClearValue *clear,
                                          VkImageLayout layout);
 VkRenderingAttachmentInfo DepthAttachmentInfo(VkImageView image_view,

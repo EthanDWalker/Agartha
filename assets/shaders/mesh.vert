@@ -2,14 +2,6 @@
 
 #extension GL_EXT_buffer_reference : require
 
-struct PointLight {
-    vec4 color;
-    vec3 position;
-    vec4 ambient;
-    vec4 diffuse;
-    vec4 specular;
-};
-
 struct Vertex {
     vec3 position;
     float uv_x;

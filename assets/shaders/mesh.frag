@@ -3,9 +3,6 @@
 struct PointLight {
     vec4 color;
     vec3 position;
-    vec4 ambient;
-    vec4 diffuse;
-    vec4 specular;
 };
 
 layout(location = 0) in vec3 iColor;
@@ -21,9 +18,11 @@ layout(std140, binding = 0) uniform LightUBO {
 
 layout(binding = 1) uniform sampler textureSampler;
 
-layout(binding = 2) uniform textureCube irradianceMap;
+layout(binding = 2) uniform textureCube prefilterMap;
+layout(binding = 3) uniform textureCube irradianceMap;
+layout(binding = 4) uniform texture2D brdfLut;
 
-layout(binding = 3) uniform texture2D pbrTexture[];
+layout(binding = 5) uniform texture2D pbrTexture[];
 
 layout(push_constant) uniform constants
 {
@@ -50,23 +49,24 @@ void main() {
     float ao = texture(sampler2D(pbrTexture[3], textureSampler), iUV).r;
 
     vec3 N = getNormalFromMap();
-
     vec3 V = normalize(PushConstants.viewPos - iWorldPos);
+    vec3 R = reflect(-V, N);
+
+    vec3 F0 = vec3(0.04);
+    F0 = mix(F0, albedo, metallic);
 
     vec3 Lo = vec3(0.0);
     // loop through lights but i only have 1
+  {
     vec3 L = normalize(light.position - iWorldPos);
     vec3 H = normalize(V + L);
     float distance = length(light.position - iWorldPos);
     float attenuation = 1.0 / (distance * distance);
     vec3 radiance = light.color.xyz * attenuation * light.color.w;
 
-    vec3 F0 = vec3(0.04);
-    F0 = mix(F0, albedo, metallic);
-    vec3 F = FresnelSchlickRoughness(max(dot(H, V), 0.0), F0, roughness);
-
     float NDF = DistributionGGX(N, H, roughness);
     float G = GeometrySmith(N, V, L, roughness);
+    vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
 
     vec3 numerator = NDF * G * F;
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
@@ -74,17 +74,29 @@ void main() {
 
     vec3 kS = F;
     vec3 kD = vec3(1.0) - kS;
-    vec3 irradience = texture(samplerCube(irradianceMap, textureSampler), N).rgb;
-    vec3 diffuse = irradience * albedo;
 
     kD *= 1.0 - metallic;
 
     float NdotL = max(dot(N, L), 0.0);
 
     Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+  }
     // end loop
+    vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
 
-    vec3 ambient = (kD * diffuse) * ao;
+    vec3 kS = F;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= 1.0 - metallic;
+
+    vec3 irradience = texture(samplerCube(irradianceMap, textureSampler), N).rgb;
+    vec3 diffuse = irradience * albedo;
+
+    const float MAX_REFLECTION_LOD = 4.0;
+    vec3 prefilteredColor = textureLod(samplerCube(prefilterMap, textureSampler), R,  roughness * MAX_REFLECTION_LOD).rgb;
+    vec2 brdf = texture(sampler2D(brdfLut, textureSampler), vec2(max(dot(N, V), 0.0), roughness)).rg;
+    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+
+    vec3 ambient = (kD * diffuse + specular) * ao;
     vec3 color = ambient + Lo + emmisive;
 
     // HDR

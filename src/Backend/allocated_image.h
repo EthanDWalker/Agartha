@@ -13,7 +13,7 @@ struct AllocatedImage {
 };
 
 void GenerateMipmaps(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                     uint32_t mipLevels, AllocatedImage &image);
+                     uint32_t mip_levels, AllocatedImage &image);
 
 void CreateImageSampler(VulkanContext &context, VkSampler &sampler);
 
@@ -30,8 +30,8 @@ void CreateAllocatedImageData(VulkanContext &context,
                               VkImageUsageFlags usage_flags,
                               AllocatedImage &image);
 
-void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_format,
-                     VkImageLayout new_format, VkImage image);
+void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,
+                     VkImageLayout new_layout, VkImage image, uint32_t mip_levels = 1);
 
 void CopyImageToImage(VkCommandBuffer cmd, VkImage source, VkImage destination,
                       VkExtent2D src_size, VkExtent2D dst_size);

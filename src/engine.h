@@ -28,7 +28,7 @@ struct Engine {
   Swapchain swapchain;
   ImmediateSubmit immediate_submit;
   Camera camera;
-  DesciptorBuilder descriptor_builder;
+  DescriptorBuilder descriptor_builder;
   FrameData frame_data[FRAME_OVERLAP];
   GLFWwindow *window;
 

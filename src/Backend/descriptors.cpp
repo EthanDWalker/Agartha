@@ -1,6 +1,6 @@
 #include "descriptors.h"
-#include "Backend/context.h"
 #include "Backend/allocated_image.h"
+#include "Backend/context.h"
 #include "Backend/util.h"
 #include "fmt/base.h"
 #include <array>
@@ -12,16 +12,16 @@
 #include <stdlib.h>
 #include <vector>
 
-void DesciptorBuilder::Init(VulkanContext &context) { pool.Init(context); }
+void DescriptorBuilder::Init(VulkanContext &context) { pool.Init(context); }
 
-void DesciptorBuilder::Destroy(VulkanContext &context) {
+void DescriptorBuilder::Destroy(VulkanContext &context) {
   pool.Destroy(context);
   for (auto *write : writes) {
     free(write);
   }
 }
 
-void DesciptorBuilder::BindBuffer(uint32_t binding, VkBuffer buffer) {
+void DescriptorBuilder::BindBuffer(uint32_t binding, VkBuffer buffer) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -39,7 +39,7 @@ void DesciptorBuilder::BindBuffer(uint32_t binding, VkBuffer buffer) {
   writes.push_back(buffer_write);
 }
 
-void DesciptorBuilder::BindCombinedImage(uint32_t binding,
+void DescriptorBuilder::BindCombinedImage(uint32_t binding,
                                          VkImageView image_view,
                                          VkSampler sampler) {
   VkDescriptorSetLayoutBinding new_binding{};
@@ -58,7 +58,7 @@ void DesciptorBuilder::BindCombinedImage(uint32_t binding,
   writes.push_back(image_write);
 }
 
-void DesciptorBuilder::BindImage(uint32_t binding, VkImageView image_view) {
+void DescriptorBuilder::BindImage(uint32_t binding, VkImageView image_view) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorCount = 1;
@@ -76,7 +76,7 @@ void DesciptorBuilder::BindImage(uint32_t binding, VkImageView image_view) {
   writes.push_back(image_write);
 }
 
-void DesciptorBuilder::BindImages(uint32_t binding,
+void DescriptorBuilder::BindImages(uint32_t binding,
                                   std::span<AllocatedImage> images) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
@@ -99,7 +99,30 @@ void DesciptorBuilder::BindImages(uint32_t binding,
   writes.push_back(image_write_array);
 }
 
-void DesciptorBuilder::BindStorageImage(uint32_t binding,
+void DescriptorBuilder::BindStorageImages(uint32_t binding,
+                                         std::vector<VkImageView> image_views) {
+  VkDescriptorSetLayoutBinding new_binding{};
+  new_binding.binding = binding;
+  new_binding.descriptorCount = image_views.size();
+  new_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+
+  bindings.push_back(new_binding);
+
+  VkDescriptorImageInfo *image_write_array = (VkDescriptorImageInfo *)malloc(
+      sizeof(VkDescriptorImageInfo) * image_views.size());
+
+  for (uint32_t i = 0; i < image_views.size(); i++) {
+    VkDescriptorImageInfo image_write{};
+    image_write.imageView = image_views[i];
+    image_write.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    image_write.sampler = VK_NULL_HANDLE;
+    image_write_array[i] = image_write;
+  }
+
+  writes.push_back(image_write_array);
+}
+
+void DescriptorBuilder::BindStorageImage(uint32_t binding,
                                         VkImageView image_view) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
@@ -116,7 +139,7 @@ void DesciptorBuilder::BindStorageImage(uint32_t binding,
   writes.push_back(image_write);
 }
 
-void DesciptorBuilder::BindSampler(uint32_t binding, VkSampler sampler) {
+void DescriptorBuilder::BindSampler(uint32_t binding, VkSampler sampler) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -132,7 +155,7 @@ void DesciptorBuilder::BindSampler(uint32_t binding, VkSampler sampler) {
   writes.push_back(image_write);
 }
 
-void DesciptorBuilder::Reset() {
+void DescriptorBuilder::Reset() {
   bindings.clear();
   for (auto *write : writes) {
     free(write);
@@ -140,7 +163,7 @@ void DesciptorBuilder::Reset() {
   writes.clear();
 }
 
-void DesciptorBuilder::Build(VulkanContext &context,
+void DescriptorBuilder::Build(VulkanContext &context,
                              VkShaderStageFlags stage_flags,
                              VkDescriptorSet &set,
                              VkDescriptorSetLayout &layout) {

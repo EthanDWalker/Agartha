@@ -10,7 +10,6 @@
 #include "Backend/util.h"
 #include "Loaders/gltf.h"
 #include "cube_data.h"
-#include "fmt/base.h"
 #include "mesh.h"
 #include "texture.h"
 #include "types.h"
@@ -25,9 +24,6 @@
 static PointLight point_light{
     .color = {1.0, 1.0, 1.0, 1.0},
     .position = {-0.0, 2.0, 2.0},
-    .ambient = {0.2f, 0.2f, 0.2f, 1.0f},
-    .diffuse = {0.5f, 0.5f, 0.5f, 1.0f},
-    .specular = {1.0f, 1.0f, 1.0f, 1.0f},
 };
 
 void Engine::Init() {
@@ -63,7 +59,7 @@ void Engine::Init() {
   CreateImageSampler(context, sampler);
   CreateTexture(context, immediate_submit, "Default", "jpg", box_texture);
 
-  CreateSkybox(context, immediate_submit, descriptor_builder, "house", skybox);
+  CreateSkybox(context, immediate_submit, descriptor_builder, "sunset", skybox);
 
   CreateBufferData(context, immediate_submit, &point_light, sizeof(PointLight),
                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, point_light_buffer);
@@ -89,8 +85,10 @@ void Engine::Init() {
     descriptor_builder.Reset();
     descriptor_builder.BindBuffer(0, point_light_buffer.buffer);
     descriptor_builder.BindSampler(1, sampler);
-    descriptor_builder.BindImage(2, skybox.irradiance.image_view);
-    descriptor_builder.BindImages(3, box_texure_images);
+    descriptor_builder.BindImage(2, skybox.prefilter.image_view);
+    descriptor_builder.BindImage(3, skybox.irradiance.image_view);
+    descriptor_builder.BindImage(4, skybox.brdf.image_view);
+    descriptor_builder.BindImages(5, box_texure_images);
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
         descriptor_set, descriptor_layout);
@@ -116,7 +114,7 @@ void Engine::Init() {
 
   {
     descriptor_builder.Reset();
-    descriptor_builder.BindCombinedImage(0, skybox.irradiance.image_view,
+    descriptor_builder.BindCombinedImage(0, skybox.image.image_view,
                                          sampler);
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,

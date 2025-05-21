@@ -11,7 +11,6 @@
 
 void GenerateMipmaps(VulkanContext &context, ImmediateSubmit &immediate_submit,
                      uint32_t mipLevels, AllocatedImage &image) {
-
   immediate_submit.Submit(context, [&](VkCommandBuffer cmd) {
     TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image.image);
@@ -22,6 +21,7 @@ void GenerateMipmaps(VulkanContext &context, ImmediateSubmit &immediate_submit,
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.baseMipLevel = 0;
     barrier.subresourceRange.layerCount = 1;
     barrier.subresourceRange.levelCount = 1;
 
@@ -130,7 +130,7 @@ void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
   }
 
   VkImageViewCreateInfo image_view_ci =
-      vkinit::ImageViewCI(format, aspect_flags, image.image);
+      vkinit::ImageViewCI(format, aspect_flags, image.image, mip_levels);
   if (cube_map) {
     image_view_ci.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
     image_view_ci.subresourceRange.layerCount = 6;
@@ -185,7 +185,7 @@ void CreateAllocatedImageData(VulkanContext &context,
 }
 
 void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,
-                     VkImageLayout new_layout, VkImage image) {
+                     VkImageLayout new_layout, VkImage image, uint32_t mip_levels) {
   VkImageMemoryBarrier2 image_barrier{};
   image_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
   image_barrier.image = image;

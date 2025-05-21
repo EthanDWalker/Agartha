@@ -1,0 +1,75 @@
+#version 450
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0) uniform samplerCube environmentMap;
+layout(binding = 1, rgba32f) writeonly uniform imageCube irradianceMap;
+
+const uint resolution = 32;
+const uint sampleCount = 128;
+
+const float PI = 3.14159265359;
+
+// Generates a 3D direction from a cubemap face and UV
+vec3 getNormalFromCubeFace(uint face, vec2 uv) {
+    uv = uv * 2.0 - 1.0;
+    switch (face) {
+        case 0: return normalize(vec3( 1.0, -uv.y, -uv.x)); // +X
+        case 1: return normalize(vec3(-1.0, -uv.y,  uv.x)); // -X
+        case 2: return normalize(vec3( uv.x,  1.0,  uv.y)); // +Y
+        case 3: return normalize(vec3( uv.x, -1.0, -uv.y)); // -Y
+        case 4: return normalize(vec3( uv.x, -uv.y,  1.0)); // +Z
+        case 5: return normalize(vec3(-uv.x, -uv.y, -1.0)); // -Z
+    }
+    return vec3(0.0);
+}
+
+// Sample over hemisphere using cosine-weighted distribution
+vec3 hemisphereSample_cosine(float u1, float u2) {
+    float r = sqrt(u1);
+    float theta = 2.0 * PI * u2;
+    float x = r * cos(theta);
+    float y = r * sin(theta);
+    float z = sqrt(max(0.0, 1.0 - u1));
+    return vec3(x, y, z);
+}
+
+// Construct tangent space basis from normal
+void getTangentBasis(vec3 N, out vec3 T, out vec3 B) {
+    vec3 up = abs(N.y) < 0.999 ? vec3(0,1,0) : vec3(1,0,0);
+    T = normalize(cross(up, N));
+    B = cross(N, T);
+}
+
+void main() {
+    uvec2 id = gl_GlobalInvocationID.xy;
+    uint face = gl_GlobalInvocationID.z;
+
+    if (id.x >= resolution || id.y >= resolution || face >= 6)
+        return;
+
+    vec2 uv = (vec2(id) + 0.5) / float(resolution);
+    vec3 normal = getNormalFromCubeFace(face, uv);
+
+    vec3 irradiance = vec3(0.0);
+    vec3 tangent, bitangent;
+    getTangentBasis(normal, tangent, bitangent);
+
+    const uint SAMPLES = sampleCount;
+    for (uint i = 0; i < SAMPLES; ++i) {
+        float u1 = float(i) / float(SAMPLES);
+        float u2 = fract(float(i) * 1.618034); // Golden ratio offset
+
+        vec3 sampleDir = hemisphereSample_cosine(u1, u2);
+        vec3 worldDir = normalize(
+            tangent * sampleDir.x +
+            bitangent * sampleDir.y +
+            normal * sampleDir.z
+        );
+
+        irradiance += texture(environmentMap, worldDir).rgb * max(dot(normal, worldDir), 0.0);
+    }
+
+    irradiance = PI * irradiance / float(SAMPLES);
+    imageStore(irradianceMap, ivec3(id, int(face)), vec4(irradiance, 1.0));
+}
+

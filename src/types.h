@@ -28,8 +28,4 @@ struct PushConstantData {
 struct PointLight {
   glm::vec4 color; // w = intensity
   glm::vec3 position;
-  float padding;
-  glm::vec4 ambient;
-  glm::vec4 diffuse;
-  glm::vec4 specular;
 };

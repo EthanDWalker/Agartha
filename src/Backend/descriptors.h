@@ -34,7 +34,7 @@ struct DescriptorPool {
   void Destroy(VulkanContext &context);
 };
 
-struct DesciptorBuilder {
+struct DescriptorBuilder {
   DescriptorPool pool;
 
   std::vector<VkDescriptorSetLayoutBinding> bindings;
@@ -46,6 +46,7 @@ struct DesciptorBuilder {
   void BindCombinedImage(uint32_t binding, VkImageView image_view,
                          VkSampler sampler);
   void BindStorageImage(uint32_t binding, VkImageView image_view);
+  void BindStorageImages(uint32_t binding, std::vector<VkImageView> image_views);
   void BindSampler(uint32_t binding, VkSampler sampler);
   void BindImage(uint32_t binding, VkImageView image_view);
 

@@ -15,7 +15,7 @@ struct Skybox {
 };
 
 void CreateSkybox(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                  DesciptorBuilder &descriptor_builder, std::string file_name,
+                  DescriptorBuilder &descriptor_builder, std::string file_name,
                   Skybox &skybox);
 
 void DestroySkybox(VulkanContext &context, Skybox &skybox);
