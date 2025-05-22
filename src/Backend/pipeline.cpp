@@ -238,17 +238,12 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
   color_blending.attachmentCount = 1;
   color_blending.pAttachments = &color_attachment;
 
-  // completely clear VertexInputStateCreateInfo, as we have no need for it
   VkPipelineVertexInputStateCreateInfo vertex_input_info{};
   vertex_input_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-  // build the actual pipeline
-  // we now use all of the info structs we have been writing into into this one
-  // to create the pipeline
   VkGraphicsPipelineCreateInfo pipeline_ci = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-  // connect the renderInfo to the pNext extension mechanism
   pipeline_ci.pNext = &render_info;
 
   VkPipelineShaderStageCreateInfo shader_stages[2] = {};

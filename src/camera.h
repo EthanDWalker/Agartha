@@ -1,9 +1,18 @@
 #pragma once
+#include "Backend/buffer.h"
+#include "Backend/context.h"
 #include <GLFW/glfw3.h>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
-class Camera {
+struct CameraUboData {
+  glm::mat4 view_matrix;
+  glm::mat4 projection_matrix;
+  glm::vec3 view_pos;
+  float padding;
+};
+
+struct Camera {
 public:
   glm::vec3 velocity;
   glm::vec3 position;
@@ -11,10 +20,12 @@ public:
   float pitch{0.0f};
   float yaw{0.0f};
 
-  glm::mat4 GetViewMatrix();
-  glm::mat4 GetRotationMatrix();
+  AllocatedBuffer ubo;
 
-  void ProcessInput(GLFWwindow *window, float delta_time);
+  void Create(VulkanContext &context);
 
-  void Update();
+  void Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
+                    GLFWwindow *window, float delta_time);
+
+  void Destroy(VulkanContext &context);
 };

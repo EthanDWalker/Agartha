@@ -1,9 +1,7 @@
 #version 450
 
-struct PointLight {
-    vec4 color;
-    vec3 position;
-};
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
 
 layout(location = 0) in vec3 iColor;
 layout(location = 1) in vec3 iNormal;
@@ -16,19 +14,17 @@ layout(std140, binding = 0) uniform LightUBO {
     PointLight light;
 };
 
-layout(binding = 1) uniform sampler textureSampler;
+layout(std140, binding = 1) uniform CameraUBO {
+  Camera camera;
+};
 
-layout(binding = 2) uniform textureCube prefilterMap;
-layout(binding = 3) uniform textureCube irradianceMap;
-layout(binding = 4) uniform texture2D brdfLut;
+layout(binding = 2) uniform sampler textureSampler;
 
-layout(binding = 5) uniform texture2D pbrTexture[];
+layout(binding = 3) uniform textureCube prefilterMap;
+layout(binding = 4) uniform textureCube irradianceMap;
+layout(binding = 5) uniform texture2D brdfLut;
 
-layout(push_constant) uniform constants
-{
-    mat4 worldMatrix;
-    vec3 viewPos;
-} PushConstants;
+layout(binding = 6) uniform texture2D pbrTexture[];
 
 const float PI = 3.14159265359;
 
@@ -49,7 +45,7 @@ void main() {
     float ao = texture(sampler2D(pbrTexture[3], textureSampler), iUV).r;
 
     vec3 N = getNormalFromMap();
-    vec3 V = normalize(PushConstants.viewPos - iWorldPos);
+    vec3 V = normalize(camera.viewPos - iWorldPos);
     vec3 R = reflect(-V, N);
 
     vec3 F0 = vec3(0.04);

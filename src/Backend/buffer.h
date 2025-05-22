@@ -16,4 +16,8 @@ void CreateBufferData(VulkanContext &context, ImmediateSubmit immediate_submit,
                       void *data, size_t size, VkBufferUsageFlags usage,
                       AllocatedBuffer &buffer);
 
+void UpdateBuffer(VulkanContext &context, ImmediateSubmit &immediate_submit,
+                  void *data, size_t size, size_t offset,
+                  AllocatedBuffer &buffer);
+
 void DestroyBuffer(VulkanContext &context, AllocatedBuffer &buffer);

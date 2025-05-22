@@ -11,6 +11,7 @@
 #include "GLFW/glfw3.h"
 #include "camera.h"
 #include "mesh.h"
+#include "object.h"
 #include "skybox.h"
 #include "texture.h"
 #include <cstdint>
@@ -39,8 +40,8 @@ struct Engine {
   AllocatedImage depth_image;
   AllocatedBuffer point_light_buffer;
 
-  Mesh test_mesh;
-  Mesh cube_mesh;
+  Object test_mesh;
+  Object cube_mesh;
 
   Pipeline mesh_pipeline;
   Pipeline light_pipeline;

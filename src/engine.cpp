@@ -1,16 +1,18 @@
 #include "engine.h"
+#include "Backend/allocated_image.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
 #include "Backend/frame_data.h"
-#include "Backend/allocated_image.h"
 #include "Backend/init.h"
 #include "Backend/pipeline.h"
 #include "Backend/swapchain.h"
 #include "Backend/util.h"
 #include "Loaders/gltf.h"
 #include "cube_data.h"
+#include "fmt/base.h"
 #include "mesh.h"
+#include "object.h"
 #include "texture.h"
 #include "types.h"
 #include <GLFW/glfw3.h>
@@ -55,6 +57,7 @@ void Engine::Init() {
 
   immediate_submit.Create(context);
   descriptor_builder.Init(context);
+  camera.Create(context);
 
   CreateImageSampler(context, sampler);
   CreateTexture(context, immediate_submit, "Default", "jpg", box_texture);
@@ -76,7 +79,7 @@ void Engine::Init() {
     pipeline_builder.SetNoMultisampling();
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
-                                          sizeof(PushConstantData));
+                                          sizeof(ObjectPushConstantData));
     pipeline_builder.Build(context, light_pipeline);
   }
 
@@ -84,11 +87,12 @@ void Engine::Init() {
     auto box_texure_images = box_texture.ToArray();
     descriptor_builder.Reset();
     descriptor_builder.BindBuffer(0, point_light_buffer.buffer);
-    descriptor_builder.BindSampler(1, sampler);
-    descriptor_builder.BindImage(2, skybox.prefilter.image_view);
-    descriptor_builder.BindImage(3, skybox.irradiance.image_view);
-    descriptor_builder.BindImage(4, skybox.brdf.image_view);
-    descriptor_builder.BindImages(5, box_texure_images);
+    descriptor_builder.BindBuffer(1, camera.ubo.buffer);
+    descriptor_builder.BindSampler(2, sampler);
+    descriptor_builder.BindImage(3, skybox.prefilter.image_view);
+    descriptor_builder.BindImage(4, skybox.irradiance.image_view);
+    descriptor_builder.BindImage(5, skybox.brdf.image_view);
+    descriptor_builder.BindImages(6, box_texure_images);
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
         descriptor_set, descriptor_layout);
@@ -107,15 +111,15 @@ void Engine::Init() {
     pipeline_builder.SetNoMultisampling();
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
-                                          sizeof(PushConstantData));
+                                          sizeof(ObjectPushConstantData));
     pipeline_builder.AddDescriptorSetLayout(descriptor_layout);
     pipeline_builder.Build(context, mesh_pipeline);
   }
 
   {
     descriptor_builder.Reset();
-    descriptor_builder.BindCombinedImage(0, skybox.image.image_view,
-                                         sampler);
+    descriptor_builder.BindCombinedImage(0, skybox.image.image_view, sampler);
+    descriptor_builder.BindBuffer(1, camera.ubo.buffer);
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
         skybox_descriptor_set, skybox_descriptor_layout);
@@ -132,7 +136,7 @@ void Engine::Init() {
     pipeline_builder.SetNoMultisampling();
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
-                                          sizeof(SkyboxPushConstantData));
+                                          sizeof(ObjectPushConstantData));
     pipeline_builder.AddDescriptorSetLayout(skybox_descriptor_layout);
     pipeline_builder.Build(context, skybox_pipeline);
   }
@@ -142,9 +146,17 @@ void Engine::Init() {
   cube_data.vertices = cube_vertices;
   cube_data.indices = cube_indices;
 
-  CreateMesh(context, immediate_submit, gltf_data, test_mesh);
-  CreateMesh(context, immediate_submit, cube_data, cube_mesh);
-  camera.position = {2.0f, 2.0f, 2.0f};
+  CreateObject(context, immediate_submit, gltf_data, test_mesh);
+
+  glm::mat4 model_matrix = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f),
+                                       glm::vec3(1.f, 0.f, 0.f));
+  AddObjectInstanceMatrix(context, immediate_submit, model_matrix, test_mesh);
+  CreateObject(context, immediate_submit, cube_data, cube_mesh);
+  AddObjectInstanceMatrix(context, immediate_submit, glm::mat4{1.0f},
+                          cube_mesh);
+
+  camera.position = {2, 2, 2};
+  camera.Update(context, immediate_submit, window, 0.001f);
 }
 
 void Engine::Run() {
@@ -155,8 +167,8 @@ void Engine::Run() {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
       glfwSetWindowShouldClose(window, true);
     }
-    camera.ProcessInput(window, .0001f);
-    camera.Update();
+
+    camera.Update(context, immediate_submit, window, 0.001f);
 
     VK_CHECK(vkWaitForFences(context.device, 1,
                              &frame_data[frame_index].render_fence, VK_TRUE,
@@ -215,13 +227,6 @@ void Engine::Run() {
 
     vkCmdBeginRendering(cmd, &rendering_info);
 
-    glm::mat4 projection = glm::perspective(
-        glm::radians(70.f),
-        swapchain.extent.width / static_cast<float>(swapchain.extent.height),
-        0.001f, 10000.f);
-
-    projection[1][1] *= -1;
-
     {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         skybox_pipeline.obj);
@@ -248,55 +253,25 @@ void Engine::Run() {
                               skybox_pipeline.layout, 0, 1,
                               &skybox_descriptor_set, 0, nullptr);
 
-      SkyboxPushConstantData pc{};
-      pc.proj_matrix = projection;
-      pc.view_matrix = camera.GetViewMatrix();
-      pc.vertex_buffer = cube_mesh.vertex_address;
-
-      vkCmdPushConstants(cmd, skybox_pipeline.layout,
-                         VK_SHADER_STAGE_VERTEX_BIT |
-                             VK_SHADER_STAGE_FRAGMENT_BIT,
-                         0, sizeof(SkyboxPushConstantData), &pc);
-
-      DrawMesh(cmd, skybox_pipeline, cube_mesh);
+      DrawObject(cmd, skybox_pipeline, cube_mesh);
     }
 
     {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         mesh_pipeline.obj);
 
-      PushConstantData pc{};
-      pc.vertex_buffer = test_mesh.vertex_address;
-      pc.world_matrix = projection * camera.GetViewMatrix();
-      pc.view_pos = camera.position;
-
-      vkCmdPushConstants(cmd, mesh_pipeline.layout,
-                         VK_SHADER_STAGE_VERTEX_BIT |
-                             VK_SHADER_STAGE_FRAGMENT_BIT,
-                         0, sizeof(pc), &pc);
-
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                               mesh_pipeline.layout, 0, 1, &descriptor_set, 0,
                               nullptr);
 
-      DrawMesh(cmd, mesh_pipeline, test_mesh);
+      DrawObject(cmd, mesh_pipeline, test_mesh);
     }
 
     {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         light_pipeline.obj);
 
-      PushConstantData pc{};
-      pc.vertex_buffer = cube_mesh.vertex_address;
-      pc.world_matrix = glm::translate(projection * camera.GetViewMatrix(),
-                                       point_light.position);
-
-      vkCmdPushConstants(cmd, light_pipeline.layout,
-                         VK_SHADER_STAGE_VERTEX_BIT |
-                             VK_SHADER_STAGE_FRAGMENT_BIT,
-                         0, sizeof(pc), &pc);
-
-      DrawMesh(cmd, light_pipeline, cube_mesh);
+      // DrawMesh(cmd, light_pipeline, cube_mesh);
     }
 
     vkCmdEndRendering(cmd);
@@ -369,6 +344,8 @@ void Engine::Destroy() {
   vkDestroyDescriptorSetLayout(context.device, skybox_descriptor_layout,
                                nullptr);
 
+  camera.Destroy(context);
+
   DestroyImageSampler(context, sampler);
 
   DestroySkybox(context, skybox);
@@ -379,8 +356,8 @@ void Engine::Destroy() {
 
   immediate_submit.Destroy(context);
 
-  DestroyMesh(context, cube_mesh);
-  DestroyMesh(context, test_mesh);
+  DestroyObject(context, cube_mesh);
+  DestroyObject(context, test_mesh);
 
   DestroyAllocatedImage(context, draw_image);
   DestroyAllocatedImage(context, depth_image);

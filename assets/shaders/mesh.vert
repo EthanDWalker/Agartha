@@ -1,26 +1,18 @@
 #version 450
 
 #extension GL_EXT_buffer_reference : require
-
-struct Vertex {
-    vec3 position;
-    float uv_x;
-    vec3 normal;
-    float uv_y;
-    vec4 color;
-};
-
-layout(buffer_reference, std430) readonly buffer VertexBuffer {
-    Vertex vertices[];
-};
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
 
 layout(push_constant) uniform constants
 {
-    mat4 worldMatrix;
-    vec3 viewPos;
-    float padding;
-    VertexBuffer vertexBuffer;
-} PushConstants;
+  VertexBuffer vertexBuffer;
+  InstanceBuffer instanceBuffer;
+};
+
+layout(std140, binding = 1) uniform CameraUBO {
+  Camera camera;
+};
 
 layout(location = 0) out vec3 vertColor;
 layout(location = 1) out vec3 vertNormal;
@@ -28,13 +20,17 @@ layout(location = 2) out vec3 fragPos;
 layout(location = 3) out vec2 uv;
 
 void main() {
-    gl_Position = PushConstants.worldMatrix * vec4(PushConstants.vertexBuffer.vertices[gl_VertexIndex].position, 1.0);
+    mat4 instanceMatrix = instanceBuffer.instances[gl_InstanceIndex];
+    Vertex vertex = vertexBuffer.vertices[gl_VertexIndex];
 
-    vertColor = PushConstants.vertexBuffer.vertices[gl_VertexIndex].color.xyz;
+    gl_Position = camera.projection * camera.view * instanceMatrix * vec4(vertex.position, 1.0);
 
-    vertNormal = PushConstants.vertexBuffer.vertices[gl_VertexIndex].normal;
+    vertColor = vertex.color.xyz;
 
-    fragPos = PushConstants.vertexBuffer.vertices[gl_VertexIndex].position;
+    mat3 normalMatrix = transpose(inverse(mat3(instanceMatrix)));
+    vertNormal = normalMatrix * vertex.normal;
 
-    uv = vec2(PushConstants.vertexBuffer.vertices[gl_VertexIndex].uv_x, PushConstants.vertexBuffer.vertices[gl_VertexIndex].uv_y);
+    fragPos = vec3(instanceMatrix * vec4(vertex.position, 1.0));
+
+    uv = vec2(vertex.uv_x, vertex.uv_y);
 }

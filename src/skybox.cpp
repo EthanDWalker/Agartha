@@ -247,7 +247,7 @@ void CreateSkybox(VulkanContext &context, ImmediateSubmit &immediate_submit,
   std::string full_path = (file_name + ".hdr");
 
   ImageData image_data;
-  LoadImageData(full_path, image_data, true, false);
+  LoadImageData(full_path, image_data, true);
 
   VkExtent3D image_size = {static_cast<uint32_t>(image_data.width),
                            static_cast<uint32_t>(image_data.height), 1};
