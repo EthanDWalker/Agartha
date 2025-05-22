@@ -16,7 +16,9 @@ VkImageCreateInfo ImageCI(VkFormat format, VkImageUsageFlags usage_flags,
 VkImageViewCreateInfo ImageViewCI(VkFormat format,
                                   VkImageAspectFlags aspect_flags,
                                   VkImage image, uint32_t mip_levels);
-VkRenderingAttachmentInfo AttachmentInfo(VkImageView view, VkClearValue *clear,
+VkRenderingAttachmentInfo AttachmentInfo(VkImageView view,
+                                         VkImageView resolve_view,
+                                         VkClearValue *clear,
                                          VkImageLayout layout);
 VkRenderingAttachmentInfo DepthAttachmentInfo(VkImageView image_view,
                                               VkImageLayout layout);

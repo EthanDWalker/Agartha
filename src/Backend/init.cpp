@@ -67,8 +67,9 @@ VkImageCreateInfo ImageCI(VkFormat format, VkImageUsageFlags usage_flags,
   return info;
 }
 
-VkImageViewCreateInfo
-ImageViewCI(VkFormat format, VkImageAspectFlags aspect_flags, VkImage image, uint32_t mip_levels) {
+VkImageViewCreateInfo ImageViewCI(VkFormat format,
+                                  VkImageAspectFlags aspect_flags,
+                                  VkImage image, uint32_t mip_levels) {
   VkImageViewCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   info.viewType = VK_IMAGE_VIEW_TYPE_2D;
@@ -82,7 +83,9 @@ ImageViewCI(VkFormat format, VkImageAspectFlags aspect_flags, VkImage image, uin
   return info;
 }
 
-VkRenderingAttachmentInfo AttachmentInfo(VkImageView view, VkClearValue *clear,
+VkRenderingAttachmentInfo AttachmentInfo(VkImageView view,
+                                         VkImageView resolve_view,
+                                         VkClearValue *clear,
                                          VkImageLayout layout) {
   VkRenderingAttachmentInfo info{};
   info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -94,6 +97,9 @@ VkRenderingAttachmentInfo AttachmentInfo(VkImageView view, VkClearValue *clear,
   info.loadOp =
       clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
   info.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  info.resolveImageView = resolve_view; 
+  info.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  info.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
   return info;
 }
 

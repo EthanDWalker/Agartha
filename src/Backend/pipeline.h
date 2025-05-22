@@ -67,6 +67,8 @@ struct GraphicsPipelineBuilder {
 
   void SetNoMultisampling();
 
+  void SetMultisampling(VkSampleCountFlagBits sample_count);
+
   void SetNoBlending();
 
   void SetColorAttachmentFormat(VkFormat format);

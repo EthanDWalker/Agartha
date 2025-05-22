@@ -10,10 +10,9 @@
 #include "Backend/swapchain.h"
 #include "GLFW/glfw3.h"
 #include "camera.h"
-#include "mesh.h"
+#include "material.h"
 #include "object.h"
 #include "skybox.h"
-#include "texture.h"
 #include <cstdint>
 
 #if defined(DEBUG)
@@ -34,17 +33,19 @@ struct Engine {
   GLFWwindow *window;
 
   Skybox skybox;
-  Texture box_texture;
+  Material box_material;
   VkSampler sampler;
+  AllocatedImage msaa_draw_image;
   AllocatedImage draw_image;
   AllocatedImage depth_image;
   AllocatedBuffer point_light_buffer;
 
-  Object test_mesh;
-  Object cube_mesh;
+  Object test_obj;
+  Object cube_obj;
+  Object rectangle_obj;
 
   Pipeline mesh_pipeline;
-  Pipeline light_pipeline;
+  Pipeline billboard_pipeline;
   Pipeline skybox_pipeline;
 
   VkDescriptorSet descriptor_set;
@@ -52,6 +53,9 @@ struct Engine {
 
   VkDescriptorSet skybox_descriptor_set;
   VkDescriptorSetLayout skybox_descriptor_layout;
+
+  VkDescriptorSet billboard_descriptor_set;
+  VkDescriptorSetLayout billboard_descriptor_layout;
 
   void Init();
 

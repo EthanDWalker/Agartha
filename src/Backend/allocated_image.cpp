@@ -104,12 +104,13 @@ void DestroyImageSampler(VulkanContext &context, VkSampler &sampler) {
 void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
                           VkFormat format, VkImageUsageFlags usage_flags,
                           AllocatedImage &image, uint32_t mip_levels,
-                          bool cube_map) {
+                          bool cube_map, VkSampleCountFlagBits sample_count) {
   image.format = format;
   image.extent = size;
 
   VkImageCreateInfo image_ci =
       vkinit::ImageCI(format, usage_flags, size, mip_levels);
+  image_ci.samples = sample_count;
 
   if (cube_map) {
     image_ci.arrayLayers = 6;

@@ -9,11 +9,11 @@
 #include "Backend/swapchain.h"
 #include "Backend/util.h"
 #include "Loaders/gltf.h"
+#include "Primitives/rectangle.h"
 #include "cube_data.h"
-#include "fmt/base.h"
+#include "material.h"
 #include "mesh.h"
 #include "object.h"
-#include "texture.h"
 #include "types.h"
 #include <GLFW/glfw3.h>
 #include <cstdint>
@@ -45,6 +45,12 @@ void Engine::Init() {
       1,
   };
 
+  CreateAllocatedImage(context, draw_image_extent_3d,
+                       VK_FORMAT_R16G16B16A16_SFLOAT,
+                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                           VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+                       msaa_draw_image, 1, false, VK_SAMPLE_COUNT_4_BIT);
+
   CreateAllocatedImage(
       context, draw_image_extent_3d, VK_FORMAT_R16G16B16A16_SFLOAT,
       VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
@@ -53,14 +59,14 @@ void Engine::Init() {
 
   CreateAllocatedImage(context, draw_image_extent_3d, VK_FORMAT_D32_SFLOAT,
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                       depth_image);
+                       depth_image, 1, false, VK_SAMPLE_COUNT_4_BIT);
 
   immediate_submit.Create(context);
   descriptor_builder.Init(context);
   camera.Create(context);
 
   CreateImageSampler(context, sampler);
-  CreateTexture(context, immediate_submit, "Default", "jpg", box_texture);
+  CreateMaterial(context, immediate_submit, "Default", "jpg", box_material);
 
   CreateSkybox(context, immediate_submit, descriptor_builder, "sunset", skybox);
 
@@ -68,23 +74,30 @@ void Engine::Init() {
                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, point_light_buffer);
 
   {
+    descriptor_builder.Reset();
+    descriptor_builder.BindBuffer(0, camera.ubo.buffer);
+    descriptor_builder.Build(
+        context, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        billboard_descriptor_set, billboard_descriptor_layout);
     GraphicsPipelineBuilder pipeline_builder;
-    pipeline_builder.SetShaders(context, "light.vert.spv", "light.frag.spv");
+    pipeline_builder.SetShaders(context, "billboard.vert.spv",
+                                "billboard.frag.spv");
     pipeline_builder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
     pipeline_builder.SetPolygonMode(VK_POLYGON_MODE_FILL);
     pipeline_builder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     pipeline_builder.SetNoBlending();
     pipeline_builder.SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
     pipeline_builder.SetDepthFormat(depth_image.format);
-    pipeline_builder.SetNoMultisampling();
+    pipeline_builder.AddDescriptorSetLayout(billboard_descriptor_layout);
+    pipeline_builder.SetMultisampling(VK_SAMPLE_COUNT_4_BIT);
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
                                           sizeof(ObjectPushConstantData));
-    pipeline_builder.Build(context, light_pipeline);
+    pipeline_builder.Build(context, billboard_pipeline);
   }
 
   {
-    auto box_texure_images = box_texture.ToArray();
+    auto box_material_images = box_material.ToArray();
     descriptor_builder.Reset();
     descriptor_builder.BindBuffer(0, point_light_buffer.buffer);
     descriptor_builder.BindBuffer(1, camera.ubo.buffer);
@@ -92,7 +105,7 @@ void Engine::Init() {
     descriptor_builder.BindImage(3, skybox.prefilter.image_view);
     descriptor_builder.BindImage(4, skybox.irradiance.image_view);
     descriptor_builder.BindImage(5, skybox.brdf.image_view);
-    descriptor_builder.BindImages(6, box_texure_images);
+    descriptor_builder.BindImages(6, box_material_images);
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
         descriptor_set, descriptor_layout);
@@ -108,7 +121,7 @@ void Engine::Init() {
     pipeline_builder.SetNoBlending();
     pipeline_builder.SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
     pipeline_builder.SetDepthFormat(depth_image.format);
-    pipeline_builder.SetNoMultisampling();
+    pipeline_builder.SetMultisampling(VK_SAMPLE_COUNT_4_BIT);
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
                                           sizeof(ObjectPushConstantData));
@@ -133,7 +146,7 @@ void Engine::Init() {
     pipeline_builder.SetNoBlending();
     pipeline_builder.SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
     pipeline_builder.SetDepthFormat(depth_image.format);
-    pipeline_builder.SetNoMultisampling();
+    pipeline_builder.SetMultisampling(VK_SAMPLE_COUNT_4_BIT);
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
                                           sizeof(ObjectPushConstantData));
@@ -142,18 +155,24 @@ void Engine::Init() {
   }
 
   MeshData gltf_data = LoadGltf("DamagedHelmet");
-  MeshData cube_data = {};
-  cube_data.vertices = cube_vertices;
-  cube_data.indices = cube_indices;
+  MeshData cube_data = {cube_vertices, cube_indices};
+  MeshData rectangle_data = {rectangle_vertices, rectangle_indices};
 
-  CreateObject(context, immediate_submit, gltf_data, test_mesh);
+  CreateObject(context, immediate_submit, gltf_data, test_obj);
 
   glm::mat4 model_matrix = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f),
                                        glm::vec3(1.f, 0.f, 0.f));
-  AddObjectInstanceMatrix(context, immediate_submit, model_matrix, test_mesh);
-  CreateObject(context, immediate_submit, cube_data, cube_mesh);
-  AddObjectInstanceMatrix(context, immediate_submit, glm::mat4{1.0f},
-                          cube_mesh);
+  AddObjectInstanceMatrix(context, immediate_submit, model_matrix, test_obj);
+
+  CreateObject(context, immediate_submit, cube_data, cube_obj);
+
+  AddObjectInstanceMatrix(context, immediate_submit, glm::mat4(1.0f), cube_obj);
+
+  CreateObject(context, immediate_submit, rectangle_data, rectangle_obj);
+
+  AddObjectInstanceMatrix(context, immediate_submit,
+                          glm::translate(glm::mat4(1.0f), point_light.position),
+                          rectangle_obj);
 
   camera.position = {2, 2, 2};
   camera.Update(context, immediate_submit, window, 0.001f);
@@ -213,9 +232,9 @@ void Engine::Run() {
     VkClearValue clear_value{};
     clear_value.color = clear_color_value;
 
-    VkRenderingAttachmentInfo attachment_info =
-        vkinit::AttachmentInfo(draw_image.image_view, &clear_value,
-                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    VkRenderingAttachmentInfo attachment_info = vkinit::AttachmentInfo(
+        msaa_draw_image.image_view, draw_image.image_view, &clear_value,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
     VkRenderingAttachmentInfo depth_attachment_info =
         vkinit::DepthAttachmentInfo(depth_image.image_view,
@@ -253,7 +272,7 @@ void Engine::Run() {
                               skybox_pipeline.layout, 0, 1,
                               &skybox_descriptor_set, 0, nullptr);
 
-      DrawObject(cmd, skybox_pipeline, cube_mesh);
+      DrawObject(cmd, skybox_pipeline, cube_obj);
     }
 
     {
@@ -264,14 +283,18 @@ void Engine::Run() {
                               mesh_pipeline.layout, 0, 1, &descriptor_set, 0,
                               nullptr);
 
-      DrawObject(cmd, mesh_pipeline, test_mesh);
+      DrawObject(cmd, mesh_pipeline, test_obj);
     }
 
     {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        light_pipeline.obj);
+                        billboard_pipeline.obj);
 
-      // DrawMesh(cmd, light_pipeline, cube_mesh);
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              billboard_pipeline.layout, 0, 1,
+                              &billboard_descriptor_set, 0, nullptr);
+
+      // DrawObject(cmd, billboard_pipeline, rectangle_obj);
     }
 
     vkCmdEndRendering(cmd);
@@ -343,6 +366,8 @@ void Engine::Destroy() {
   vkDestroyDescriptorSetLayout(context.device, descriptor_layout, nullptr);
   vkDestroyDescriptorSetLayout(context.device, skybox_descriptor_layout,
                                nullptr);
+  vkDestroyDescriptorSetLayout(context.device, billboard_descriptor_layout,
+                               nullptr);
 
   camera.Destroy(context);
 
@@ -350,20 +375,22 @@ void Engine::Destroy() {
 
   DestroySkybox(context, skybox);
 
-  DestroyTexture(context, box_texture);
+  DestroyMaterial(context, box_material);
 
   DestroyBuffer(context, point_light_buffer);
 
   immediate_submit.Destroy(context);
 
-  DestroyObject(context, cube_mesh);
-  DestroyObject(context, test_mesh);
+  DestroyObject(context, cube_obj);
+  DestroyObject(context, test_obj);
+  DestroyObject(context, rectangle_obj);
 
+  DestroyAllocatedImage(context, msaa_draw_image);
   DestroyAllocatedImage(context, draw_image);
   DestroyAllocatedImage(context, depth_image);
 
   DestroyPipeline(context, mesh_pipeline);
-  DestroyPipeline(context, light_pipeline);
+  DestroyPipeline(context, billboard_pipeline);
   DestroyPipeline(context, skybox_pipeline);
 
   DestroyVulkanSwapchain(context, swapchain);

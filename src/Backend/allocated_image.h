@@ -19,10 +19,11 @@ void CreateImageSampler(VulkanContext &context, VkSampler &sampler);
 
 void DestroyImageSampler(VulkanContext &context, VkSampler &sampler);
 
-void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
-                          VkFormat format, VkImageUsageFlags usage_flags,
-                          AllocatedImage &image, uint32_t mip_levels = 1,
-                          bool cube_map = false);
+void CreateAllocatedImage(
+    VulkanContext &context, VkExtent3D size, VkFormat format,
+    VkImageUsageFlags usage_flags, AllocatedImage &image,
+    uint32_t mip_levels = 1, bool cube_map = false,
+    VkSampleCountFlagBits sample_count = VK_SAMPLE_COUNT_1_BIT);
 
 void CreateAllocatedImageData(VulkanContext &context,
                               ImmediateSubmit immediate_submit, void *data,
@@ -31,7 +32,8 @@ void CreateAllocatedImageData(VulkanContext &context,
                               AllocatedImage &image);
 
 void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,
-                     VkImageLayout new_layout, VkImage image, uint32_t mip_levels = 1);
+                     VkImageLayout new_layout, VkImage image,
+                     uint32_t mip_levels = 1);
 
 void CopyImageToImage(VkCommandBuffer cmd, VkImage source, VkImage destination,
                       VkExtent2D src_size, VkExtent2D dst_size);

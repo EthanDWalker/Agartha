@@ -135,6 +135,13 @@ void GraphicsPipelineBuilder::SetCullMode(VkCullModeFlags cull_mode,
   rasterization.frontFace = front_face;
 }
 
+void GraphicsPipelineBuilder::SetMultisampling(
+    VkSampleCountFlagBits sample_count) {
+  multisample.sampleShadingEnable = VK_FALSE;
+  multisample.rasterizationSamples = sample_count;
+  multisample.minSampleShading = 0.2f;
+}
+
 void GraphicsPipelineBuilder::SetNoMultisampling() {
   multisample.sampleShadingEnable = VK_FALSE;
   // multisampling defaulted to no multisampling (1 sample per pixel)
