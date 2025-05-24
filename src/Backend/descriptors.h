@@ -1,6 +1,6 @@
 #pragma once
-#include "Backend/context.h"
 #include "Backend/allocated_image.h"
+#include "Backend/context.h"
 #include <array>
 #include <cstdint>
 #include <span>
@@ -46,10 +46,12 @@ struct DescriptorBuilder {
   void BindCombinedImage(uint32_t binding, VkImageView image_view,
                          VkSampler sampler);
   void BindStorageImage(uint32_t binding, VkImageView image_view);
-  void BindStorageImages(uint32_t binding, std::vector<VkImageView> image_views);
+  void BindStorageImages(uint32_t binding,
+                         std::vector<VkImageView> image_views);
   void BindSampler(uint32_t binding, VkSampler sampler);
   void BindImage(uint32_t binding, VkImageView image_view);
 
+  void BindNullImages(uint32_t binding, uint32_t amount);
   void BindImages(uint32_t binding, std::span<AllocatedImage> image_views);
 
   void Build(VulkanContext &context, VkShaderStageFlags stage_flags,

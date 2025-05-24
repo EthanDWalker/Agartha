@@ -1,13 +1,14 @@
 #include "object.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
+#include "Backend/descriptors.h"
 #include "Backend/immediate_submit.h"
 #include "Backend/pipeline.h"
-#include "fmt/base.h"
 #include "mesh.h"
 
 void CreateObject(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                  MeshData &mesh_data, Object &object) {
+                  DescriptorBuilder &descriptor_builder, MeshData &mesh_data,
+                  Object &object) {
   CreateMesh(context, immediate_submit, mesh_data, object.mesh);
 
   CreateBuffer(context, sizeof(glm::mat4) * MAX_OBJECT_INSTANCES,

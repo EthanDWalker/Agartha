@@ -13,6 +13,7 @@
 #include "material.h"
 #include "object.h"
 #include "skybox.h"
+#include "texture_manager.h"
 #include <cstdint>
 
 #if defined(DEBUG)
@@ -28,6 +29,7 @@ struct Engine {
   Swapchain swapchain;
   ImmediateSubmit immediate_submit;
   Camera camera;
+  TextureManager texture_manager;
   DescriptorBuilder descriptor_builder;
   FrameData frame_data[FRAME_OVERLAP];
   GLFWwindow *window;
@@ -44,8 +46,9 @@ struct Engine {
   Object cube_obj;
   Object rectangle_obj;
 
+  AllocatedImage light_image;
+
   Pipeline mesh_pipeline;
-  Pipeline billboard_pipeline;
   Pipeline skybox_pipeline;
 
   VkDescriptorSet descriptor_set;

@@ -3,9 +3,10 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/pipeline.h"
+#include "Backend/descriptors.h"
 #include "mesh.h"
 
-const uint32_t MAX_OBJECT_INSTANCES = 1000;
+const uint32_t MAX_OBJECT_INSTANCES = 100;
 
 struct Object {
   Mesh mesh;
@@ -19,7 +20,7 @@ struct ObjectPushConstantData {
   VkDeviceAddress instance_buffer_address;
 };
 
-void CreateObject(VulkanContext &context, ImmediateSubmit &immediate_submit,
+void CreateObject(VulkanContext &context, ImmediateSubmit &immediate_submit, DescriptorBuilder &descriptor_builder,
                   MeshData &mesh_data, Object &object);
 
 void AddObjectInstanceMatrix(VulkanContext &context,

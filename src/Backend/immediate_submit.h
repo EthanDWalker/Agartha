@@ -2,6 +2,7 @@
 
 #include "Backend/context.h"
 #include <functional>
+#include <future>
 #include <vulkan/vulkan.h>
 
 struct ImmediateSubmit {
@@ -11,7 +12,11 @@ struct ImmediateSubmit {
 
   void Create(VulkanContext &context);
 
-  void Submit(VulkanContext &context, std::function<void(VkCommandBuffer cmd)> &&function);
+  void Submit(VulkanContext &context,
+              std::function<void(VkCommandBuffer cmd)> &&function);
+
+  static void SubmitAsync(VulkanContext &context,
+                          std::function<void(VkCommandBuffer cmd)> &&function);
 
   void Destroy(VulkanContext &context);
 };

@@ -14,7 +14,7 @@ layout(std140, binding = 0) uniform CameraUBO {
   Camera camera;
 };
 
-layout(location = 0) out vec4 vertColor;
+layout(location = 0) out vec3 vertColor;
 layout(location = 1) out vec2 uv;
 
 void main() {
@@ -43,8 +43,8 @@ void main() {
     vec3 finalWorldPos = worldPosition.xyz + rotatedPosition;
 
     // Output final screen-space position
-    gl_Position = camera.projection * camera.view * vec4(finalWorldPos, 1.0);
+    gl_Position = (camera.projection * camera.view * vec4(finalWorldPos.xyz, 1.0)) * vec4(1.0, 1.0, 0.0, 1.0);
 
-    vertColor = vertex.color;
-    uv = vec2(vertex.uv_x, vertex.uv_y);
+    vertColor = vertex.color.rgb;
+    uv = vec2(vertex.uv_x, 1 - vertex.uv_y);
 }

@@ -1,4 +1,5 @@
 #include "image.h"
+#include "fmt/base.h"
 #include <cstdint>
 
 #define STB_IMAGE_IMPLEMENTATION

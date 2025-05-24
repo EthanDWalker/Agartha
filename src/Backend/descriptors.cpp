@@ -40,8 +40,8 @@ void DescriptorBuilder::BindBuffer(uint32_t binding, VkBuffer buffer) {
 }
 
 void DescriptorBuilder::BindCombinedImage(uint32_t binding,
-                                         VkImageView image_view,
-                                         VkSampler sampler) {
+                                          VkImageView image_view,
+                                          VkSampler sampler) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -77,7 +77,7 @@ void DescriptorBuilder::BindImage(uint32_t binding, VkImageView image_view) {
 }
 
 void DescriptorBuilder::BindImages(uint32_t binding,
-                                  std::span<AllocatedImage> images) {
+                                   std::span<AllocatedImage> images) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorCount = images.size();
@@ -99,8 +99,19 @@ void DescriptorBuilder::BindImages(uint32_t binding,
   writes.push_back(image_write_array);
 }
 
-void DescriptorBuilder::BindStorageImages(uint32_t binding,
-                                         std::vector<VkImageView> image_views) {
+void DescriptorBuilder::BindNullImages(uint32_t binding, uint32_t amount) {
+  VkDescriptorSetLayoutBinding new_binding{};
+  new_binding.binding = binding;
+  new_binding.descriptorCount = amount;
+  new_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+
+  bindings.push_back(new_binding);
+
+  writes.push_back(nullptr);
+}
+
+void DescriptorBuilder::BindStorageImages(
+    uint32_t binding, std::vector<VkImageView> image_views) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorCount = image_views.size();
@@ -123,7 +134,7 @@ void DescriptorBuilder::BindStorageImages(uint32_t binding,
 }
 
 void DescriptorBuilder::BindStorageImage(uint32_t binding,
-                                        VkImageView image_view) {
+                                         VkImageView image_view) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -164,9 +175,9 @@ void DescriptorBuilder::Reset() {
 }
 
 void DescriptorBuilder::Build(VulkanContext &context,
-                             VkShaderStageFlags stage_flags,
-                             VkDescriptorSet &set,
-                             VkDescriptorSetLayout &layout) {
+                              VkShaderStageFlags stage_flags,
+                              VkDescriptorSet &set,
+                              VkDescriptorSetLayout &layout) {
   for (auto &binding : bindings) {
     binding.stageFlags = stage_flags;
   }

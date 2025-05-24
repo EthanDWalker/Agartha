@@ -119,6 +119,16 @@ void GraphicsPipelineBuilder::SetShaders(VulkanContext &context,
   }
 }
 
+// need to set shaders and depth image format
+void GraphicsPipelineBuilder::Default() {
+  SetCullMode(VK_CULL_MODE_FRONT_BIT, VK_FRONT_FACE_CLOCKWISE);
+  SetPolygonMode(VK_POLYGON_MODE_FILL);
+  SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+  SetBlendingAlpha();
+  SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+  SetMultisampling(VK_SAMPLE_COUNT_4_BIT);
+}
+
 void GraphicsPipelineBuilder::SetInputTopology(VkPrimitiveTopology topology) {
   input_assembly.topology = topology;
   input_assembly.primitiveRestartEnable = VK_FALSE;
@@ -151,6 +161,32 @@ void GraphicsPipelineBuilder::SetNoMultisampling() {
   // no alpha to coverage either
   multisample.alphaToCoverageEnable = VK_FALSE;
   multisample.alphaToOneEnable = VK_FALSE;
+}
+
+void GraphicsPipelineBuilder::SetBlendingAdditive() {
+  color_attachment.colorWriteMask =
+      VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  color_attachment.blendEnable = VK_TRUE;
+  color_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+  color_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+  color_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+  color_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  color_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  color_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+}
+
+void GraphicsPipelineBuilder::SetBlendingAlpha() {
+  color_attachment.colorWriteMask =
+      VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  color_attachment.blendEnable = VK_TRUE;
+  color_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+  color_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  color_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+  color_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  color_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  color_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
 }
 
 void GraphicsPipelineBuilder::SetNoBlending() {
@@ -233,15 +269,10 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
   viewport_state.viewportCount = 1;
   viewport_state.scissorCount = 1;
 
-  // setup dummy color blending. We arent using transparent objects yet
-  // the blending is just "no blend", but we do write to the color attachment
   VkPipelineColorBlendStateCreateInfo color_blending = {};
   color_blending.sType =
       VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  color_blending.pNext = nullptr;
-
   color_blending.logicOpEnable = VK_FALSE;
-  color_blending.logicOp = VK_LOGIC_OP_COPY;
   color_blending.attachmentCount = 1;
   color_blending.pAttachments = &color_attachment;
 

@@ -9,8 +9,9 @@
 #include "Backend/swapchain.h"
 #include "Backend/util.h"
 #include "Loaders/gltf.h"
+#include "Loaders/image.h"
+#include "Primitives/cube.h"
 #include "Primitives/rectangle.h"
-#include "cube_data.h"
 #include "material.h"
 #include "mesh.h"
 #include "object.h"
@@ -34,6 +35,10 @@ void Engine::Init() {
   window = glfwCreateWindow(1600, 900, "Engine", nullptr, nullptr);
   InitVulkanContext(window, DEBUG, context);
   CreateVulkanSwapchain(context, 1600, 900, swapchain);
+  immediate_submit.Create(context);
+  descriptor_builder.Init(context);
+  texture_manager.Init(context, descriptor_builder, immediate_submit);
+  camera.Create(context);
 
   for (FrameData &frame : frame_data) {
     CreateFrameData(context, frame);
@@ -58,43 +63,27 @@ void Engine::Init() {
       draw_image);
 
   CreateAllocatedImage(context, draw_image_extent_3d, VK_FORMAT_D32_SFLOAT,
-                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                       depth_image, 1, false, VK_SAMPLE_COUNT_4_BIT);
-
-  immediate_submit.Create(context);
-  descriptor_builder.Init(context);
-  camera.Create(context);
+                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, depth_image,
+                       1, false, VK_SAMPLE_COUNT_4_BIT);
 
   CreateImageSampler(context, sampler);
   CreateMaterial(context, immediate_submit, "Default", "jpg", box_material);
+
+  {
+    ImageData light_image_data;
+    LoadImageData("light_indicator.png", light_image_data);
+    VkExtent3D image_size = {static_cast<uint32_t>(light_image_data.width),
+                             static_cast<uint32_t>(light_image_data.height), 1};
+
+    CreateAllocatedImageData(context, immediate_submit, light_image_data.data,
+                             image_size, VK_FORMAT_R8G8B8A8_UNORM,
+                             VK_IMAGE_USAGE_SAMPLED_BIT, light_image);
+  }
 
   CreateSkybox(context, immediate_submit, descriptor_builder, "sunset", skybox);
 
   CreateBufferData(context, immediate_submit, &point_light, sizeof(PointLight),
                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, point_light_buffer);
-
-  {
-    descriptor_builder.Reset();
-    descriptor_builder.BindBuffer(0, camera.ubo.buffer);
-    descriptor_builder.Build(
-        context, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-        billboard_descriptor_set, billboard_descriptor_layout);
-    GraphicsPipelineBuilder pipeline_builder;
-    pipeline_builder.SetShaders(context, "billboard.vert.spv",
-                                "billboard.frag.spv");
-    pipeline_builder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-    pipeline_builder.SetPolygonMode(VK_POLYGON_MODE_FILL);
-    pipeline_builder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-    pipeline_builder.SetNoBlending();
-    pipeline_builder.SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-    pipeline_builder.SetDepthFormat(depth_image.format);
-    pipeline_builder.AddDescriptorSetLayout(billboard_descriptor_layout);
-    pipeline_builder.SetMultisampling(VK_SAMPLE_COUNT_4_BIT);
-    pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
-                                              VK_SHADER_STAGE_FRAGMENT_BIT,
-                                          sizeof(ObjectPushConstantData));
-    pipeline_builder.Build(context, billboard_pipeline);
-  }
 
   {
     auto box_material_images = box_material.ToArray();
@@ -109,19 +98,10 @@ void Engine::Init() {
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
         descriptor_set, descriptor_layout);
-  }
-
-  {
     GraphicsPipelineBuilder pipeline_builder;
     pipeline_builder.SetShaders(context, "mesh.vert.spv", "mesh.frag.spv");
-    pipeline_builder.SetCullMode(VK_CULL_MODE_FRONT_BIT,
-                                 VK_FRONT_FACE_CLOCKWISE);
-    pipeline_builder.SetPolygonMode(VK_POLYGON_MODE_FILL);
-    pipeline_builder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-    pipeline_builder.SetNoBlending();
-    pipeline_builder.SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+    pipeline_builder.Default();
     pipeline_builder.SetDepthFormat(depth_image.format);
-    pipeline_builder.SetMultisampling(VK_SAMPLE_COUNT_4_BIT);
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
                                           sizeof(ObjectPushConstantData));
@@ -139,14 +119,10 @@ void Engine::Init() {
 
     GraphicsPipelineBuilder pipeline_builder;
     pipeline_builder.SetShaders(context, "skybox.vert.spv", "skybox.frag.spv");
+    pipeline_builder.Default();
     pipeline_builder.SetCullMode(VK_CULL_MODE_BACK_BIT,
                                  VK_FRONT_FACE_CLOCKWISE);
-    pipeline_builder.SetPolygonMode(VK_POLYGON_MODE_FILL);
-    pipeline_builder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-    pipeline_builder.SetNoBlending();
-    pipeline_builder.SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
     pipeline_builder.SetDepthFormat(depth_image.format);
-    pipeline_builder.SetMultisampling(VK_SAMPLE_COUNT_4_BIT);
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
                                           sizeof(ObjectPushConstantData));
@@ -158,17 +134,20 @@ void Engine::Init() {
   MeshData cube_data = {cube_vertices, cube_indices};
   MeshData rectangle_data = {rectangle_vertices, rectangle_indices};
 
-  CreateObject(context, immediate_submit, gltf_data, test_obj);
+  CreateObject(context, immediate_submit, descriptor_builder, gltf_data,
+               test_obj);
 
   glm::mat4 model_matrix = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f),
                                        glm::vec3(1.f, 0.f, 0.f));
   AddObjectInstanceMatrix(context, immediate_submit, model_matrix, test_obj);
 
-  CreateObject(context, immediate_submit, cube_data, cube_obj);
+  CreateObject(context, immediate_submit, descriptor_builder, cube_data,
+               cube_obj);
 
   AddObjectInstanceMatrix(context, immediate_submit, glm::mat4(1.0f), cube_obj);
 
-  CreateObject(context, immediate_submit, rectangle_data, rectangle_obj);
+  CreateObject(context, immediate_submit, descriptor_builder, rectangle_data,
+               rectangle_obj);
 
   AddObjectInstanceMatrix(context, immediate_submit,
                           glm::translate(glm::mat4(1.0f), point_light.position),
@@ -227,7 +206,7 @@ void Engine::Run() {
                     depth_image.image);
 
     VkClearColorValue clear_color_value{};
-    clear_color_value = {0.0f, 0.0f, 0.0f};
+    clear_color_value = {0.0f, 0.0f, 0.0f, 0.0f};
 
     VkClearValue clear_value{};
     clear_value.color = clear_color_value;
@@ -284,17 +263,6 @@ void Engine::Run() {
                               nullptr);
 
       DrawObject(cmd, mesh_pipeline, test_obj);
-    }
-
-    {
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        billboard_pipeline.obj);
-
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              billboard_pipeline.layout, 0, 1,
-                              &billboard_descriptor_set, 0, nullptr);
-
-      // DrawObject(cmd, billboard_pipeline, rectangle_obj);
     }
 
     vkCmdEndRendering(cmd);
@@ -362,7 +330,9 @@ void Engine::Destroy() {
     DestroyFrameData(context, frame);
   }
 
+  texture_manager.Destroy(context);
   descriptor_builder.Destroy(context);
+
   vkDestroyDescriptorSetLayout(context.device, descriptor_layout, nullptr);
   vkDestroyDescriptorSetLayout(context.device, skybox_descriptor_layout,
                                nullptr);
@@ -385,12 +355,13 @@ void Engine::Destroy() {
   DestroyObject(context, test_obj);
   DestroyObject(context, rectangle_obj);
 
+  DestroyAllocatedImage(context, light_image);
+
   DestroyAllocatedImage(context, msaa_draw_image);
   DestroyAllocatedImage(context, draw_image);
   DestroyAllocatedImage(context, depth_image);
 
   DestroyPipeline(context, mesh_pipeline);
-  DestroyPipeline(context, billboard_pipeline);
   DestroyPipeline(context, skybox_pipeline);
 
   DestroyVulkanSwapchain(context, swapchain);

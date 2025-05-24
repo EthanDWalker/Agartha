@@ -1,8 +1,7 @@
 #pragma once
 #include <chrono>
 
-class Timer {
-public:
+struct Timer {
   Timer() { Reset(); }
   void Reset() { m_start = std::chrono::high_resolution_clock::now(); }
   float Elapsed() const {
@@ -18,6 +17,5 @@ public:
            0.001f;
   }
 
-private:
   std::chrono::time_point<std::chrono::high_resolution_clock> m_start;
 };

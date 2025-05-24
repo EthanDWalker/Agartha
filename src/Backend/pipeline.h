@@ -59,6 +59,8 @@ struct GraphicsPipelineBuilder {
 
   void SetShaders(VulkanContext &context, std::string vert, std::string frag);
 
+  void Default();
+
   void SetInputTopology(VkPrimitiveTopology topology);
 
   void SetPolygonMode(VkPolygonMode mode);
@@ -70,6 +72,10 @@ struct GraphicsPipelineBuilder {
   void SetMultisampling(VkSampleCountFlagBits sample_count);
 
   void SetNoBlending();
+
+  void SetBlendingAdditive();
+
+  void SetBlendingAlpha();
 
   void SetColorAttachmentFormat(VkFormat format);
 

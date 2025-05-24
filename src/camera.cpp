@@ -3,13 +3,12 @@
 #include "Backend/context.h"
 #include "Backend/immediate_submit.h"
 #include "GLFW/glfw3.h"
-#include "fmt/base.h"
 #include <glm/glm.hpp>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
-#include <glm/gtx/transform.hpp>
 #include <glm/gtx/string_cast.hpp>
+#include <glm/gtx/transform.hpp>
 
 void Camera::Create(VulkanContext &context) {
   CreateBuffer(context, sizeof(CameraUboData),
@@ -36,19 +35,20 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
   pos_x -= window_width / 2.0f;
   pos_y -= window_height / 2.0f;
 
-  double dx, dy;
-  dx = pos_x - last_x;
-  dy = last_y - pos_y;
+  const double sensitivity = 0.003f;
+  if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT)) {
+    double dx, dy;
+    dx = pos_x - last_x;
+    dy = last_y - pos_y;
+    dx *= sensitivity;
+    dy *= sensitivity;
+
+    yaw += static_cast<float>(dx);
+    pitch += static_cast<float>(dy);
+  }
 
   last_x = pos_x;
   last_y = pos_y;
-
-  const double sensitivity = 0.003f;
-  dx *= sensitivity;
-  dy *= sensitivity;
-
-  yaw += static_cast<float>(dx);
-  pitch += static_cast<float>(dy);
 
   if (pitch < -89.0f)
     pitch = -89.0f;
