@@ -36,7 +36,6 @@ FetchContent_Declare(
     GIT_TAG d4734a7e55d8d25155e755d895e018e423845cd0
 )
 FetchContent_MakeAvailable(fastgltf)
-
 find_package(Vulkan REQUIRED)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.cpp)

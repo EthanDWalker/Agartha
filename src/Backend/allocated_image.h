@@ -1,6 +1,5 @@
 #pragma once
 #include "Backend/context.h"
-#include <mutex>
 #include <vma/vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
@@ -27,7 +26,7 @@ void CreateAllocatedImage(
 
 void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,
                      VkImageLayout new_layout, VkImage image,
-                     uint32_t mip_levels = 1);
+                     uint32_t mip_levels = 1, bool depth = false);
 
 void CopyImageToImage(VkCommandBuffer cmd, VkImage source, VkImage destination,
                       VkExtent2D src_size, VkExtent2D dst_size);

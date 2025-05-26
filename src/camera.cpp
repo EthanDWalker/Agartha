@@ -93,7 +93,7 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
 
     glm::mat4 projection = glm::perspective(
         glm::radians(70.f), window_width / static_cast<float>(window_height),
-        0.001f, 10000.f);
+        0.001f, 1000.f);
 
     projection[1][1] *= -1;
 

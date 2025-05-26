@@ -2,12 +2,14 @@
 
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_samplerless_texture_functions : require
 #include "common.glsl"
 
 layout(location = 0) in vec3 iColor;
 layout(location = 1) in vec3 iNormal;
 layout(location = 2) in vec3 iWorldPos;
 layout(location = 3) in vec2 iUV;
+layout(location = 4) in vec4 iLightSpacePos;
 
 layout(location = 0) out vec4 oColor;
 
@@ -28,6 +30,7 @@ layout(binding = 3) uniform sampler textureSampler;
 layout(binding = 4) uniform textureCube prefilterMap;
 layout(binding = 5) uniform textureCube irradianceMap;
 layout(binding = 6) uniform texture2D brdfLut;
+layout(binding = 7) uniform sampler2D shadowMap;
 
 layout(push_constant) uniform constants
 {
@@ -48,6 +51,37 @@ float GeometrySchlickGGX(float NdotV, float roughness);
 float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness);
 
 vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
+
+float ShadowCalculation(vec3 L, vec3 N) {
+    vec3 projCoords = iLightSpacePos.xyz / iLightSpacePos.w;
+
+    projCoords = projCoords * 0.5 + 0.5;
+
+    if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 0.0;
+
+    float closestDepth = texture(shadowMap, projCoords.xy).r;
+
+    float currentDepth = projCoords.z;
+
+    currentDepth = (1.0 - currentDepth) * 2;
+
+    float bias = max(0.05 * (1.0 - dot(N, L)), 0.005);
+
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    for (int x = -1; x <= 1; ++x)
+    {
+        for (int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth + bias < pcfDepth ? 0.0 : 1.0;
+        }
+    }
+    shadow /= 9.0;
+
+    return shadow;
+}
 
 void main() {
     vec3 albedo = texture(sampler2D(pbrTexture[material.albedo], textureSampler), iUV).rgb;
@@ -113,7 +147,9 @@ void main() {
 
         float NdotL = max(dot(N, L), 0.0);
 
-        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+        float shadow = ShadowCalculation(L, N);
+
+        Lo += shadow * (kD * albedo / PI + specular) * radiance * NdotL;
     }
     // end loop
     vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
@@ -134,7 +170,8 @@ void main() {
     if (material.ambient_occlusion != -1) {
         ambient *= ao;
     }
-    vec3 color = Lo + emisive; //ambient + Lo + emisive;
+
+    vec3 color = Lo + emisive;
 
     // HDR
     color = color / (color + vec3(1.0));
@@ -161,7 +198,10 @@ vec3 getNormalFromMap()
 }
 
 // Approximates the number subsurface mircofacets that align with the half way ray
-float DistributionGGX(vec3 N, vec3 H, float roughness)
+float DistributionGGX(vec3
+    N, vec3
+    H, float
+    roughness)
 {
     float a = roughness * roughness;
     float a2 = a * a;

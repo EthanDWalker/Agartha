@@ -141,7 +141,7 @@ void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
 
 void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,
                      VkImageLayout new_layout, VkImage image,
-                     uint32_t mip_levels) {
+                     uint32_t mip_levels, bool depth) {
   VkImageMemoryBarrier2 image_barrier{};
   image_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
   image_barrier.image = image;
@@ -155,9 +155,12 @@ void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,
   image_barrier.newLayout = new_layout;
 
   VkImageAspectFlags aspect_mask =
-      (new_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
+      (new_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
+       old_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
           ? VK_IMAGE_ASPECT_DEPTH_BIT
           : VK_IMAGE_ASPECT_COLOR_BIT;
+
+  if (depth) aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
   image_barrier.subresourceRange = vkinit::ImageSubresourceRange(aspect_mask);
   image_barrier.image = image;

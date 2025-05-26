@@ -10,12 +10,14 @@
 #include "Backend/util.h"
 #include "Loaders/model.h"
 #include "Primitives/cube.h"
+#include "fmt/base.h"
 #include "object.h"
 #include "texture_manager.h"
 #include "types.h"
 #include <GLFW/glfw3.h>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <vulkan/vulkan_core.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
@@ -57,7 +59,32 @@ void Engine::Init() {
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, depth_image,
                        1, false, VK_SAMPLE_COUNT_4_BIT);
 
+  CreateAllocatedImage(context, {1024, 1024, 1}, VK_FORMAT_D32_SFLOAT,
+                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                           VK_IMAGE_USAGE_SAMPLED_BIT |
+                           VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                       shadow_image);
+
   CreateImageSampler(context, sampler);
+
+  VkSamplerCreateInfo shadow_sampler_ci{};
+  shadow_sampler_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  shadow_sampler_ci.magFilter =
+      VK_FILTER_NEAREST; // Linear filtering helps with PCF
+  shadow_sampler_ci.minFilter = VK_FILTER_NEAREST;
+  shadow_sampler_ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+  shadow_sampler_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+  shadow_sampler_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+  shadow_sampler_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+  shadow_sampler_ci.compareEnable = VK_TRUE; // Using manual PCF in shader
+  shadow_sampler_ci.compareOp =
+      VK_COMPARE_OP_LESS_OR_EQUAL; // Only used if compareEnable = true
+  shadow_sampler_ci.anisotropyEnable =
+      VK_FALSE; // No need for anisotropy in shadow maps
+  shadow_sampler_ci.minLod = 0.0f;
+  shadow_sampler_ci.maxLod = 1.0f;
+
+  vkCreateSampler(context.device, &shadow_sampler_ci, nullptr, &shadow_sampler);
 
   CreateSkybox(context, immediate_submit, descriptor_builder, texture_manager,
                "sunset", skybox);
@@ -68,6 +95,25 @@ void Engine::Init() {
                    sizeof(DirectionalLight), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                    directional_light_buffer);
 
+  glm::vec3 light_dir = normalize(glm::vec3(-1.0f, -1.5f, -1.0f));
+  glm::vec3 light_pos = glm::zero<glm::vec3>() - light_dir * 150.0f;
+  glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+
+  fmt::println("{}, {}, {}", light_pos.x, light_pos.y, light_pos.z);
+  glm::mat4 light_view = glm::lookAt(light_pos, glm::zero<glm::vec3>(), up);
+
+  float scene_extent = 85.0f;
+
+  glm::mat4 light_projection = glm::ortho(
+      -scene_extent, scene_extent, -scene_extent, scene_extent, 0.1f, 200.0f);
+
+  glm::mat4 light_matrix = light_projection * light_view;
+
+  CreateBuffer(context, sizeof(glm::mat4),
+               VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+                   VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+               VMA_MEMORY_USAGE_GPU_ONLY, light_matrix_buffer);
+
   {
     descriptor_builder.Reset();
     descriptor_builder.BindBuffer(0, point_light_buffer.buffer);
@@ -77,6 +123,9 @@ void Engine::Init() {
     descriptor_builder.BindImage(4, skybox.prefilter.image_view);
     descriptor_builder.BindImage(5, skybox.irradiance.image_view);
     descriptor_builder.BindImage(6, skybox.brdf.image_view);
+    descriptor_builder.BindCombinedImage(7, shadow_image.image_view,
+                                         shadow_sampler);
+    descriptor_builder.BindBuffer(8, light_matrix_buffer.buffer);
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
         descriptor_set, descriptor_layout);
@@ -114,6 +163,25 @@ void Engine::Init() {
     pipeline_builder.AddDescriptorSetLayout(skybox_descriptor_layout);
     pipeline_builder.Build(context, skybox_pipeline);
   }
+  {
+    descriptor_builder.Reset();
+    descriptor_builder.BindBuffer(0, light_matrix_buffer.buffer);
+    descriptor_builder.Build(context, VK_SHADER_STAGE_VERTEX_BIT,
+                             shadow_descriptor_set,
+                             shadow_descriptor_set_layout);
+    GraphicsPipelineBuilder pipeline_builder;
+    pipeline_builder.Default();
+    pipeline_builder.SetCullMode(VK_CULL_MODE_BACK_BIT,
+                                 VK_FRONT_FACE_CLOCKWISE);
+    pipeline_builder.SetNoMultisampling();
+    pipeline_builder.SetShaders(context, "shadow.vert.spv", "shadow.frag.spv");
+    pipeline_builder.SetDepthFormat(shadow_image.format);
+    pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
+                                              VK_SHADER_STAGE_FRAGMENT_BIT,
+                                          sizeof(ObjectPushConstantData));
+    pipeline_builder.AddDescriptorSetLayout(shadow_descriptor_set_layout);
+    pipeline_builder.Build(context, shadow_pipeline);
+  }
 
   std::vector<MeshData> gltf_data = LoadModel("Sponza.gltf");
 
@@ -148,6 +216,28 @@ void Engine::Init() {
 
 void Engine::Run() {
   uint8_t frame_index = 0;
+
+  float distance = 200.0f;
+  float scene_extent = 85.0f;
+  float far_plane = 240.0f;
+  float near_plane = 0.1f;
+
+  {
+    glm::vec3 light_dir = normalize(glm::vec3(-1.0f, -1.5f, -1.0f));
+    glm::vec3 light_pos = glm::zero<glm::vec3>() - light_dir * distance;
+    glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
+
+    glm::mat4 light_view = glm::lookAt(light_pos, glm::zero<glm::vec3>(), up);
+
+    glm::mat4 light_projection =
+        glm::ortho(-scene_extent, scene_extent, -scene_extent, scene_extent,
+                   near_plane, far_plane);
+
+    glm::mat4 light_matrix = light_projection * light_view;
+
+    UpdateBuffer(context, immediate_submit, &light_matrix, sizeof(glm::mat4), 0,
+                 light_matrix_buffer);
+  }
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
@@ -194,11 +284,58 @@ void Engine::Run() {
                     VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                     depth_image.image);
 
+    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                    shadow_image.image);
+
     VkClearColorValue clear_color_value{};
     clear_color_value = {0.0f, 0.0f, 0.0f, 0.0f};
 
     VkClearValue clear_value{};
     clear_value.color = clear_color_value;
+
+    {
+      VkRenderingAttachmentInfo shadow_attachment_info =
+          vkinit::DepthAttachmentInfo(shadow_image.image_view,
+                                      VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+
+      VkRenderingInfo rendering_info = vkinit::RenderingInfo(
+          {shadow_image.extent.width, shadow_image.extent.height}, nullptr,
+          &shadow_attachment_info);
+
+      vkCmdBeginRendering(cmd, &rendering_info);
+
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        shadow_pipeline.obj);
+
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              shadow_pipeline.layout, 0, 1,
+                              &shadow_descriptor_set, 0, nullptr);
+
+      VkViewport viewport = {};
+      viewport.x = 0;
+      viewport.y = 0;
+      viewport.width = shadow_image.extent.width;
+      viewport.height = shadow_image.extent.height;
+      viewport.minDepth = 1.0f;
+      viewport.maxDepth = 0.0f;
+
+      vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+      VkRect2D scissor = {};
+      scissor.offset.x = 0;
+      scissor.offset.y = 0;
+      scissor.extent.width = shadow_image.extent.width;
+      scissor.extent.height = shadow_image.extent.height;
+
+      vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+      for (auto &object : scene) {
+        DrawObject(cmd, shadow_pipeline, object);
+      }
+
+      vkCmdEndRendering(cmd);
+    }
 
     VkRenderingAttachmentInfo attachment_info = vkinit::AttachmentInfo(
         msaa_draw_image.image_view, draw_image.image_view, &clear_value,
@@ -211,6 +348,10 @@ void Engine::Run() {
     VkRenderingInfo rendering_info = vkinit::RenderingInfo(
         {draw_image.extent.width, draw_image.extent.height}, &attachment_info,
         &depth_attachment_info);
+
+    TransitionImage(cmd, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    shadow_image.image);
 
     vkCmdBeginRendering(cmd, &rendering_info);
 
@@ -327,21 +468,23 @@ void Engine::Destroy() {
 
   texture_manager.Destroy(context);
   descriptor_builder.Destroy(context);
-
   vkDestroyDescriptorSetLayout(context.device, descriptor_layout, nullptr);
   vkDestroyDescriptorSetLayout(context.device, skybox_descriptor_layout,
                                nullptr);
   vkDestroyDescriptorSetLayout(context.device, billboard_descriptor_layout,
                                nullptr);
+  vkDestroyDescriptorSetLayout(context.device, shadow_descriptor_set_layout,
+                               nullptr);
 
   camera.Destroy(context);
-
   DestroyImageSampler(context, sampler);
+  DestroyImageSampler(context, shadow_sampler);
 
   DestroySkybox(context, skybox);
 
   DestroyBuffer(context, point_light_buffer);
   DestroyBuffer(context, directional_light_buffer);
+  DestroyBuffer(context, light_matrix_buffer);
 
   immediate_submit.Destroy(context);
 
@@ -354,9 +497,11 @@ void Engine::Destroy() {
   DestroyAllocatedImage(context, msaa_draw_image);
   DestroyAllocatedImage(context, draw_image);
   DestroyAllocatedImage(context, depth_image);
+  DestroyAllocatedImage(context, shadow_image);
 
   DestroyPipeline(context, mesh_pipeline);
   DestroyPipeline(context, skybox_pipeline);
+  DestroyPipeline(context, shadow_pipeline);
 
   DestroyVulkanSwapchain(context, swapchain);
   DestroyVulkanContext(context);

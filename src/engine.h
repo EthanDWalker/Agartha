@@ -30,7 +30,7 @@ static PointLight point_light{
 };
 
 static DirectionalLight directional_light{
-    .direction = {-.2, -1.0, -0.3},
+    .direction = {glm::normalize(glm::vec3(-1.0f, -1.5f, -1.0f))},
 };
 
 struct Engine {
@@ -46,11 +46,14 @@ struct Engine {
   Skybox skybox;
   Material box_material;
   VkSampler sampler;
+  VkSampler shadow_sampler;
   AllocatedImage msaa_draw_image;
   AllocatedImage draw_image;
   AllocatedImage depth_image;
+  AllocatedImage shadow_image;
   AllocatedBuffer point_light_buffer;
   AllocatedBuffer directional_light_buffer;
+  AllocatedBuffer light_matrix_buffer;
 
   std::vector<Object> scene;
   Object cube_obj;
@@ -58,6 +61,7 @@ struct Engine {
 
   Pipeline mesh_pipeline;
   Pipeline skybox_pipeline;
+  Pipeline shadow_pipeline;
 
   VkDescriptorSet descriptor_set;
   VkDescriptorSetLayout descriptor_layout;
@@ -67,6 +71,9 @@ struct Engine {
 
   VkDescriptorSet billboard_descriptor_set;
   VkDescriptorSetLayout billboard_descriptor_layout;
+
+  VkDescriptorSet shadow_descriptor_set;
+  VkDescriptorSetLayout shadow_descriptor_set_layout;
 
   void Init();
 
