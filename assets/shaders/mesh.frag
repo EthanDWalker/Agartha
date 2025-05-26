@@ -1,6 +1,7 @@
 #version 450
 
 #extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_nonuniform_qualifier : require
 #include "common.glsl"
 
 layout(location = 0) in vec3 iColor;
@@ -10,21 +11,32 @@ layout(location = 3) in vec2 iUV;
 
 layout(location = 0) out vec4 oColor;
 
-layout(std140, binding = 0) uniform LightUBO {
-    PointLight light;
+layout(std140, binding = 0) uniform PointLightUBO {
+    PointLight pointLight;
 };
 
-layout(std140, binding = 1) uniform CameraUBO {
-  Camera camera;
+layout(std140, binding = 1) uniform DirectionalLightUBO {
+    DirectionalLight directionalLight;
 };
 
-layout(binding = 2) uniform sampler textureSampler;
+layout(std140, binding = 2) uniform CameraUBO {
+    Camera camera;
+};
 
-layout(binding = 3) uniform textureCube prefilterMap;
-layout(binding = 4) uniform textureCube irradianceMap;
-layout(binding = 5) uniform texture2D brdfLut;
+layout(binding = 3) uniform sampler textureSampler;
 
-layout(binding = 6) uniform texture2D pbrTexture[];
+layout(binding = 4) uniform textureCube prefilterMap;
+layout(binding = 5) uniform textureCube irradianceMap;
+layout(binding = 6) uniform texture2D brdfLut;
+
+layout(push_constant) uniform constants
+{
+    VertexBuffer vertexBuffer;
+    InstanceBuffer instanceBuffer;
+    Material material;
+};
+
+layout(set = 1, binding = 0) uniform texture2D pbrTexture[];
 
 const float PI = 3.14159265359;
 
@@ -38,11 +50,11 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness);
 vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
 
 void main() {
-    vec3 albedo = texture(sampler2D(pbrTexture[0], textureSampler), iUV).rgb;
-    float metallic = texture(sampler2D(pbrTexture[1], textureSampler), iUV).b;
-    float roughness = texture(sampler2D(pbrTexture[1], textureSampler), iUV).g;
-    vec3 emmisive = texture(sampler2D(pbrTexture[2], textureSampler), iUV).rgb;
-    float ao = texture(sampler2D(pbrTexture[3], textureSampler), iUV).r;
+    vec3 albedo = texture(sampler2D(pbrTexture[material.albedo], textureSampler), iUV).rgb;
+    float metallic = texture(sampler2D(pbrTexture[material.metal_roughness], textureSampler), iUV).b;
+    float roughness = texture(sampler2D(pbrTexture[material.metal_roughness], textureSampler), iUV).g;
+    vec3 emisive = texture(sampler2D(pbrTexture[material.emissive], textureSampler), iUV).rgb;
+    float ao = texture(sampler2D(pbrTexture[material.ambient_occlusion], textureSampler), iUV).r;
 
     vec3 N = getNormalFromMap();
     vec3 V = normalize(camera.viewPos - iWorldPos);
@@ -53,30 +65,56 @@ void main() {
 
     vec3 Lo = vec3(0.0);
     // loop through lights but i only have 1
-  {
-    vec3 L = normalize(light.position - iWorldPos);
-    vec3 H = normalize(V + L);
-    float distance = length(light.position - iWorldPos);
-    float attenuation = 1.0 / (distance * distance);
-    vec3 radiance = light.color.xyz * attenuation * light.color.w;
+    {
+        vec3 L = normalize(pointLight.position - iWorldPos);
+        vec3 H = normalize(V + L);
 
-    float NDF = DistributionGGX(N, H, roughness);
-    float G = GeometrySmith(N, V, L, roughness);
-    vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+        float distance = length(pointLight.position - iWorldPos);
+        float attenuation = 1.0 / (distance * distance);
+        vec3 radiance = pointLight.color.xyz * attenuation * pointLight.color.w;
 
-    vec3 numerator = NDF * G * F;
-    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-    vec3 specular = numerator / denominator;
+        float NDF = DistributionGGX(N, H, roughness);
+        float G = GeometrySmith(N, V, L, roughness);
+        vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
 
-    vec3 kS = F;
-    vec3 kD = vec3(1.0) - kS;
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+        vec3 specular = numerator / denominator;
 
-    kD *= 1.0 - metallic;
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
 
-    float NdotL = max(dot(N, L), 0.0);
+        kD *= 1.0 - metallic;
 
-    Lo += (kD * albedo / PI + specular) * radiance * NdotL;
-  }
+        float NdotL = max(dot(N, L), 0.0);
+
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+    }
+
+    // directional light
+    {
+        vec3 L = normalize(-directionalLight.direction);
+        vec3 H = normalize(V + L);
+
+        vec3 radiance = vec3(1.0); // pointLight.color.xyz * attenuation * pointLight.color.w;
+
+        float NDF = DistributionGGX(N, H, roughness);
+        float G = GeometrySmith(N, V, L, roughness);
+        vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+        vec3 specular = numerator / denominator;
+
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+
+        kD *= 1.0 - metallic;
+
+        float NdotL = max(dot(N, L), 0.0);
+
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+    }
     // end loop
     vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
 
@@ -88,22 +126,26 @@ void main() {
     vec3 diffuse = irradience * albedo;
 
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 prefilteredColor = textureLod(samplerCube(prefilterMap, textureSampler), R,  roughness * MAX_REFLECTION_LOD).rgb;
+    vec3 prefilteredColor = textureLod(samplerCube(prefilterMap, textureSampler), R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(sampler2D(brdfLut, textureSampler), vec2(max(dot(N, V), 0.0), roughness)).rg;
     vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
 
-    vec3 ambient = (kD * diffuse + specular) * ao;
-    vec3 color = ambient + Lo + emmisive;
+    vec3 ambient = (kD * diffuse + specular);
+    if (material.ambient_occlusion != -1) {
+        ambient *= ao;
+    }
+    vec3 color = Lo + emisive; //ambient + Lo + emisive;
 
     // HDR
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
+
     oColor = vec4(color, 1.0);
 }
 
 vec3 getNormalFromMap()
 {
-    vec3 tangentNormal = texture(sampler2D(pbrTexture[4], textureSampler), iUV).xyz * 2.0 - 1.0;
+    vec3 tangentNormal = texture(sampler2D(pbrTexture[material.normal], textureSampler), iUV).xyz * 2.0 - 1.0;
 
     vec3 Q1 = dFdx(iWorldPos);
     vec3 Q2 = dFdy(iWorldPos);

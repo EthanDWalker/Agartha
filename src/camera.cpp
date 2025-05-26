@@ -25,7 +25,6 @@ void Camera::Destroy(VulkanContext &context) {
 void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
                     GLFWwindow *window, float delta_time) {
   static double last_x, last_y;
-
   double pos_x, pos_y;
   int window_width, window_height;
 
@@ -55,7 +54,7 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
   else if (pitch > 89.0f)
     pitch = 89.0f;
 
-  const float speed = 5.0f * delta_time;
+  const float speed = 50.0f * delta_time;
 
   if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
     velocity.z = -speed;

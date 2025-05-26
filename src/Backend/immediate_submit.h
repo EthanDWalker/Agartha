@@ -2,7 +2,6 @@
 
 #include "Backend/context.h"
 #include <functional>
-#include <future>
 #include <vulkan/vulkan.h>
 
 struct ImmediateSubmit {

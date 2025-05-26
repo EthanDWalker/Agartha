@@ -1,6 +1,6 @@
 #pragma once
 #include "Backend/context.h"
-#include "Backend/immediate_submit.h"
+#include <mutex>
 #include <vma/vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
@@ -12,8 +12,8 @@ struct AllocatedImage {
   VkFormat format;
 };
 
-void GenerateMipmaps(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                     uint32_t mip_levels, AllocatedImage &image);
+void GenerateMipmaps(VulkanContext &context, uint32_t mipLevels,
+                     AllocatedImage &image);
 
 void CreateImageSampler(VulkanContext &context, VkSampler &sampler);
 
@@ -24,12 +24,6 @@ void CreateAllocatedImage(
     VkImageUsageFlags usage_flags, AllocatedImage &image,
     uint32_t mip_levels = 1, bool cube_map = false,
     VkSampleCountFlagBits sample_count = VK_SAMPLE_COUNT_1_BIT);
-
-void CreateAllocatedImageData(VulkanContext &context,
-                              ImmediateSubmit immediate_submit, void *data,
-                              VkExtent3D size, VkFormat format,
-                              VkImageUsageFlags usage_flags,
-                              AllocatedImage &image);
 
 void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,
                      VkImageLayout new_layout, VkImage image,

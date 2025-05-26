@@ -1,10 +1,12 @@
 #include "texture_manager.h"
 #include "Backend/allocated_image.h"
+#include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
+#include "Backend/image_format.h"
 #include "Backend/immediate_submit.h"
-#include "Backend/util.h"
 #include "Loaders/image.h"
+#include "Loaders/model.h"
 #include "fmt/base.h"
 #include "timer.h"
 #include <cmath>
@@ -13,25 +15,8 @@
 #include <mutex>
 #include <stdlib.h>
 
-/*
-struct TextureManager {
-  const uint32_t MAX_TEXTURES = 1024;
-
-  VkDescriptorSet descriptor_set;
-  VkDescriptorSetLayout descriptor_set_layout;
-
-  std::vector<AllocatedImage> texture_data;
-  std::unordered_map<std::string, uint32_t> texture_indices;
-
-  void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
-  Material GetMaterial();
-  void Destroy();
-};
-*/
-
 void TextureManager::Init(VulkanContext &context,
-                          DescriptorBuilder &descriptor_builder,
-                          ImmediateSubmit &immediate_submit) {
+                          DescriptorBuilder &descriptor_builder) {
   Timer timer{};
   texture_data.resize(MAX_TEXTURES);
   uint32_t alloc_scaler = descriptor_builder.pool.alloc_scaler;
@@ -58,13 +43,18 @@ void TextureManager::Init(VulkanContext &context,
     }
     std::string file_name = file.path().filename().string();
 
-    futures.push_back(std::async(std::launch::async, [file_name, &context, &queue_mutex]() {
+    futures.push_back(std::async(std::launch::async, [file_name, &context,
+                                                      &queue_mutex]() {
       LoadedImageTask task;
       task.file_name = file_name;
-      ImmediateSubmit immediate_submit{};
-      immediate_submit.Create(context);
 
-      LoadImageData(file_name, task.image_data);
+      VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+      bool float_load = false;
+      if (file_name.ends_with(".hdr")) {
+        format = VK_FORMAT_R32G32B32A32_SFLOAT;
+        float_load = true;
+      }
+      LoadImageData(file_name, task.image_data, float_load);
 
       VkExtent3D image_extent = {
           static_cast<uint32_t>(task.image_data.width),
@@ -72,27 +62,62 @@ void TextureManager::Init(VulkanContext &context,
           1,
       };
 
+      const uint8_t channel_count = 4; // @HARDCODE forced in stbi_image_load
+      size_t data_size = image_extent.depth * image_extent.width *
+                         image_extent.height * channel_count *
+                         GetFormatComponentSize(format);
+
+      AllocatedBuffer upload_buffer;
+      CreateBuffer(context, data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                   VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
+
+      memcpy(upload_buffer.info.pMappedData, task.image_data.data, data_size);
+
+      CreateAllocatedImage(context, image_extent, format,
+                           VK_IMAGE_USAGE_SAMPLED_BIT |
+                               VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                               VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                           task.texture_image);
+
       std::lock_guard<std::mutex> lock(queue_mutex);
 
-      CreateAllocatedImageData(context, immediate_submit, task.image_data.data,
-                               image_extent, VK_FORMAT_R8G8B8A8_UNORM,
-                               VK_IMAGE_USAGE_SAMPLED_BIT, task.texture_image);
+      ImmediateSubmit::SubmitAsync(context, [&](VkCommandBuffer cmd) {
+        TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        task.texture_image.image);
+        VkBufferImageCopy copy_region{};
+        copy_region.bufferOffset = 0;
+        copy_region.bufferRowLength = 0;
+        copy_region.bufferImageHeight = 0;
+        copy_region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copy_region.imageSubresource.mipLevel = 0;
+        copy_region.imageSubresource.baseArrayLayer = 0;
+        copy_region.imageSubresource.layerCount = 1;
+        copy_region.imageExtent = image_extent;
 
-      immediate_submit.Destroy(context);
+        vkCmdCopyBufferToImage(
+            cmd, upload_buffer.buffer, task.texture_image.image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
+
+        TransitionImage(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        task.texture_image.image);
+      });
+
+      DestroyBuffer(context, upload_buffer);
 
       return task;
     }));
   }
 
-  uint32_t file_index;
+  uint32_t file_index = 0;
   std::vector<VkDescriptorImageInfo> image_infos{};
 
   for (auto &future : futures) {
     LoadedImageTask image_task = future.get();
 
-    fmt::println("task done: {}", image_task.file_name);
-
     texture_data[file_index] = image_task.texture_image;
+
     texture_indices[image_task.file_name] = file_index;
 
     VkDescriptorImageInfo image_info{};
@@ -122,9 +147,28 @@ void TextureManager::Init(VulkanContext &context,
   fmt::println("TextureManager::Init: {}", timer.ElapsedMillis());
 }
 
+Material TextureManager::GetMaterial(MaterialData data) {
+  Material material;
+  material.albedo = !data.albedo.empty() ? texture_indices[data.albedo] : -1;
+  material.normal = !data.normal.empty() ? texture_indices[data.normal] : -1;
+
+  material.emissive =
+      !data.emissive.empty() ? texture_indices[data.emissive] : -1;
+
+  material.ambient_occlusion = !data.ambient_occlusion.empty()
+                                   ? texture_indices[data.ambient_occlusion]
+                                   : -1;
+  material.metal_roughness = !data.metal_roughness.empty()
+                                 ? texture_indices[data.metal_roughness]
+                                 : -1;
+  return material;
+}
+
 void TextureManager::Destroy(VulkanContext &context) {
   for (auto &image : texture_data) {
-    DestroyAllocatedImage(context, image);
+    if (image.extent.depth != 0) {
+      DestroyAllocatedImage(context, image);
+    }
   }
   vkDestroyDescriptorSetLayout(context.device, descriptor_set_layout, nullptr);
 }

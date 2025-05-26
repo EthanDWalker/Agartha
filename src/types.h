@@ -17,12 +17,14 @@ struct PointLight {
   glm::vec3 position;
 };
 
-/*
-struct Material {
-  uint32_t albedo;
-  uint32_t metal_roughness;
-  uint32_t emmissive;
-  uint32_t normal;
-  uint32_t ambient_occlusion;
+struct DirectionalLight {
+  glm::vec3 direction;
 };
-*/
+
+struct Material {
+  int32_t albedo{-1};
+  int32_t metal_roughness{-1};
+  int32_t emissive{-1};
+  int32_t normal{-1};
+  int32_t ambient_occlusion{-1};
+};

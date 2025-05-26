@@ -10,7 +10,7 @@ layout(push_constant) uniform constants
   InstanceBuffer instanceBuffer;
 };
 
-layout(std140, binding = 1) uniform CameraUBO {
+layout(std140, binding = 2) uniform CameraUBO {
   Camera camera;
 };
 

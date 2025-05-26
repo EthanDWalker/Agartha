@@ -31,36 +31,13 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(glfw)
 
 FetchContent_Declare(
-    imgui
-    GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG f5befd2d29e66809cd1110a152e375a7f1981f06
-)
-FetchContent_MakeAvailable(imgui)
-
-FetchContent_Declare(
     fastgltf
     GIT_REPOSITORY https://github.com/spnda/fastgltf.git
     GIT_TAG d4734a7e55d8d25155e755d895e018e423845cd0
 )
 FetchContent_MakeAvailable(fastgltf)
 
-file(GLOB IMGUI_SOURCES
-    ${imgui_SOURCE_DIR}/*.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
-)
-
 find_package(Vulkan REQUIRED)
-
-add_library(imgui STATIC ${IMGUI_SOURCES})
-
-target_include_directories(imgui PUBLIC
-    ${imgui_SOURCE_DIR}
-    ${imgui_SOURCE_DIR}/backends
-    ${Vulkan_INCLUDE_DIR}
-)
-
-target_link_libraries(imgui PUBLIC glfw ${Vulkan_LIBRARY})
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.cpp)
 
@@ -70,10 +47,9 @@ target_include_directories(engine PUBLIC
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/ext/
     ${Vulkan_INCLUDE_DIR}
-    imgui
 )
 
-target_link_libraries(engine PRIVATE imgui ${Vulkan_LIBRARY} fastgltf::fastgltf glfw fmt::fmt vk-bootstrap::vk-bootstrap)
+target_link_libraries(engine PRIVATE ${Vulkan_LIBRARY} fastgltf::fastgltf glfw fmt::fmt vk-bootstrap::vk-bootstrap)
 
 file(GLOB SHADER_SRC
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.frag 

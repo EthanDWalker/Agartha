@@ -1,7 +1,6 @@
 #include "mesh.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
-#include "fmt/base.h"
 #include "types.h"
 #include <cassert>
 #include <cstdint>

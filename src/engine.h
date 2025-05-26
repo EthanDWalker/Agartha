@@ -10,10 +10,10 @@
 #include "Backend/swapchain.h"
 #include "GLFW/glfw3.h"
 #include "camera.h"
-#include "material.h"
 #include "object.h"
 #include "skybox.h"
 #include "texture_manager.h"
+#include "types.h"
 #include <cstdint>
 
 #if defined(DEBUG)
@@ -23,6 +23,15 @@ constexpr bool DEBUG = false;
 #endif
 
 constexpr uint8_t FRAME_OVERLAP = 2;
+
+static PointLight point_light{
+    .color = {1.0, 1.0, 1.0, 10.0},
+    .position = {-0.0, 2.0, 2.0},
+};
+
+static DirectionalLight directional_light{
+    .direction = {-.2, -1.0, -0.3},
+};
 
 struct Engine {
   VulkanContext context;
@@ -41,12 +50,11 @@ struct Engine {
   AllocatedImage draw_image;
   AllocatedImage depth_image;
   AllocatedBuffer point_light_buffer;
+  AllocatedBuffer directional_light_buffer;
 
-  Object test_obj;
+  std::vector<Object> scene;
   Object cube_obj;
   Object rectangle_obj;
-
-  AllocatedImage light_image;
 
   Pipeline mesh_pipeline;
   Pipeline skybox_pipeline;

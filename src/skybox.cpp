@@ -7,8 +7,7 @@
 #include "Backend/init.h"
 #include "Backend/pipeline.h"
 #include "Backend/util.h"
-#include "Loaders/image.h"
-#include "fmt/base.h"
+#include "texture_manager.h"
 #include <cstdint>
 #include <vulkan/vulkan.h>
 
@@ -162,7 +161,7 @@ void CreatePrefilter(VulkanContext &context, ImmediateSubmit &immediate_submit,
                            VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                        skybox.prefilter, MIP_LEVELS, true);
 
-  GenerateMipmaps(context, immediate_submit, MIP_LEVELS, skybox.prefilter);
+  GenerateMipmaps(context, MIP_LEVELS, skybox.prefilter);
 
   Pipeline compute_pipeline;
   VkDescriptorSetLayout ds_layout;
@@ -242,31 +241,20 @@ void CreatePrefilter(VulkanContext &context, ImmediateSubmit &immediate_submit,
 }
 
 void CreateSkybox(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                  DescriptorBuilder &descriptor_builder, std::string file_name,
+                  DescriptorBuilder &descriptor_builder,
+                  TextureManager &texture_manager, std::string file_name,
                   Skybox &skybox) {
+
   std::string full_path = (file_name + ".hdr");
 
-  ImageData image_data;
-  LoadImageData(full_path, image_data, true);
-
-  VkExtent3D image_size = {static_cast<uint32_t>(image_data.width),
-                           static_cast<uint32_t>(image_data.height), 1};
-
-  AllocatedImage equirect_image;
-  CreateAllocatedImageData(context, immediate_submit, image_data.data,
-                           image_size, VK_FORMAT_R32G32B32A32_SFLOAT,
-                           VK_IMAGE_USAGE_SAMPLED_BIT, equirect_image);
-
-  DestroyImageData(image_data);
+  AllocatedImage skybox_image =
+      texture_manager.texture_data[texture_manager.texture_indices[full_path]];
 
   VkSampler sampler;
   CreateImageSampler(context, sampler);
 
   CreateEnvMap(context, immediate_submit, descriptor_builder, sampler,
-               equirect_image, skybox);
-
-  DestroyAllocatedImage(context, equirect_image);
-
+               skybox_image, skybox);
   CreateIrradiance(context, immediate_submit, descriptor_builder, sampler,
                    skybox);
   CreatePrefilter(context, immediate_submit, descriptor_builder, sampler,

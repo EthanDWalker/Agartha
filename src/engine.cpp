@@ -8,26 +8,17 @@
 #include "Backend/pipeline.h"
 #include "Backend/swapchain.h"
 #include "Backend/util.h"
-#include "Loaders/gltf.h"
-#include "Loaders/image.h"
+#include "Loaders/model.h"
 #include "Primitives/cube.h"
-#include "Primitives/rectangle.h"
-#include "material.h"
-#include "mesh.h"
 #include "object.h"
+#include "texture_manager.h"
 #include "types.h"
 #include <GLFW/glfw3.h>
 #include <cstdint>
 #include <limits>
-#include <span>
 #include <vulkan/vulkan_core.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
-
-static PointLight point_light{
-    .color = {1.0, 1.0, 1.0, 1.0},
-    .position = {-0.0, 2.0, 2.0},
-};
 
 void Engine::Init() {
   glfwInit();
@@ -37,7 +28,7 @@ void Engine::Init() {
   CreateVulkanSwapchain(context, 1600, 900, swapchain);
   immediate_submit.Create(context);
   descriptor_builder.Init(context);
-  texture_manager.Init(context, descriptor_builder, immediate_submit);
+  texture_manager.Init(context, descriptor_builder);
   camera.Create(context);
 
   for (FrameData &frame : frame_data) {
@@ -67,37 +58,29 @@ void Engine::Init() {
                        1, false, VK_SAMPLE_COUNT_4_BIT);
 
   CreateImageSampler(context, sampler);
-  CreateMaterial(context, immediate_submit, "Default", "jpg", box_material);
 
-  {
-    ImageData light_image_data;
-    LoadImageData("light_indicator.png", light_image_data);
-    VkExtent3D image_size = {static_cast<uint32_t>(light_image_data.width),
-                             static_cast<uint32_t>(light_image_data.height), 1};
-
-    CreateAllocatedImageData(context, immediate_submit, light_image_data.data,
-                             image_size, VK_FORMAT_R8G8B8A8_UNORM,
-                             VK_IMAGE_USAGE_SAMPLED_BIT, light_image);
-  }
-
-  CreateSkybox(context, immediate_submit, descriptor_builder, "sunset", skybox);
+  CreateSkybox(context, immediate_submit, descriptor_builder, texture_manager,
+               "sunset", skybox);
 
   CreateBufferData(context, immediate_submit, &point_light, sizeof(PointLight),
                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, point_light_buffer);
+  CreateBufferData(context, immediate_submit, &directional_light,
+                   sizeof(DirectionalLight), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                   directional_light_buffer);
 
   {
-    auto box_material_images = box_material.ToArray();
     descriptor_builder.Reset();
     descriptor_builder.BindBuffer(0, point_light_buffer.buffer);
-    descriptor_builder.BindBuffer(1, camera.ubo.buffer);
-    descriptor_builder.BindSampler(2, sampler);
-    descriptor_builder.BindImage(3, skybox.prefilter.image_view);
-    descriptor_builder.BindImage(4, skybox.irradiance.image_view);
-    descriptor_builder.BindImage(5, skybox.brdf.image_view);
-    descriptor_builder.BindImages(6, box_material_images);
+    descriptor_builder.BindBuffer(1, directional_light_buffer.buffer);
+    descriptor_builder.BindBuffer(2, camera.ubo.buffer);
+    descriptor_builder.BindSampler(3, sampler);
+    descriptor_builder.BindImage(4, skybox.prefilter.image_view);
+    descriptor_builder.BindImage(5, skybox.irradiance.image_view);
+    descriptor_builder.BindImage(6, skybox.brdf.image_view);
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
         descriptor_set, descriptor_layout);
+
     GraphicsPipelineBuilder pipeline_builder;
     pipeline_builder.SetShaders(context, "mesh.vert.spv", "mesh.frag.spv");
     pipeline_builder.Default();
@@ -106,6 +89,8 @@ void Engine::Init() {
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
                                           sizeof(ObjectPushConstantData));
     pipeline_builder.AddDescriptorSetLayout(descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(
+        texture_manager.descriptor_set_layout);
     pipeline_builder.Build(context, mesh_pipeline);
   }
 
@@ -130,28 +115,32 @@ void Engine::Init() {
     pipeline_builder.Build(context, skybox_pipeline);
   }
 
-  MeshData gltf_data = LoadGltf("DamagedHelmet");
-  MeshData cube_data = {cube_vertices, cube_indices};
-  MeshData rectangle_data = {rectangle_vertices, rectangle_indices};
+  std::vector<MeshData> gltf_data = LoadModel("Sponza.gltf");
 
-  CreateObject(context, immediate_submit, descriptor_builder, gltf_data,
-               test_obj);
+  MeshData cube_data = {
+      .vertices = cube_vertices,
+      .indices = cube_indices,
+  };
 
-  glm::mat4 model_matrix = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f),
-                                       glm::vec3(1.f, 0.f, 0.f));
-  AddObjectInstanceMatrix(context, immediate_submit, model_matrix, test_obj);
+  scene.reserve(gltf_data.size());
+
+  {
+    uint32_t index;
+    for (auto &mesh_data : gltf_data) {
+      Object object;
+      CreateObjectMaterial(context, immediate_submit, descriptor_builder,
+                           texture_manager, mesh_data, object);
+      AddObjectInstanceMatrix(context, immediate_submit, glm::mat4(1.0f),
+                              object);
+      scene.push_back(object);
+      index++;
+    }
+  }
 
   CreateObject(context, immediate_submit, descriptor_builder, cube_data,
                cube_obj);
 
   AddObjectInstanceMatrix(context, immediate_submit, glm::mat4(1.0f), cube_obj);
-
-  CreateObject(context, immediate_submit, descriptor_builder, rectangle_data,
-               rectangle_obj);
-
-  AddObjectInstanceMatrix(context, immediate_submit,
-                          glm::translate(glm::mat4(1.0f), point_light.position),
-                          rectangle_obj);
 
   camera.position = {2, 2, 2};
   camera.Update(context, immediate_submit, window, 0.001f);
@@ -259,10 +248,16 @@ void Engine::Run() {
                         mesh_pipeline.obj);
 
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              mesh_pipeline.layout, 1, 1,
+                              &texture_manager.descriptor_set, 0, nullptr);
+
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                               mesh_pipeline.layout, 0, 1, &descriptor_set, 0,
                               nullptr);
 
-      DrawObject(cmd, mesh_pipeline, test_obj);
+      for (auto &object : scene) {
+        DrawObject(cmd, mesh_pipeline, object);
+      }
     }
 
     vkCmdEndRendering(cmd);
@@ -345,17 +340,16 @@ void Engine::Destroy() {
 
   DestroySkybox(context, skybox);
 
-  DestroyMaterial(context, box_material);
-
   DestroyBuffer(context, point_light_buffer);
+  DestroyBuffer(context, directional_light_buffer);
 
   immediate_submit.Destroy(context);
 
   DestroyObject(context, cube_obj);
-  DestroyObject(context, test_obj);
+  for (auto &object : scene) {
+    DestroyObject(context, object);
+  }
   DestroyObject(context, rectangle_obj);
-
-  DestroyAllocatedImage(context, light_image);
 
   DestroyAllocatedImage(context, msaa_draw_image);
   DestroyAllocatedImage(context, draw_image);
