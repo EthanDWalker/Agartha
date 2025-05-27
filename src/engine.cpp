@@ -10,14 +10,13 @@
 #include "Backend/util.h"
 #include "Loaders/model.h"
 #include "Primitives/cube.h"
-#include "fmt/base.h"
 #include "object.h"
 #include "texture_manager.h"
+#include "timer.h"
 #include "types.h"
 #include <GLFW/glfw3.h>
 #include <cstdint>
 #include <limits>
-#include <memory>
 #include <vulkan/vulkan_core.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
@@ -59,7 +58,7 @@ void Engine::Init() {
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, depth_image,
                        1, false, VK_SAMPLE_COUNT_4_BIT);
 
-  CreateAllocatedImage(context, {1024, 1024, 1}, VK_FORMAT_D32_SFLOAT,
+  CreateAllocatedImage(context, {1024 * 4, 1024 * 4, 1}, VK_FORMAT_D32_SFLOAT,
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                            VK_IMAGE_USAGE_SAMPLED_BIT |
                            VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -69,16 +68,15 @@ void Engine::Init() {
 
   VkSamplerCreateInfo shadow_sampler_ci{};
   shadow_sampler_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  shadow_sampler_ci.magFilter =
-      VK_FILTER_NEAREST; // Linear filtering helps with PCF
-  shadow_sampler_ci.minFilter = VK_FILTER_NEAREST;
+  shadow_sampler_ci.magFilter = VK_FILTER_LINEAR;
+  shadow_sampler_ci.minFilter = VK_FILTER_LINEAR;
   shadow_sampler_ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-  shadow_sampler_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-  shadow_sampler_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-  shadow_sampler_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+  shadow_sampler_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  shadow_sampler_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  shadow_sampler_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   shadow_sampler_ci.compareEnable = VK_TRUE; // Using manual PCF in shader
   shadow_sampler_ci.compareOp =
-      VK_COMPARE_OP_LESS_OR_EQUAL; // Only used if compareEnable = true
+      VK_COMPARE_OP_GREATER_OR_EQUAL; // Only used if compareEnable = true
   shadow_sampler_ci.anisotropyEnable =
       VK_FALSE; // No need for anisotropy in shadow maps
   shadow_sampler_ci.minLod = 0.0f;
@@ -94,20 +92,6 @@ void Engine::Init() {
   CreateBufferData(context, immediate_submit, &directional_light,
                    sizeof(DirectionalLight), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                    directional_light_buffer);
-
-  glm::vec3 light_dir = normalize(glm::vec3(-1.0f, -1.5f, -1.0f));
-  glm::vec3 light_pos = glm::zero<glm::vec3>() - light_dir * 150.0f;
-  glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-
-  fmt::println("{}, {}, {}", light_pos.x, light_pos.y, light_pos.z);
-  glm::mat4 light_view = glm::lookAt(light_pos, glm::zero<glm::vec3>(), up);
-
-  float scene_extent = 85.0f;
-
-  glm::mat4 light_projection = glm::ortho(
-      -scene_extent, scene_extent, -scene_extent, scene_extent, 0.1f, 200.0f);
-
-  glm::mat4 light_matrix = light_projection * light_view;
 
   CreateBuffer(context, sizeof(glm::mat4),
                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
@@ -171,7 +155,7 @@ void Engine::Init() {
                              shadow_descriptor_set_layout);
     GraphicsPipelineBuilder pipeline_builder;
     pipeline_builder.Default();
-    pipeline_builder.SetCullMode(VK_CULL_MODE_BACK_BIT,
+    pipeline_builder.SetCullMode(VK_CULL_MODE_FRONT_BIT,
                                  VK_FRONT_FACE_CLOCKWISE);
     pipeline_builder.SetNoMultisampling();
     pipeline_builder.SetShaders(context, "shadow.vert.spv", "shadow.frag.spv");
@@ -198,8 +182,11 @@ void Engine::Init() {
       Object object;
       CreateObjectMaterial(context, immediate_submit, descriptor_builder,
                            texture_manager, mesh_data, object);
-      AddObjectInstanceMatrix(context, immediate_submit, glm::mat4(1.0f),
-                              object);
+
+      for (auto &instance : mesh_data.instances) {
+        AddObjectInstanceMatrix(context, immediate_submit, instance, object);
+      }
+
       scene.push_back(object);
       index++;
     }
@@ -223,7 +210,7 @@ void Engine::Run() {
   float near_plane = 0.1f;
 
   {
-    glm::vec3 light_dir = normalize(glm::vec3(-1.0f, -1.5f, -1.0f));
+    glm::vec3 light_dir = normalize(glm::vec3(-1.0f, -3.0f, -1.0f));
     glm::vec3 light_pos = glm::zero<glm::vec3>() - light_dir * distance;
     glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
 
@@ -240,6 +227,7 @@ void Engine::Run() {
   }
 
   while (!glfwWindowShouldClose(window)) {
+    Timer timer{};
     glfwPollEvents();
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
       glfwSetWindowShouldClose(window, true);
@@ -295,6 +283,7 @@ void Engine::Run() {
     clear_value.color = clear_color_value;
 
     {
+      Timer timer{};
       VkRenderingAttachmentInfo shadow_attachment_info =
           vkinit::DepthAttachmentInfo(shadow_image.image_view,
                                       VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
@@ -356,6 +345,7 @@ void Engine::Run() {
     vkCmdBeginRendering(cmd, &rendering_info);
 
     {
+      Timer timer{};
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         skybox_pipeline.obj);
 
@@ -385,6 +375,7 @@ void Engine::Run() {
     }
 
     {
+      Timer timer{};
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         mesh_pipeline.obj);
 
@@ -399,8 +390,10 @@ void Engine::Run() {
       for (auto &object : scene) {
         DrawObject(cmd, mesh_pipeline, object);
       }
+
     }
 
+    Timer other_timer{};
     vkCmdEndRendering(cmd);
 
     TransitionImage(cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,

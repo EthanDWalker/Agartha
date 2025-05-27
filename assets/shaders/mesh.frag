@@ -70,6 +70,7 @@ float ShadowCalculation(vec3 L, vec3 N) {
 
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+
     for (int x = -1; x <= 1; ++x)
     {
         for (int y = -1; y <= 1; ++y)
@@ -158,6 +159,7 @@ void main() {
     vec3 kD = vec3(1.0) - kS;
     kD *= 1.0 - metallic;
 
+    /*
     vec3 irradience = texture(samplerCube(irradianceMap, textureSampler), N).rgb;
     vec3 diffuse = irradience * albedo;
 
@@ -170,8 +172,9 @@ void main() {
     if (material.ambient_occlusion != -1) {
         ambient *= ao;
     }
+    */
 
-    vec3 color = Lo + emisive;
+    vec3 color = Lo + emisive + (F + albedo * material.base_color) * kD * ao;
 
     // HDR
     color = color / (color + vec3(1.0));

@@ -29,6 +29,7 @@ struct Material {
     int emissive;
     int normal;
     int ambient_occlusion;
+    vec3 base_color;
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {

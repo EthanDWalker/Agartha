@@ -8,16 +8,30 @@
 #include <fastgltf/util.hpp>
 #include <filesystem>
 #include <fmt/base.h>
+#include <iterator>
+#include <limits>
 #include <string>
-#include <variant>
 #include <vector>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/transform.hpp>
+
+std::pair<glm::vec3, glm::vec3> GetAABB(std::span<Vertex> vertices) {
+  glm::vec3 min{std::numeric_limits<float>::max()};
+  glm::vec3 max{};
+
+  for (auto &vertex : vertices) {
+    min = glm::min(vertex.position, min);
+    max = glm::max(vertex.position, max);
+  }
+
+  return {min, max};
+}
 
 MaterialData ParseMaterialData(fastgltf::Material &material,
                                std::span<size_t> textures,
                                std::span<std::string> images) {
 
   MaterialData new_material;
-
   new_material.albedo =
       material.pbrData.baseColorTexture.has_value()
           ? images[textures[material.pbrData.baseColorTexture->textureIndex]]
@@ -39,6 +53,13 @@ MaterialData ParseMaterialData(fastgltf::Material &material,
           ? images[textures[material.pbrData.metallicRoughnessTexture
                                 ->textureIndex]]
           : "";
+
+  new_material.base_color = {
+      material.pbrData.baseColorFactor.x(),
+      material.pbrData.baseColorFactor.y(),
+      material.pbrData.baseColorFactor.z(),
+  };
+
   return new_material;
 }
 
@@ -104,22 +125,26 @@ std::vector<MeshData> LoadModel(std::string path) {
   std::vector<Vertex> vertices;
 
   std::vector<MeshData> mesh_data;
+  std::vector<size_t> unique_check_sums;
 
+  Timer timer{};
   for (fastgltf::Mesh &mesh : asset->meshes) {
-
-    mesh_data.reserve(mesh.primitives.size());
+    mesh_data.reserve(mesh.primitives.size() + mesh_data.size());
+    unique_check_sums.reserve(mesh.primitives.size() +
+                              unique_check_sums.size());
 
     for (auto &&p : mesh.primitives) {
+      size_t check_sum = 0;
       indices.clear();
       vertices.clear();
 
       auto &index_accessor = asset->accessors[p.indicesAccessor.value()];
-      indices.reserve(indices.size() + index_accessor.count);
+      indices.reserve(index_accessor.count);
 
       fastgltf::iterateAccessor<std::uint32_t>(asset.get(), index_accessor,
                                                [&](std::uint32_t index) {
                                                  indices.push_back(index);
-                                                 ;
+                                                 check_sum += index;
                                                });
 
       auto &position_accessor =
@@ -144,6 +169,7 @@ std::vector<MeshData> LoadModel(std::string path) {
         fastgltf::iterateAccessorWithIndex<glm::vec3>(
             asset.get(), asset->accessors[normals->accessorIndex],
             [&](glm::vec3 normal, std::size_t index) {
+              check_sum += normal.x + normal.y + normal.z;
               vertices[index].normal = normal;
             });
       }
@@ -170,15 +196,55 @@ std::vector<MeshData> LoadModel(std::string path) {
       MaterialData material_data{};
       if (p.materialIndex.has_value()) {
         material_data = material_datas[p.materialIndex.value()];
+        check_sum += p.materialIndex.value();
       }
 
-      mesh_data.push_back({
-          .vertices = vertices,
-          .indices = indices,
-          .material_data = material_data,
-      });
+      assert(unique_check_sums.size() == mesh_data.size());
+
+      auto it = std::find(unique_check_sums.begin(), unique_check_sums.end(),
+                          check_sum);
+
+      glm::vec3 centriod = glm::vec3(0.0);
+
+      for (const Vertex &vertex : vertices) {
+        centriod += vertex.position;
+      }
+
+      auto new_aabb = GetAABB(vertices);
+
+      centriod /= static_cast<float>(vertices.size());
+
+      glm::mat4 new_instance = glm::translate(glm::mat4(1.0), centriod);
+
+      if (it != unique_check_sums.end()) {
+        size_t mesh_index = std::distance(unique_check_sums.begin(), it);
+
+        mesh_data[mesh_index].instances.push_back(new_instance);
+        mesh_data[mesh_index].instance_aabbs.push_back(new_aabb);
+      } else {
+        unique_check_sums.push_back(check_sum);
+
+        std::vector instances = {new_instance};
+
+        std::vector instance_aabbs = {
+            new_aabb,
+        };
+
+        for (auto &vertex : vertices) {
+          vertex.position -= centriod;
+        }
+
+        mesh_data.push_back({
+            .vertices = vertices,
+            .indices = indices,
+            .instances = instances,
+            .instance_aabbs = instance_aabbs,
+            .material_data = material_data,
+        });
+      }
     }
   }
+  fmt::println("model loaded in {} ms", timer.ElapsedMillis());
 
   return mesh_data;
 }

@@ -12,11 +12,14 @@ struct MaterialData {
   std::string emissive;
   std::string normal;
   std::string ambient_occlusion;
+  glm::vec3 base_color;
 };
 
 struct MeshData {
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
+  std::vector<glm::mat4> instances;
+  std::vector<std::pair<glm::vec3, glm::vec3>> instance_aabbs;
   MaterialData material_data;
 };
 

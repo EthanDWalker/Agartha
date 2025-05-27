@@ -24,6 +24,7 @@ void CreateObjectMaterial(VulkanContext &context, ImmediateSubmit &immediate_sub
   device_address_info.buffer = object.instance_buffer.buffer;
 
   object.material = texture_manager.GetMaterial(mesh_data.material_data);
+  object.material.base_color = mesh_data.material_data.base_color;
 
   object.instance_buffer_address =
       vkGetBufferDeviceAddress(context.device, &device_address_info);
