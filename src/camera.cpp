@@ -1,25 +1,31 @@
 #include "camera.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
+#include "Backend/descriptors.h"
 #include "Backend/immediate_submit.h"
 #include "GLFW/glfw3.h"
 #include <glm/glm.hpp>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
-#include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 
-void Camera::Create(VulkanContext &context) {
+void Camera::Create(VulkanContext &context,
+                    DescriptorBuilder &descriptor_builder) {
   CreateBuffer(context, sizeof(CameraUboData),
                VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                VMA_MEMORY_USAGE_GPU_ONLY, ubo);
+
+  descriptor_builder.Reset();
+  descriptor_builder.BindBuffer(0, ubo.buffer);
+  descriptor_builder.Build(context, VK_SHADER_STAGE_ALL_GRAPHICS,
+                           descriptor_set, descriptor_layout);
 };
 
 void Camera::Destroy(VulkanContext &context) {
   DestroyBuffer(context, ubo);
-  ;
+  vkDestroyDescriptorSetLayout(context.device, descriptor_layout, nullptr);
 }
 
 void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,

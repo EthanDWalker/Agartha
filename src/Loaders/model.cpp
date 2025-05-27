@@ -13,18 +13,38 @@
 #include <string>
 #include <vector>
 #define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 
-std::pair<glm::vec3, glm::vec3> GetAABB(std::span<Vertex> vertices) {
+AABB GetAABB(std::span<Vertex> vertices) {
   glm::vec3 min{std::numeric_limits<float>::max()};
-  glm::vec3 max{};
+  glm::vec3 max{std::numeric_limits<float>::lowest()};
 
-  for (auto &vertex : vertices) {
-    min = glm::min(vertex.position, min);
-    max = glm::max(vertex.position, max);
+  for (const auto &vertex : vertices) {
+    glm::vec3 position = vertex.position;
+
+    if (vertex.position.x < min.x) {
+      min.x = vertex.position.x;
+    }
+    if (vertex.position.y < min.y) {
+      min.y = vertex.position.y;
+    }
+    if (vertex.position.z < min.z) {
+      min.z = vertex.position.z;
+    }
+
+    if (vertex.position.x > max.x) {
+      max.x = vertex.position.x;
+    }
+    if (vertex.position.y > max.y) {
+      max.y = vertex.position.y;
+    }
+    if (vertex.position.z > max.z) {
+      max.z = vertex.position.z;
+    }
   }
 
-  return {min, max};
+  return {.min = min, .max = max};
 }
 
 MaterialData ParseMaterialData(fastgltf::Material &material,
@@ -53,12 +73,6 @@ MaterialData ParseMaterialData(fastgltf::Material &material,
           ? images[textures[material.pbrData.metallicRoughnessTexture
                                 ->textureIndex]]
           : "";
-
-  new_material.base_color = {
-      material.pbrData.baseColorFactor.x(),
-      material.pbrData.baseColorFactor.y(),
-      material.pbrData.baseColorFactor.z(),
-  };
 
   return new_material;
 }
@@ -121,9 +135,6 @@ std::vector<MeshData> LoadModel(std::string path) {
     material_datas.push_back(ParseMaterialData(material, textures, images));
   }
 
-  std::vector<uint32_t> indices;
-  std::vector<Vertex> vertices;
-
   std::vector<MeshData> mesh_data;
   std::vector<size_t> unique_check_sums;
 
@@ -135,8 +146,8 @@ std::vector<MeshData> LoadModel(std::string path) {
 
     for (auto &&p : mesh.primitives) {
       size_t check_sum = 0;
-      indices.clear();
-      vertices.clear();
+      std::vector<uint32_t> indices;
+      std::vector<Vertex> vertices;
 
       auto &index_accessor = asset->accessors[p.indicesAccessor.value()];
       indices.reserve(index_accessor.count);
@@ -204,41 +215,38 @@ std::vector<MeshData> LoadModel(std::string path) {
       auto it = std::find(unique_check_sums.begin(), unique_check_sums.end(),
                           check_sum);
 
-      glm::vec3 centriod = glm::vec3(0.0);
+      glm::vec3 centroid = glm::vec3(0.0);
 
       for (const Vertex &vertex : vertices) {
-        centriod += vertex.position;
+        centroid += vertex.position;
       }
 
-      auto new_aabb = GetAABB(vertices);
+      centroid /= static_cast<float>(vertices.size());
 
-      centriod /= static_cast<float>(vertices.size());
-
-      glm::mat4 new_instance = glm::translate(glm::mat4(1.0), centriod);
+      glm::mat4 new_instance = glm::translate(glm::mat4(1.0), centroid);
 
       if (it != unique_check_sums.end()) {
         size_t mesh_index = std::distance(unique_check_sums.begin(), it);
 
         mesh_data[mesh_index].instances.push_back(new_instance);
-        mesh_data[mesh_index].instance_aabbs.push_back(new_aabb);
       } else {
         unique_check_sums.push_back(check_sum);
 
-        std::vector instances = {new_instance};
-
-        std::vector instance_aabbs = {
-            new_aabb,
-        };
+        auto desired_aabb = GetAABB(vertices);
 
         for (auto &vertex : vertices) {
-          vertex.position -= centriod;
+          vertex.position -= centroid;
         }
+
+        auto new_aabb = GetAABB(vertices);
+
+        std::vector<glm::mat4> instances = {new_instance};
 
         mesh_data.push_back({
             .vertices = vertices,
             .indices = indices,
             .instances = instances,
-            .instance_aabbs = instance_aabbs,
+            .aabb = new_aabb,
             .material_data = material_data,
         });
       }

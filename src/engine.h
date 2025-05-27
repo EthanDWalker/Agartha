@@ -54,6 +54,7 @@ struct Engine {
   AllocatedBuffer point_light_buffer;
   AllocatedBuffer directional_light_buffer;
   AllocatedBuffer light_matrix_buffer;
+  AllocatedBuffer aabb_buffer;
 
   std::vector<Object> scene;
   Object cube_obj;
@@ -62,6 +63,7 @@ struct Engine {
   Pipeline mesh_pipeline;
   Pipeline skybox_pipeline;
   Pipeline shadow_pipeline;
+  Pipeline aabb_pipeline;
 
   VkDescriptorSet descriptor_set;
   VkDescriptorSetLayout descriptor_layout;

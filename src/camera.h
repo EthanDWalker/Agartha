@@ -1,6 +1,7 @@
 #pragma once
 #include "Backend/buffer.h"
 #include "Backend/context.h"
+#include "Backend/descriptors.h"
 #include <GLFW/glfw3.h>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
@@ -21,11 +22,13 @@ public:
   float yaw{0.0f};
 
   AllocatedBuffer ubo;
+  VkDescriptorSet descriptor_set;
+  VkDescriptorSetLayout descriptor_layout;
 
-  void Create(VulkanContext &context);
+  void Create(VulkanContext &context, DescriptorBuilder &descriptor_builder);
 
   void Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                    GLFWwindow *window, float delta_time);
+              GLFWwindow *window, float delta_time);
 
   void Destroy(VulkanContext &context);
 };

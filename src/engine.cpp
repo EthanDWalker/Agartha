@@ -10,6 +10,7 @@
 #include "Backend/util.h"
 #include "Loaders/model.h"
 #include "Primitives/cube.h"
+#include "fmt/base.h"
 #include "object.h"
 #include "texture_manager.h"
 #include "timer.h"
@@ -17,8 +18,10 @@
 #include <GLFW/glfw3.h>
 #include <cstdint>
 #include <limits>
+#include <vector>
 #include <vulkan/vulkan_core.h>
 #define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 
 void Engine::Init() {
@@ -30,7 +33,7 @@ void Engine::Init() {
   immediate_submit.Create(context);
   descriptor_builder.Init(context);
   texture_manager.Init(context, descriptor_builder);
-  camera.Create(context);
+  camera.Create(context, descriptor_builder);
 
   for (FrameData &frame : frame_data) {
     CreateFrameData(context, frame);
@@ -147,6 +150,7 @@ void Engine::Init() {
     pipeline_builder.AddDescriptorSetLayout(skybox_descriptor_layout);
     pipeline_builder.Build(context, skybox_pipeline);
   }
+
   {
     descriptor_builder.Reset();
     descriptor_builder.BindBuffer(0, light_matrix_buffer.buffer);
@@ -167,6 +171,19 @@ void Engine::Init() {
     pipeline_builder.Build(context, shadow_pipeline);
   }
 
+  {
+    GraphicsPipelineBuilder pipeline_builder{};
+    pipeline_builder.Default();
+    pipeline_builder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
+    pipeline_builder.SetShaders(context, "debug_aabb.vert.spv",
+                                "debug_aabb.frag.spv", "debug_aabb.geom.spv");
+    pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
+    pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT,
+                                          sizeof(VkDeviceAddress));
+    pipeline_builder.SetDepthFormat(depth_image.format);
+    pipeline_builder.Build(context, aabb_pipeline);
+  }
+
   std::vector<MeshData> gltf_data = LoadModel("Sponza.gltf");
 
   MeshData cube_data = {
@@ -175,6 +192,9 @@ void Engine::Init() {
   };
 
   scene.reserve(gltf_data.size());
+
+  std::vector<AABB> aabbs;
+  aabbs.reserve(gltf_data.size());
 
   {
     uint32_t index;
@@ -185,12 +205,23 @@ void Engine::Init() {
 
       for (auto &instance : mesh_data.instances) {
         AddObjectInstanceMatrix(context, immediate_submit, instance, object);
+        aabbs.push_back({
+            .min = glm::vec3(instance * glm::vec4(mesh_data.aabb.min, 1.0)),
+            .max = glm::vec3(instance * glm::vec4(mesh_data.aabb.max, 1.0)),
+        });
       }
 
       scene.push_back(object);
       index++;
     }
   }
+  fmt::println("{}", aabbs.size());
+
+  CreateBufferData(context, immediate_submit, aabbs.data(),
+                   aabbs.size() * sizeof(AABB),
+                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                       VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                   aabb_buffer);
 
   CreateObject(context, immediate_submit, descriptor_builder, cube_data,
                cube_obj);
@@ -226,11 +257,18 @@ void Engine::Run() {
                  light_matrix_buffer);
   }
 
+  bool debug_aabb = false;
+
   while (!glfwWindowShouldClose(window)) {
     Timer timer{};
     glfwPollEvents();
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
       glfwSetWindowShouldClose(window, true);
+    }
+    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
+      debug_aabb = true;
+    } else if (glfwGetKey(window, GLFW_KEY_T) != GLFW_PRESS) {
+      debug_aabb = false;
     }
 
     camera.Update(context, immediate_submit, window, 0.001f);
@@ -374,6 +412,26 @@ void Engine::Run() {
       DrawObject(cmd, skybox_pipeline, cube_obj);
     }
 
+    if (debug_aabb) {
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        aabb_pipeline.obj);
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              aabb_pipeline.layout, 0, 1,
+                              &camera.descriptor_set, 0, nullptr);
+
+      VkBufferDeviceAddressInfo device_address_info{};
+      device_address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+      device_address_info.buffer = aabb_buffer.buffer;
+
+      VkDeviceAddress address =
+          vkGetBufferDeviceAddress(context.device, &device_address_info);
+
+      vkCmdPushConstants(cmd, aabb_pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT,
+                         0, sizeof(VkDeviceAddress), &address);
+
+      vkCmdDraw(cmd, 50 * 2, 1, 0, 0);
+    }
+
     {
       Timer timer{};
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -390,7 +448,6 @@ void Engine::Run() {
       for (auto &object : scene) {
         DrawObject(cmd, mesh_pipeline, object);
       }
-
     }
 
     Timer other_timer{};
@@ -478,6 +535,7 @@ void Engine::Destroy() {
   DestroyBuffer(context, point_light_buffer);
   DestroyBuffer(context, directional_light_buffer);
   DestroyBuffer(context, light_matrix_buffer);
+  DestroyBuffer(context, aabb_buffer);
 
   immediate_submit.Destroy(context);
 
@@ -495,6 +553,7 @@ void Engine::Destroy() {
   DestroyPipeline(context, mesh_pipeline);
   DestroyPipeline(context, skybox_pipeline);
   DestroyPipeline(context, shadow_pipeline);
+  DestroyPipeline(context, aabb_pipeline);
 
   DestroyVulkanSwapchain(context, swapchain);
   DestroyVulkanContext(context);

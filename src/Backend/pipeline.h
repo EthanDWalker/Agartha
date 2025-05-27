@@ -1,5 +1,6 @@
 #pragma once
 #include "context.h"
+#include <optional>
 #include <string>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -40,6 +41,7 @@ struct GraphicsPipelineBuilder {
   VkFormat color_attachment_format;
   VkShaderModule vert_shader;
   VkShaderModule frag_shader;
+  std::optional<VkShaderModule> geom_shader;
 
   GraphicsPipelineBuilder() {
     render_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -57,7 +59,8 @@ struct GraphicsPipelineBuilder {
     dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
   }
 
-  void SetShaders(VulkanContext &context, std::string vert, std::string frag);
+  void SetShaders(VulkanContext &context, std::string vert, std::string frag,
+                  std::string geom = "");
 
   void Default();
 

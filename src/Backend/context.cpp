@@ -24,6 +24,9 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   VK_CHECK(glfwCreateWindowSurface(context.instance, window, nullptr,
                                    &context.surface));
 
+  VkPhysicalDeviceFeatures features{};
+  features.geometryShader = VK_TRUE;
+
   VkPhysicalDeviceVulkan14Features features_14{};
   features_14.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
 
@@ -55,6 +58,7 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
       physical_device_selector.set_minimum_version(1, 3)
           .set_required_features_13(features_13)
           .set_required_features_12(features_12)
+          .set_required_features(features)
           .set_surface(context.surface)
           .add_required_extension("VK_EXT_robustness2")
           .add_required_extension_features(robustness2)

@@ -29,7 +29,17 @@ struct Material {
     int emissive;
     int normal;
     int ambient_occlusion;
-    vec3 base_color;
+};
+
+struct AABB {
+  vec3 min;
+  float padding;
+  vec3 max;
+  float padding_1;
+};
+
+layout(buffer_reference, std430) readonly buffer AabbBuffer {
+    AABB aabbs[];
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {

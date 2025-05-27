@@ -54,6 +54,7 @@ file(GLOB SHADER_SRC
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.frag 
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.vert 
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.comp
+    ${CMAKE_SOURCE_DIR}/assets/shaders/*.geom
 )
 
 set(COMPILED_SHADERS)

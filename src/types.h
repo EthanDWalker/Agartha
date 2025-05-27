@@ -27,5 +27,22 @@ struct Material {
   int32_t emissive{-1};
   int32_t normal{-1};
   int32_t ambient_occlusion{-1};
-  glm::vec3 base_color;
+};
+
+struct AABB {
+  glm::vec3 min;
+  float padding;
+  glm::vec3 max;
+  float padding_1;
+};
+
+inline bool operator==(const AABB &a, const AABB &b) {
+  return a.min == b.min && a.max == b.max;
+}
+
+struct Frustum {
+  float near_plane;
+  float far_plane;
+  float fov_y;
+  float aspect_ratio;
 };

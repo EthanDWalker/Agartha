@@ -20,17 +20,17 @@ bool LoadShaderModule(std::string_view file_path, VkDevice device,
 
   // find what the size of the file is by looking up the location of the cursor
   // because the cursor is at the end, it gives the size directly in bytes
-  size_t fileSize = (size_t)file.tellg();
+  size_t file_size = (size_t)file.tellg();
 
   // spirv expects the buffer to be on uint32, so make sure to reserve a int
   // vector big enough for the entire file
-  std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
+  std::vector<uint32_t> buffer(file_size / sizeof(uint32_t));
 
   // put file cursor at beginning
   file.seekg(0);
 
   // load the entire file into the buffer
-  file.read((char *)buffer.data(), fileSize);
+  file.read((char *)buffer.data(), file_size);
 
   // now that the file is loaded into the buffer, we can close it
   file.close();
@@ -108,7 +108,8 @@ void ComputePipelineBuilder::Build(VulkanContext &context, Pipeline &pipeline) {
 }
 
 void GraphicsPipelineBuilder::SetShaders(VulkanContext &context,
-                                         std::string vert, std::string frag) {
+                                         std::string vert, std::string frag,
+                                         std::string geom) {
   if (!LoadShaderModule(shader_file_path + vert, context.device,
                         &vert_shader)) {
     fmt::println("[ERROR] failed to load {}", vert);
@@ -116,6 +117,13 @@ void GraphicsPipelineBuilder::SetShaders(VulkanContext &context,
   if (!LoadShaderModule(shader_file_path + frag, context.device,
                         &frag_shader)) {
     fmt::println("[ERROR] failed to load {}", frag);
+  }
+  if (!geom.empty()) {
+    geom_shader.emplace();
+    if (!LoadShaderModule(shader_file_path + geom, context.device,
+                          &geom_shader.value())) {
+      fmt::println("[ERROR] failed to load {}", geom);
+    }
   }
 }
 
@@ -261,7 +269,6 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
   VK_CHECK(vkCreatePipelineLayout(context.device, &pipeline_layout_ci, nullptr,
                                   &pipeline.layout));
 
-  // at the moment we wont support multiple viewports or scissors
   VkPipelineViewportStateCreateInfo viewport_state = {};
   viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
   viewport_state.pNext = nullptr;
@@ -284,7 +291,8 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
   pipeline_ci.pNext = &render_info;
 
-  VkPipelineShaderStageCreateInfo shader_stages[2] = {};
+  std::vector<VkPipelineShaderStageCreateInfo> shader_stages = {};
+  shader_stages.resize(2);
   shader_stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
   shader_stages[0].module = vert_shader;
@@ -295,8 +303,17 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
   shader_stages[1].module = frag_shader;
   shader_stages[1].pName = "main";
 
-  pipeline_ci.stageCount = 2;
-  pipeline_ci.pStages = shader_stages;
+  if (geom_shader.has_value()) {
+    shader_stages.resize(3);
+    shader_stages[2].sType =
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shader_stages[2].stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+    shader_stages[2].module = geom_shader.value();
+    shader_stages[2].pName = "main";
+  };
+
+  pipeline_ci.stageCount = shader_stages.size();
+  pipeline_ci.pStages = shader_stages.data();
   pipeline_ci.pVertexInputState = &vertex_input_info;
   pipeline_ci.pInputAssemblyState = &input_assembly;
   pipeline_ci.pViewportState = &viewport_state;
@@ -322,6 +339,9 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
 
   vkDestroyShaderModule(context.device, vert_shader, nullptr);
   vkDestroyShaderModule(context.device, frag_shader, nullptr);
+  if (geom_shader.has_value()) {
+    vkDestroyShaderModule(context.device, geom_shader.value(), nullptr);
+  }
 }
 
 void DestroyPipeline(VulkanContext &context, Pipeline &pipeline) {
