@@ -4,10 +4,10 @@
 #include <vulkan/vulkan.h>
 
 struct AllocatedImage {
+  VkExtent3D extent;
   VkImage image;
   VkImageView image_view;
   VmaAllocation allocation;
-  VkExtent3D extent;
   VkFormat format;
 };
 

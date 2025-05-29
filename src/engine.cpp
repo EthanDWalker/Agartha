@@ -3,65 +3,36 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
-#include "Backend/frame_data.h"
-#include "Backend/init.h"
 #include "Backend/pipeline.h"
-#include "Backend/swapchain.h"
-#include "Backend/util.h"
 #include "Loaders/model.h"
 #include "Primitives/cube.h"
-#include "fmt/base.h"
 #include "object.h"
+#include "render_graph.h"
 #include "texture_manager.h"
-#include "timer.h"
 #include "types.h"
 #include <GLFW/glfw3.h>
 #include <cstdint>
-#include <limits>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 
+void Engine::CreateRenderGraph() { render_graph.Init(context, window); }
+
 void Engine::Init() {
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_FALSE);
   window = glfwCreateWindow(1600, 900, "Engine", nullptr, nullptr);
+
   InitVulkanContext(window, DEBUG, context);
-  CreateVulkanSwapchain(context, 1600, 900, swapchain);
+
   immediate_submit.Create(context);
   descriptor_builder.Init(context);
   texture_manager.Init(context, descriptor_builder);
   camera.Create(context, descriptor_builder);
 
-  for (FrameData &frame : frame_data) {
-    CreateFrameData(context, frame);
-  }
-
-  VkExtent3D draw_image_extent_3d = {
-      swapchain.extent.width,
-      swapchain.extent.height,
-      1,
-  };
-
-  CreateAllocatedImage(context, draw_image_extent_3d,
-                       VK_FORMAT_R16G16B16A16_SFLOAT,
-                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                           VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
-                       msaa_draw_image, 1, false, VK_SAMPLE_COUNT_4_BIT);
-
-  CreateAllocatedImage(
-      context, draw_image_extent_3d, VK_FORMAT_R16G16B16A16_SFLOAT,
-      VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
-          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-      draw_image);
-
-  CreateAllocatedImage(context, draw_image_extent_3d, VK_FORMAT_D32_SFLOAT,
-                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, depth_image,
-                       1, false, VK_SAMPLE_COUNT_4_BIT);
-
-  CreateAllocatedImage(context, {1024 * 4, 1024 * 4, 1}, VK_FORMAT_D32_SFLOAT,
+  CreateAllocatedImage(context, {1024 * 2, 1024 * 2, 1}, VK_FORMAT_D32_SFLOAT,
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                            VK_IMAGE_USAGE_SAMPLED_BIT |
                            VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -77,11 +48,9 @@ void Engine::Init() {
   shadow_sampler_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   shadow_sampler_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   shadow_sampler_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  shadow_sampler_ci.compareEnable = VK_TRUE; // Using manual PCF in shader
-  shadow_sampler_ci.compareOp =
-      VK_COMPARE_OP_GREATER_OR_EQUAL; // Only used if compareEnable = true
-  shadow_sampler_ci.anisotropyEnable =
-      VK_FALSE; // No need for anisotropy in shadow maps
+  shadow_sampler_ci.compareEnable = VK_TRUE;
+  shadow_sampler_ci.compareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
+  shadow_sampler_ci.anisotropyEnable = VK_FALSE;
   shadow_sampler_ci.minLod = 0.0f;
   shadow_sampler_ci.maxLod = 1.0f;
 
@@ -92,6 +61,7 @@ void Engine::Init() {
 
   CreateBufferData(context, immediate_submit, &point_light, sizeof(PointLight),
                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, point_light_buffer);
+
   CreateBufferData(context, immediate_submit, &directional_light,
                    sizeof(DirectionalLight), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                    directional_light_buffer);
@@ -120,7 +90,6 @@ void Engine::Init() {
     GraphicsPipelineBuilder pipeline_builder;
     pipeline_builder.SetShaders(context, "mesh.vert.spv", "mesh.frag.spv");
     pipeline_builder.Default();
-    pipeline_builder.SetDepthFormat(depth_image.format);
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
                                           sizeof(ObjectPushConstantData));
@@ -143,7 +112,6 @@ void Engine::Init() {
     pipeline_builder.Default();
     pipeline_builder.SetCullMode(VK_CULL_MODE_BACK_BIT,
                                  VK_FRONT_FACE_CLOCKWISE);
-    pipeline_builder.SetDepthFormat(depth_image.format);
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT |
                                               VK_SHADER_STAGE_FRAGMENT_BIT,
                                           sizeof(ObjectPushConstantData));
@@ -180,7 +148,6 @@ void Engine::Init() {
     pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT,
                                           sizeof(VkDeviceAddress));
-    pipeline_builder.SetDepthFormat(depth_image.format);
     pipeline_builder.Build(context, aabb_pipeline);
   }
 
@@ -215,7 +182,6 @@ void Engine::Init() {
       index++;
     }
   }
-  fmt::println("{}", aabbs.size());
 
   CreateBufferData(context, immediate_submit, aabbs.data(),
                    aabbs.size() * sizeof(AABB),
@@ -230,18 +196,18 @@ void Engine::Init() {
 
   camera.position = {2, 2, 2};
   camera.Update(context, immediate_submit, window, 0.001f);
+
+  CreateRenderGraph();
 }
 
 void Engine::Run() {
-  uint8_t frame_index = 0;
-
-  float distance = 200.0f;
-  float scene_extent = 85.0f;
-  float far_plane = 240.0f;
-  float near_plane = 0.1f;
+  const float distance = 200.0f;
+  const float scene_extent = 85.0f;
+  const float far_plane = 240.0f;
+  const float near_plane = 0.1f;
 
   {
-    glm::vec3 light_dir = normalize(glm::vec3(-1.0f, -3.0f, -1.0f));
+    glm::vec3 light_dir = normalize(glm::vec3(-1.0f, -4.0f, -1.0f));
     glm::vec3 light_pos = glm::zero<glm::vec3>() - light_dir * distance;
     glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
 
@@ -260,7 +226,6 @@ void Engine::Run() {
   bool debug_aabb = false;
 
   while (!glfwWindowShouldClose(window)) {
-    Timer timer{};
     glfwPollEvents();
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
       glfwSetWindowShouldClose(window, true);
@@ -273,251 +238,21 @@ void Engine::Run() {
 
     camera.Update(context, immediate_submit, window, 0.001f);
 
-    VK_CHECK(vkWaitForFences(context.device, 1,
-                             &frame_data[frame_index].render_fence, VK_TRUE,
-                             std::numeric_limits<uint32_t>::max()));
-    VK_CHECK(vkResetFences(context.device, 1,
-                           &frame_data[frame_index].render_fence));
-
-    uint32_t swapchain_image_index;
-    {
-      VkResult e =
-          vkAcquireNextImageKHR(context.device, swapchain.obj, 1000000000,
-                                frame_data[frame_index].swapchain_semaphore,
-                                nullptr, &swapchain_image_index);
-      if (e == VK_ERROR_OUT_OF_DATE_KHR) {
-        int32_t width, height;
-        glfwGetWindowSize(window, &width, &height);
-        vkDeviceWaitIdle(context.device);
-        DestroyVulkanSwapchain(context, swapchain);
-        CreateVulkanSwapchain(context, width, height, swapchain);
-      }
+    render_graph.Render(context);
+    if (render_graph.resize_requested == true) {
+      render_graph.Resize(context, window);
     }
-
-    VkCommandBuffer cmd = frame_data[frame_index].command_buffer;
-
-    VK_CHECK(vkResetCommandBuffer(cmd, 0));
-
-    VkCommandBufferBeginInfo cmd_begin_info = vkinit::CommandBufferBeginInfo(
-        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-
-    VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
-
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, draw_image.image);
-
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                    depth_image.image);
-
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                    shadow_image.image);
-
-    VkClearColorValue clear_color_value{};
-    clear_color_value = {0.0f, 0.0f, 0.0f, 0.0f};
-
-    VkClearValue clear_value{};
-    clear_value.color = clear_color_value;
-
-    {
-      Timer timer{};
-      VkRenderingAttachmentInfo shadow_attachment_info =
-          vkinit::DepthAttachmentInfo(shadow_image.image_view,
-                                      VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-
-      VkRenderingInfo rendering_info = vkinit::RenderingInfo(
-          {shadow_image.extent.width, shadow_image.extent.height}, nullptr,
-          &shadow_attachment_info);
-
-      vkCmdBeginRendering(cmd, &rendering_info);
-
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        shadow_pipeline.obj);
-
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              shadow_pipeline.layout, 0, 1,
-                              &shadow_descriptor_set, 0, nullptr);
-
-      VkViewport viewport = {};
-      viewport.x = 0;
-      viewport.y = 0;
-      viewport.width = shadow_image.extent.width;
-      viewport.height = shadow_image.extent.height;
-      viewport.minDepth = 1.0f;
-      viewport.maxDepth = 0.0f;
-
-      vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-      VkRect2D scissor = {};
-      scissor.offset.x = 0;
-      scissor.offset.y = 0;
-      scissor.extent.width = shadow_image.extent.width;
-      scissor.extent.height = shadow_image.extent.height;
-
-      vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-      for (auto &object : scene) {
-        DrawObject(cmd, shadow_pipeline, object);
-      }
-
-      vkCmdEndRendering(cmd);
-    }
-
-    VkRenderingAttachmentInfo attachment_info = vkinit::AttachmentInfo(
-        msaa_draw_image.image_view, draw_image.image_view, &clear_value,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
-    VkRenderingAttachmentInfo depth_attachment_info =
-        vkinit::DepthAttachmentInfo(depth_image.image_view,
-                                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-
-    VkRenderingInfo rendering_info = vkinit::RenderingInfo(
-        {draw_image.extent.width, draw_image.extent.height}, &attachment_info,
-        &depth_attachment_info);
-
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    shadow_image.image);
-
-    vkCmdBeginRendering(cmd, &rendering_info);
-
-    {
-      Timer timer{};
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        skybox_pipeline.obj);
-
-      VkViewport viewport = {};
-      viewport.x = 0;
-      viewport.y = 0;
-      viewport.width = draw_image.extent.width;
-      viewport.height = draw_image.extent.height;
-      viewport.minDepth = 1.0f;
-      viewport.maxDepth = 0.0f;
-
-      vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-      VkRect2D scissor = {};
-      scissor.offset.x = 0;
-      scissor.offset.y = 0;
-      scissor.extent.width = draw_image.extent.width;
-      scissor.extent.height = draw_image.extent.height;
-
-      vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              skybox_pipeline.layout, 0, 1,
-                              &skybox_descriptor_set, 0, nullptr);
-
-      DrawObject(cmd, skybox_pipeline, cube_obj);
-    }
-
-    if (debug_aabb) {
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        aabb_pipeline.obj);
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              aabb_pipeline.layout, 0, 1,
-                              &camera.descriptor_set, 0, nullptr);
-
-      VkBufferDeviceAddressInfo device_address_info{};
-      device_address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-      device_address_info.buffer = aabb_buffer.buffer;
-
-      VkDeviceAddress address =
-          vkGetBufferDeviceAddress(context.device, &device_address_info);
-
-      vkCmdPushConstants(cmd, aabb_pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT,
-                         0, sizeof(VkDeviceAddress), &address);
-
-      vkCmdDraw(cmd, 50 * 2, 1, 0, 0);
-    }
-
-    {
-      Timer timer{};
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        mesh_pipeline.obj);
-
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              mesh_pipeline.layout, 1, 1,
-                              &texture_manager.descriptor_set, 0, nullptr);
-
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              mesh_pipeline.layout, 0, 1, &descriptor_set, 0,
-                              nullptr);
-
-      for (auto &object : scene) {
-        DrawObject(cmd, mesh_pipeline, object);
-      }
-    }
-
-    Timer other_timer{};
-    vkCmdEndRendering(cmd);
-
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, draw_image.image);
-
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    swapchain.images[swapchain_image_index]);
-
-    CopyImageToImage(
-        cmd, draw_image.image, swapchain.images[swapchain_image_index],
-        {draw_image.extent.width, draw_image.extent.height}, swapchain.extent);
-
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                    swapchain.images[swapchain_image_index]);
-
-    VK_CHECK(vkEndCommandBuffer(cmd));
-
-    VkCommandBufferSubmitInfo cmd_info = vkinit::CommandBufferSubmitInfo(cmd);
-
-    VkSemaphoreSubmitInfo wait_semaphore_info = vkinit::SemaphoreSubmitInfo(
-        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR,
-        frame_data[frame_index].swapchain_semaphore);
-
-    VkSemaphoreSubmitInfo signal_semaphore_info =
-        vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-                                    frame_data[frame_index].render_semaphore);
-
-    VkSubmitInfo2 submit_info = vkinit::SubmitInfo(
-        &cmd_info, &signal_semaphore_info, &wait_semaphore_info);
-
-    VK_CHECK(vkQueueSubmit2(context.graphics_queue, 1, &submit_info,
-                            frame_data[frame_index].render_fence));
-
-    VkPresentInfoKHR present_info{};
-    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    present_info.pSwapchains = &swapchain.obj;
-    present_info.swapchainCount = 1;
-    present_info.pWaitSemaphores = &frame_data[frame_index].render_semaphore;
-    present_info.waitSemaphoreCount = 1;
-    present_info.pImageIndices = &swapchain_image_index;
-
-    {
-      VkResult e = vkQueuePresentKHR(context.graphics_queue, &present_info);
-      if (e == VK_ERROR_OUT_OF_DATE_KHR) {
-        int32_t width, height;
-        glfwGetWindowSize(window, &width, &height);
-        vkDeviceWaitIdle(context.device);
-        DestroyVulkanSwapchain(context, swapchain);
-        CreateVulkanSwapchain(context, width, height, swapchain);
-      }
-    }
-
-    frame_index ^= 1;
   }
 }
 
 void Engine::Destroy() {
   vkDeviceWaitIdle(context.device);
 
-  for (FrameData &frame : frame_data) {
-    DestroyFrameData(context, frame);
-  }
+  render_graph.Destroy(context);
 
   texture_manager.Destroy(context);
   descriptor_builder.Destroy(context);
+
   vkDestroyDescriptorSetLayout(context.device, descriptor_layout, nullptr);
   vkDestroyDescriptorSetLayout(context.device, skybox_descriptor_layout,
                                nullptr);
@@ -545,9 +280,6 @@ void Engine::Destroy() {
   }
   DestroyObject(context, rectangle_obj);
 
-  DestroyAllocatedImage(context, msaa_draw_image);
-  DestroyAllocatedImage(context, draw_image);
-  DestroyAllocatedImage(context, depth_image);
   DestroyAllocatedImage(context, shadow_image);
 
   DestroyPipeline(context, mesh_pipeline);
@@ -555,7 +287,6 @@ void Engine::Destroy() {
   DestroyPipeline(context, shadow_pipeline);
   DestroyPipeline(context, aabb_pipeline);
 
-  DestroyVulkanSwapchain(context, swapchain);
   DestroyVulkanContext(context);
 
   glfwDestroyWindow(window);

@@ -19,8 +19,8 @@ void Camera::Create(VulkanContext &context,
 
   descriptor_builder.Reset();
   descriptor_builder.BindBuffer(0, ubo.buffer);
-  descriptor_builder.Build(context, VK_SHADER_STAGE_ALL_GRAPHICS,
-                           descriptor_set, descriptor_layout);
+  descriptor_builder.Build(context, VK_SHADER_STAGE_ALL, descriptor_set,
+                           descriptor_layout);
 };
 
 void Camera::Destroy(VulkanContext &context) {

@@ -58,7 +58,7 @@ void AddObjectInstanceMatrix(VulkanContext &context,
   object.instance_matrices.push_back(matrix);
 }
 
-void DrawObject(VkCommandBuffer cmd, Pipeline pipeline, Object &object) {
+void DrawObject(VkCommandBuffer cmd, VkPipelineLayout pipeline, Object &object) {
   vkCmdBindIndexBuffer(cmd, object.mesh.index_buffer.buffer, 0,
                        VK_INDEX_TYPE_UINT32);
 
@@ -67,7 +67,7 @@ void DrawObject(VkCommandBuffer cmd, Pipeline pipeline, Object &object) {
   pc.vertex_buffer_address = object.mesh.vertex_address;
   pc.material = object.material;
 
-  vkCmdPushConstants(cmd, pipeline.layout,
+  vkCmdPushConstants(cmd, pipeline,
                      VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
                      0, sizeof(ObjectPushConstantData), &pc);
 

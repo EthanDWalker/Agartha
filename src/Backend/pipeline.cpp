@@ -134,7 +134,8 @@ void GraphicsPipelineBuilder::Default() {
   SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
   SetBlendingAlpha();
   SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-  SetMultisampling(VK_SAMPLE_COUNT_4_BIT);
+  SetDepthFormat(VK_FORMAT_D32_SFLOAT);
+  SetNoMultisampling();
 }
 
 void GraphicsPipelineBuilder::SetInputTopology(VkPrimitiveTopology topology) {

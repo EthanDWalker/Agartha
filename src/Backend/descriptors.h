@@ -42,7 +42,7 @@ struct DescriptorBuilder {
 
   void Init(VulkanContext &context);
 
-  void BindBuffer(uint32_t binding, VkBuffer buffer);
+  void BindBuffer(uint32_t binding, VkBuffer buffer, bool storage = false);
   void BindCombinedImage(uint32_t binding, VkImageView image_view,
                          VkSampler sampler);
   void BindStorageImage(uint32_t binding, VkImageView image_view);

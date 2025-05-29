@@ -97,9 +97,10 @@ VkRenderingAttachmentInfo AttachmentInfo(VkImageView view,
   info.loadOp =
       clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
   info.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  info.resolveImageView = resolve_view; 
+  info.resolveImageView = resolve_view;
   info.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  info.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+  info.resolveMode =
+      resolve_view ? VK_RESOLVE_MODE_AVERAGE_BIT : VK_RESOLVE_MODE_NONE;
   return info;
 }
 

@@ -35,14 +35,3 @@ struct AABB {
   glm::vec3 max;
   float padding_1;
 };
-
-inline bool operator==(const AABB &a, const AABB &b) {
-  return a.min == b.min && a.max == b.max;
-}
-
-struct Frustum {
-  float near_plane;
-  float far_plane;
-  float fov_y;
-  float aspect_ratio;
-};

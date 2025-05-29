@@ -37,6 +37,6 @@ void AddObjectInstanceMatrix(VulkanContext &context,
                              ImmediateSubmit &immediate_submit,
                              glm::mat4 matrix, Object &object);
 
-void DrawObject(VkCommandBuffer cmd, Pipeline pipeline, Object &object);
+void DrawObject(VkCommandBuffer cmd, VkPipelineLayout pipeline, Object &object);
 
 void DestroyObject(VulkanContext &context, Object &object);

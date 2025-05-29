@@ -1,0 +1,63 @@
+#version 450
+layout(local_size_x = 64) in;
+
+#extension GL_EXT_buffer_reference : require
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
+
+layout(push_constant) uniform constants {
+    AabbBuffer aabbBuffer;
+    uint aabb_length;
+};
+
+layout(set = 0, binding = 0) buffer OutUBO {
+    uint visibleObjectIndices[];
+};
+
+layout(set = 0, binding = 1) buffer DrawCount {
+    uint drawCount;
+};
+
+layout(set = 1, binding = 0) uniform CameraUBO {
+    Camera camera;
+};
+
+bool isAABBVisible(AABB box, mat4 viewProj) {
+    vec3 corners[8];
+    corners[0] = vec3(box.min.x, box.min.y, box.min.z);
+    corners[1] = vec3(box.max.x, box.min.y, box.min.z);
+    corners[2] = vec3(box.min.x, box.max.y, box.min.z);
+    corners[3] = vec3(box.max.x, box.max.y, box.min.z);
+    corners[4] = vec3(box.min.x, box.min.y, box.max.z);
+    corners[5] = vec3(box.max.x, box.min.y, box.max.z);
+    corners[6] = vec3(box.min.x, box.max.y, box.max.z);
+    corners[7] = vec3(box.max.x, box.max.y, box.max.z);
+
+    bool allOutside = true;
+    for (int i = 0; i < 8; ++i) {
+        vec4 clip = viewProj * vec4(corners[i], 1.0);
+        if (abs(clip.x) <= clip.w &&
+                abs(clip.y) <= clip.w &&
+                0.0 <= clip.z && clip.z <= clip.w)
+            allOutside = false;
+    }
+
+    return !allOutside;
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id == 0) {
+        drawCount = 0;
+    }
+    if (id >= aabb_length) {
+        return;
+    }
+
+    mat4 viewProj = camera.projection * camera.view;
+
+    if (isAABBVisible(aabbBuffer.aabbs[id], viewProj)) {
+        uint index = atomicAdd(drawCount, 1);
+        visibleObjectIndices[index] = id;
+    }
+}

@@ -148,7 +148,7 @@ void main() {
 
         float NdotL = max(dot(N, L), 0.0);
 
-        float shadow = ShadowCalculation(L, N);
+        float shadow = 1.0; // ShadowCalculation(L, N);
 
         Lo += shadow * (kD * albedo / PI + specular) * radiance * NdotL;
     }

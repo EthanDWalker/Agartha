@@ -38,6 +38,13 @@ struct AABB {
   float padding_1;
 };
 
+struct Frustum {
+  float near_plane;
+  float far_plane;
+  float fov_y;
+  float aspect_ratio;
+};
+
 layout(buffer_reference, std430) readonly buffer AabbBuffer {
     AABB aabbs[];
 };
