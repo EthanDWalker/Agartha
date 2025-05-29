@@ -1,5 +1,6 @@
 #include "render_graph.h"
 #include "Backend/allocated_image.h"
+#include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/frame_data.h"
 #include "Backend/init.h"
@@ -8,6 +9,71 @@
 #include "GLFW/glfw3.h"
 #include <cstdint>
 #include <limits>
+#include <vulkan/vulkan_core.h>
+
+/*
+struct DependencyBuilder {
+  std::vector<Dependency> dependencies;
+
+  void AddDependency(AllocatedImage image);
+  void AddDependency(AllocatedBuffer buffer);
+};
+
+struct RenderGraphBuilder {
+  std::vector<std::vector<RenderPass>> render_graph;
+
+  void AddPass(uint32_t level, std::vector<Dependency> dependencies,
+               std::function<void(VkCommandBuffer)> &callback);
+};
+*/
+
+void DependencyBuilder::AddDependency(AllocatedBuffer buffer,
+                                      VkAccessFlagBits2 src_access,
+                                      VkAccessFlagBits2 dst_access,
+                                      VkPipelineStageFlagBits2 src_stage,
+                                      VkPipelineStageFlagBits2 dst_stage) {
+  VkBufferMemoryBarrier2 barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+  barrier.buffer = buffer.buffer;
+  barrier.size = VK_WHOLE_SIZE;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.srcAccessMask = src_access;
+  barrier.dstAccessMask = dst_access;
+  barrier.srcStageMask = src_stage;
+  barrier.dstStageMask = dst_stage;
+  dependency.buffer_deps.push_back(barrier);
+}
+
+void DependencyBuilder::AddDependency(AllocatedImage image,
+                                      VkAccessFlagBits2 src_access,
+                                      VkAccessFlagBits2 dst_access,
+                                      VkPipelineStageFlagBits2 src_stage,
+                                      VkPipelineStageFlagBits2 dst_stage) {
+  VkImageMemoryBarrier2 barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+  barrier.image = image.image;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.srcAccessMask = src_access;
+  barrier.dstAccessMask = dst_access;
+  barrier.srcStageMask = src_stage;
+  barrier.dstStageMask = dst_stage;
+  dependency.image_deps.push_back(barrier);
+}
+
+void DependencyBuilder::AddDependency(VkAccessFlagBits2 src_access,
+                                      VkAccessFlagBits2 dst_access,
+                                      VkPipelineStageFlagBits2 src_stage,
+                                      VkPipelineStageFlagBits2 dst_stage) {
+  VkMemoryBarrier2 barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+  barrier.srcAccessMask = src_access;
+  barrier.dstAccessMask = dst_access;
+  barrier.srcStageMask = src_stage;
+  barrier.dstStageMask = dst_stage;
+  dependency.memory_deps.push_back(barrier);
+}
 
 void RenderGraph::Init(VulkanContext &context, GLFWwindow *window) {
   int32_t width, height;
@@ -101,8 +167,6 @@ void RenderGraph::Render(VulkanContext &context) {
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
   // DO RENDERING
-
-
 
   // root node work
 
