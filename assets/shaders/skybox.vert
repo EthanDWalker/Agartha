@@ -11,7 +11,7 @@ layout(push_constant) uniform constants
     VertexBuffer vertexBuffer;
 };
 
-layout(std140, binding = 1) uniform CameraUBO {
+layout(set = 1, binding = 0) uniform CameraUBO {
   Camera camera;
 };
 

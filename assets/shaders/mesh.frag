@@ -21,25 +21,25 @@ layout(std140, binding = 1) uniform DirectionalLightUBO {
     DirectionalLight directionalLight;
 };
 
-layout(std140, binding = 2) uniform CameraUBO {
-    Camera camera;
-};
+layout(binding = 2) uniform sampler textureSampler;
 
-layout(binding = 3) uniform sampler textureSampler;
-
-layout(binding = 4) uniform textureCube prefilterMap;
-layout(binding = 5) uniform textureCube irradianceMap;
-layout(binding = 6) uniform texture2D brdfLut;
-layout(binding = 7) uniform sampler2D shadowMap;
+layout(binding = 3) uniform textureCube prefilterMap;
+layout(binding = 4) uniform textureCube irradianceMap;
+layout(binding = 5) uniform texture2D brdfLut;
+layout(binding = 6) uniform sampler2D shadowMap;
 
 layout(push_constant) uniform constants
 {
     VertexBuffer vertexBuffer;
-    InstanceBuffer instanceBuffer;
+    InstanceIndicesBuffer instanceIndicesBuffer;
     Material material;
 };
 
-layout(set = 1, binding = 0) uniform texture2D pbrTexture[];
+layout(set = 2, binding = 0) uniform texture2D textures[];
+
+layout(set = 3, binding = 0) uniform CameraUBO {
+    Camera camera;
+};
 
 const float PI = 3.14159265359;
 
@@ -85,11 +85,11 @@ float ShadowCalculation(vec3 L, vec3 N) {
 }
 
 void main() {
-    vec3 albedo = texture(sampler2D(pbrTexture[material.albedo], textureSampler), iUV).rgb;
-    float metallic = texture(sampler2D(pbrTexture[material.metal_roughness], textureSampler), iUV).b;
-    float roughness = texture(sampler2D(pbrTexture[material.metal_roughness], textureSampler), iUV).g;
-    vec3 emisive = texture(sampler2D(pbrTexture[material.emissive], textureSampler), iUV).rgb;
-    float ao = texture(sampler2D(pbrTexture[material.ambient_occlusion], textureSampler), iUV).r;
+    vec3 albedo = texture(sampler2D(textures[material.albedo], textureSampler), iUV).rgb;
+    float metallic = texture(sampler2D(textures[material.metal_roughness], textureSampler), iUV).b;
+    float roughness = texture(sampler2D(textures[material.metal_roughness], textureSampler), iUV).g;
+    vec3 emisive = texture(sampler2D(textures[material.emissive], textureSampler), iUV).rgb;
+    float ao = texture(sampler2D(textures[material.ambient_occlusion], textureSampler), iUV).r;
 
     vec3 N = getNormalFromMap();
     vec3 V = normalize(camera.viewPos - iWorldPos);
@@ -185,7 +185,7 @@ void main() {
 
 vec3 getNormalFromMap()
 {
-    vec3 tangentNormal = texture(sampler2D(pbrTexture[material.normal], textureSampler), iUV).xyz * 2.0 - 1.0;
+    vec3 tangentNormal = texture(sampler2D(textures[material.normal], textureSampler), iUV).xyz * 2.0 - 1.0;
 
     vec3 Q1 = dFdx(iWorldPos);
     vec3 Q2 = dFdy(iWorldPos);

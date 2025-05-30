@@ -4,7 +4,7 @@ layout(location = 0) out vec4 FragColor;
 
 layout(location = 0) in vec3 localPos;
 
-layout(binding = 0) uniform samplerCube environmentMap;
+layout(set = 0 ,binding = 0) uniform samplerCube environmentMap;
 
 const vec2 invAtan = vec2(0.1591, 0.3183);
 

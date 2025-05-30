@@ -42,8 +42,8 @@ layout(buffer_reference, std430) readonly buffer AabbBuffer {
     AABB aabbs[];
 };
 
-layout(buffer_reference, std430) readonly buffer InstanceBuffer {
-    mat4 instances[];
+layout(buffer_reference, std430) readonly buffer InstanceIndicesBuffer {
+    uint indices[];
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {

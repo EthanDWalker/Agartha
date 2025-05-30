@@ -4,6 +4,13 @@
 #include <glm/vec4.hpp>
 #include <vulkan/vulkan.h>
 
+struct GpuObject {
+  VkDeviceAddress vertex_buffer;
+  VkDeviceAddress index_buffer;
+  VkDeviceAddress instance_buffer;
+  uint32_t aabb_buffer_index;
+};
+
 struct Vertex {
   glm::vec3 position;
   float uv_x;

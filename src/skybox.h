@@ -7,7 +7,7 @@
 #include "Backend/allocated_image.h"
 #include "Backend/descriptors.h"
 #include "Backend/immediate_submit.h"
-#include "texture_manager.h"
+#include "Managers/texture_manager.h"
 
 struct Skybox {
   AllocatedImage image;

@@ -7,7 +7,7 @@
 #include "Backend/init.h"
 #include "Backend/pipeline.h"
 #include "Backend/util.h"
-#include "texture_manager.h"
+#include "Managers/texture_manager.h"
 #include <cstdint>
 #include <vulkan/vulkan.h>
 

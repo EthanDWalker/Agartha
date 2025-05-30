@@ -7,11 +7,12 @@
 #include "Backend/immediate_submit.h"
 #include "Backend/pipeline.h"
 #include "GLFW/glfw3.h"
+#include "Managers/instance_manager.h"
+#include "Managers/texture_manager.h"
 #include "camera.h"
 #include "object.h"
 #include "render_graph.h"
 #include "skybox.h"
-#include "texture_manager.h"
 #include "thread_pool.h"
 #include "types.h"
 
@@ -35,6 +36,7 @@ struct Engine {
   ImmediateSubmit immediate_submit;
   Camera camera;
   TextureManager texture_manager;
+  InstanceManager instance_manager;
   DescriptorBuilder descriptor_builder;
   ThreadPool thread_pool;
   RenderGraph render_graph;
@@ -62,17 +64,13 @@ struct Engine {
   Pipeline mesh_pipeline;
   Pipeline skybox_pipeline;
   Pipeline shadow_pipeline;
-  Pipeline aabb_pipeline;
   Pipeline cull_pipeline;
 
-  VkDescriptorSet descriptor_set;
-  VkDescriptorSetLayout descriptor_layout;
+  VkDescriptorSet mesh_descriptor_set;
+  VkDescriptorSetLayout mesh_descriptor_layout;
 
   VkDescriptorSet skybox_descriptor_set;
   VkDescriptorSetLayout skybox_descriptor_layout;
-
-  VkDescriptorSet billboard_descriptor_set;
-  VkDescriptorSetLayout billboard_descriptor_layout;
 
   VkDescriptorSet shadow_descriptor_set;
   VkDescriptorSetLayout shadow_descriptor_set_layout;

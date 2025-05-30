@@ -2,19 +2,24 @@
 
 #extension GL_EXT_buffer_reference : require
 #extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference2 : require
 #include "common.glsl"
 
 layout(push_constant) uniform constants
 {
     VertexBuffer vertexBuffer;
-    InstanceBuffer instanceBuffer;
+    InstanceIndicesBuffer instanceIndicesBuffer;
 };
 
-layout(std140, binding = 2) uniform CameraUBO {
+layout(set = 1, binding = 0) readonly buffer instanceBuffer {
+  mat4 instances[];
+};
+
+layout(set = 3, binding = 0) uniform CameraUBO {
     Camera camera;
 };
 
-layout(binding = 8) uniform LightMatrixUBO {
+layout(binding = 7) uniform LightMatrixUBO {
     mat4 lightMatrix;
 };
 
@@ -25,7 +30,7 @@ layout(location = 3) out vec2 uv;
 layout(location = 4) out vec4 fragPosLight;
 
 void main() {
-    mat4 instanceMatrix = instanceBuffer.instances[gl_InstanceIndex];
+    mat4 instanceMatrix = instances[instanceIndicesBuffer.indices[gl_InstanceIndex]];
     Vertex vertex = vertexBuffer.vertices[gl_VertexIndex];
     vec4 worldPos = instanceMatrix * vec4(vertex.position, 1.0);
 

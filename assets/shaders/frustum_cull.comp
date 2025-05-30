@@ -10,16 +10,16 @@ layout(push_constant) uniform constants {
     uint aabb_length;
 };
 
-layout(std430, set = 0, binding = 0) buffer OutUBO {
+layout(set = 0, binding = 0) uniform CameraUBO {
+    Camera camera;
+};
+
+layout(std430, set = 1, binding = 0) buffer OutUBO {
     uint visibleObjectIndices[];
 };
 
-layout(std430, set = 0, binding = 1) buffer DrawCount {
+layout(std430, set = 1, binding = 1) buffer DrawCount {
     uint drawCount;
-};
-
-layout(set = 1, binding = 0) uniform CameraUBO {
-    Camera camera;
 };
 
 bool isAABBVisible(AABB box, mat4 viewProj) {
