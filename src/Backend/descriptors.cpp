@@ -21,12 +21,28 @@ void DescriptorBuilder::Destroy(VulkanContext &context) {
   }
 }
 
-void DescriptorBuilder::BindBuffer(uint32_t binding, VkBuffer buffer,
-                                   bool storage) {
+void DescriptorBuilder::BindUniformBuffer(uint32_t binding, VkBuffer buffer) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
-  new_binding.descriptorType = storage ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
-                                       : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  new_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  new_binding.descriptorCount = 1;
+
+  bindings.push_back(new_binding);
+
+  VkDescriptorBufferInfo *buffer_write =
+      (VkDescriptorBufferInfo *)malloc(sizeof(VkDescriptorBufferInfo));
+  memset(buffer_write, 0, sizeof(VkDescriptorBufferInfo));
+  buffer_write->buffer = buffer;
+  buffer_write->offset = 0;
+  buffer_write->range = VK_WHOLE_SIZE;
+
+  writes.push_back(buffer_write);
+}
+
+void DescriptorBuilder::BindStorageBuffer(uint32_t binding, VkBuffer buffer) {
+  VkDescriptorSetLayoutBinding new_binding{};
+  new_binding.binding = binding;
+  new_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   new_binding.descriptorCount = 1;
 
   bindings.push_back(new_binding);

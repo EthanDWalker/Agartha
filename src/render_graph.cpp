@@ -11,22 +11,6 @@
 #include <limits>
 #include <vulkan/vulkan_core.h>
 
-/*
-struct DependencyBuilder {
-  std::vector<Dependency> dependencies;
-
-  void AddDependency(AllocatedImage image);
-  void AddDependency(AllocatedBuffer buffer);
-};
-
-struct RenderGraphBuilder {
-  std::vector<std::vector<RenderPass>> render_graph;
-
-  void AddPass(uint32_t level, std::vector<Dependency> dependencies,
-               std::function<void(VkCommandBuffer)> &callback);
-};
-*/
-
 void DependencyBuilder::AddDependency(AllocatedBuffer buffer,
                                       VkAccessFlagBits2 src_access,
                                       VkAccessFlagBits2 dst_access,
@@ -75,6 +59,45 @@ void DependencyBuilder::AddDependency(VkAccessFlagBits2 src_access,
   dependency.memory_deps.push_back(barrier);
 }
 
+void DependencyBuilder::AddImageTransition(VkImageLayout old_layout,
+                                           VkImageLayout new_layout,
+                                           AllocatedImage image) {
+  VkImageMemoryBarrier2 barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+  barrier.image = image.image;
+  barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+  barrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
+  barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+  barrier.dstAccessMask =
+      VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT;
+  barrier.oldLayout = old_layout;
+  barrier.newLayout = new_layout;
+
+  VkImageAspectFlags aspect_mask =
+      (new_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
+       old_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
+          ? VK_IMAGE_ASPECT_DEPTH_BIT
+          : VK_IMAGE_ASPECT_COLOR_BIT;
+
+  barrier.subresourceRange = vkinit::ImageSubresourceRange(aspect_mask);
+
+  dependency.image_deps.push_back(barrier);
+}
+
+void RenderGraphBuilder::AddPass(uint32_t level, Dependency dependency,
+                                 std::function<void(VkCommandBuffer)> callback,
+                                 bool *condition) {
+  RenderPass render_pass{};
+  render_pass.callback = callback;
+  render_pass.dependency = dependency;
+  render_pass.condition = condition;
+
+  if (render_graph.size() <= level) {
+    render_graph.resize(level + 1);
+  }
+  render_graph[level].push_back(render_pass);
+}
+
 void RenderGraph::Init(VulkanContext &context, GLFWwindow *window) {
   int32_t width, height;
   glfwGetWindowSize(window, &width, &height);
@@ -84,14 +107,6 @@ void RenderGraph::Init(VulkanContext &context, GLFWwindow *window) {
       swapchain.extent.height,
       1,
   };
-  CreateAllocatedImage(
-      context, draw_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
-      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-          VK_IMAGE_USAGE_STORAGE_BIT,
-      draw_image);
-  CreateAllocatedImage(context, draw_image_extent, VK_FORMAT_D32_SFLOAT,
-                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                       depth_image);
   for (auto &frame : frame_data) {
     CreateFrameData(context, frame);
   }
@@ -136,56 +151,52 @@ void RenderGraph::Render(VulkanContext &context) {
 
   VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin));
 
-  TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
-                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, draw_image.image);
+  for (auto &render_pass_level : render_graph) {
+    for (auto &render_pass : render_pass_level) {
+      if (render_pass.condition != nullptr) {
+        if (*render_pass.condition == false) {
+          continue;
+        }
+      }
+      VkDependencyInfo dependency_info{};
+      dependency_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
 
-  TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
-                  VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, depth_image.image);
+      dependency_info.pBufferMemoryBarriers =
+          render_pass.dependency.buffer_deps.data();
+      dependency_info.bufferMemoryBarrierCount =
+          render_pass.dependency.buffer_deps.size();
 
-  VkClearColorValue clear_color_value{};
-  clear_color_value = {0.0f, 0.0f, 0.0f, 0.0f};
+      dependency_info.pImageMemoryBarriers =
+          render_pass.dependency.image_deps.data();
+      dependency_info.imageMemoryBarrierCount =
+          render_pass.dependency.image_deps.size();
 
-  VkClearValue clear_value{};
-  clear_value.color = clear_color_value;
+      dependency_info.pMemoryBarriers =
+          render_pass.dependency.memory_deps.data();
+      dependency_info.memoryBarrierCount =
+          render_pass.dependency.memory_deps.size();
 
-  VkViewport viewport = {};
-  viewport.x = 0;
-  viewport.y = 0;
-  viewport.width = draw_image.extent.width;
-  viewport.height = draw_image.extent.height;
-  viewport.minDepth = 1.0f;
-  viewport.maxDepth = 0.0f;
+      vkCmdPipelineBarrier2(cmd, &dependency_info);
 
-  vkCmdSetViewport(cmd, 0, 1, &viewport);
+      render_pass.callback(cmd);
+    }
+  }
 
-  VkRect2D scissor = {};
-  scissor.offset.x = 0;
-  scissor.offset.y = 0;
-  scissor.extent.width = draw_image.extent.width;
-  scissor.extent.height = draw_image.extent.height;
+  VkDependencyInfo dependency_info{};
+  dependency_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
 
-  vkCmdSetScissor(cmd, 0, 1, &scissor);
+  dependency_info.pBufferMemoryBarriers = root_dep.buffer_deps.data();
+  dependency_info.bufferMemoryBarrierCount = root_dep.buffer_deps.size();
 
-  // DO RENDERING
+  dependency_info.pImageMemoryBarriers = root_dep.image_deps.data();
+  dependency_info.imageMemoryBarrierCount = root_dep.image_deps.size();
 
-  // root node work
+  dependency_info.pMemoryBarriers = root_dep.memory_deps.data();
+  dependency_info.memoryBarrierCount = root_dep.memory_deps.size();
 
-  TransitionImage(cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, draw_image.image);
+  vkCmdPipelineBarrier2(cmd, &dependency_info);
 
-  TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
-                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                  swapchain.images[swapchain_image_index]);
-
-  CopyImageToImage(
-      cmd, draw_image.image, swapchain.images[swapchain_image_index],
-      {draw_image.extent.width, draw_image.extent.height}, swapchain.extent);
-
-  TransitionImage(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                  VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                  swapchain.images[swapchain_image_index]);
-
-  // root node work
+  root_callback(cmd, swapchain.images[swapchain_image_index], swapchain.extent);
 
   VK_CHECK(vkEndCommandBuffer(cmd));
 
@@ -226,8 +237,6 @@ void RenderGraph::Render(VulkanContext &context) {
 
 void RenderGraph::Destroy(VulkanContext &context) {
   DestroyVulkanSwapchain(context, swapchain);
-  DestroyAllocatedImage(context, draw_image);
-  DestroyAllocatedImage(context, depth_image);
 
   for (auto &frame : frame_data) {
     DestroyFrameData(context, frame);

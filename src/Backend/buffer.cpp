@@ -17,6 +17,9 @@ void CreateBuffer(VulkanContext &context, size_t size, VkBufferUsageFlags usage,
   VmaAllocationCreateInfo alloc_ci{};
   alloc_ci.usage = memory_usage;
   alloc_ci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+  if (memory_usage == VMA_MEMORY_USAGE_AUTO) {
+    alloc_ci.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+  }
 
   VK_CHECK(vmaCreateBuffer(context.allocator, &buffer_ci, &alloc_ci,
                            &buffer.buffer, &buffer.allocation, &buffer.info));

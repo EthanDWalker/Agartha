@@ -19,6 +19,6 @@ void main()
 {
     localPos = vertexBuffer.vertices[gl_VertexIndex].position;
     mat4 rotView = mat4(mat3(camera.view));
-    vec4 clipPos = camera.projection * rotView * vec4(localPos * 500, 1.0);
+    vec4 clipPos = camera.projection * rotView * vec4(localPos, 1.0);
     gl_Position = clipPos.xyww; // so it always is at the back
 }

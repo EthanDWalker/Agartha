@@ -1,5 +1,4 @@
 #include "init.h"
-#include <numbers>
 #include <vulkan/vulkan_core.h>
 
 namespace vkinit {
@@ -93,9 +92,10 @@ VkRenderingAttachmentInfo AttachmentInfo(VkImageView view,
   info.imageView = view;
   if (clear) {
     info.clearValue = *clear;
+    info.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  } else {
+    info.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
   }
-  info.loadOp =
-      clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
   info.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
   info.resolveImageView = resolve_view;
   info.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -116,16 +116,37 @@ VkRenderingAttachmentInfo DepthAttachmentInfo(VkImageView image_view,
   return info;
 }
 
-VkRenderingInfo RenderingInfo(VkExtent2D render_extent,
+VkRenderingInfo RenderingInfo(VkExtent3D render_extent,
                               VkRenderingAttachmentInfo *color_attachment,
                               VkRenderingAttachmentInfo *depth_attachment) {
   VkRenderingInfo info{};
   info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-  info.renderArea = VkRect2D{VkOffset2D{0, 0}, render_extent};
+  info.renderArea =
+      VkRect2D{VkOffset2D{0, 0}, {render_extent.width, render_extent.height}};
   info.layerCount = 1;
   info.pColorAttachments = color_attachment;
   info.colorAttachmentCount = color_attachment ? 1 : 0;
   info.pDepthAttachment = depth_attachment;
   return info;
+}
+
+VkViewport Viewport(VkExtent3D extent) {
+  VkViewport viewport{};
+  viewport.x = 0;
+  viewport.y = 0;
+  viewport.width = extent.width;
+  viewport.height = extent.height;
+  viewport.minDepth = 1.0f;
+  viewport.maxDepth = 0.0f;
+  return viewport;
+}
+
+VkRect2D Scissor(VkExtent3D extent) {
+  VkRect2D scissor{};
+  scissor.offset.x = 0;
+  scissor.offset.y = 0;
+  scissor.extent.width = extent.width;
+  scissor.extent.height = extent.height;
+  return scissor;
 }
 } // namespace vkinit

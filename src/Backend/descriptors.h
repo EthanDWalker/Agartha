@@ -42,7 +42,8 @@ struct DescriptorBuilder {
 
   void Init(VulkanContext &context);
 
-  void BindBuffer(uint32_t binding, VkBuffer buffer, bool storage = false);
+  void BindUniformBuffer(uint32_t binding, VkBuffer buffer);
+  void BindStorageBuffer(uint32_t binding, VkBuffer buffer);
   void BindCombinedImage(uint32_t binding, VkImageView image_view,
                          VkSampler sampler);
   void BindStorageImage(uint32_t binding, VkImageView image_view);
@@ -50,7 +51,6 @@ struct DescriptorBuilder {
                          std::vector<VkImageView> image_views);
   void BindSampler(uint32_t binding, VkSampler sampler);
   void BindImage(uint32_t binding, VkImageView image_view);
-
   void BindNullImages(uint32_t binding, uint32_t amount);
   void BindImages(uint32_t binding, std::span<AllocatedImage> image_views);
 

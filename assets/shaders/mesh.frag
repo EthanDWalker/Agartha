@@ -131,7 +131,7 @@ void main() {
         vec3 L = normalize(-directionalLight.direction);
         vec3 H = normalize(V + L);
 
-        vec3 radiance = vec3(1.0, 0.8, 0.3);
+        vec3 radiance = vec3(1.0, 0.8, 0.5);
 
         float NDF = DistributionGGX(N, H, roughness);
         float G = GeometrySmith(N, V, L, roughness);
@@ -148,7 +148,7 @@ void main() {
 
         float NdotL = max(dot(N, L), 0.0);
 
-        float shadow = 1.0; // ShadowCalculation(L, N);
+        float shadow = ShadowCalculation(L, N);
 
         Lo += shadow * (kD * albedo / PI + specular) * radiance * NdotL;
     }
@@ -160,19 +160,19 @@ void main() {
     kD *= 1.0 - metallic;
 
     /*
-            vec3 irradience = texture(samplerCube(irradianceMap, textureSampler), N).rgb;
-            vec3 diffuse = irradience * albedo;
+                                vec3 irradience = texture(samplerCube(irradianceMap, textureSampler), N).rgb;
+                                vec3 diffuse = irradience * albedo;
 
-            const float MAX_REFLECTION_LOD = 4.0;
-            vec3 prefilteredColor = textureLod(samplerCube(prefilterMap, textureSampler), R, roughness * MAX_REFLECTION_LOD).rgb;
-            vec2 brdf = texture(sampler2D(brdfLut, textureSampler), vec2(max(dot(N, V), 0.0), roughness)).rg;
-            vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+                                const float MAX_REFLECTION_LOD = 4.0;
+                                vec3 prefilteredColor = textureLod(samplerCube(prefilterMap, textureSampler), R, roughness * MAX_REFLECTION_LOD).rgb;
+                                vec2 brdf = texture(sampler2D(brdfLut, textureSampler), vec2(max(dot(N, V), 0.0), roughness)).rg;
+                                vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
 
-            vec3 ambient = (kD * diffuse + specular);
-            if (material.ambient_occlusion != -1) {
-                ambient *= ao;
-            }
-            */
+                                vec3 ambient = (kD * diffuse + specular);
+                                if (material.ambient_occlusion != -1) {
+                                    ambient *= ao;
+                                }
+                                */
 
     vec3 color = Lo + emisive + (F + albedo) * kD * ao;
 

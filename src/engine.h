@@ -12,6 +12,7 @@
 #include "render_graph.h"
 #include "skybox.h"
 #include "texture_manager.h"
+#include "thread_pool.h"
 #include "types.h"
 
 #if defined(DEBUG)
@@ -35,21 +36,24 @@ struct Engine {
   Camera camera;
   TextureManager texture_manager;
   DescriptorBuilder descriptor_builder;
-  GLFWwindow *window;
-
+  ThreadPool thread_pool;
   RenderGraph render_graph;
 
   Skybox skybox;
-  Material box_material;
   VkSampler sampler;
   VkSampler shadow_sampler;
 
+  AllocatedImage draw_image;
+  AllocatedImage depth_image;
   AllocatedImage shadow_image;
 
   AllocatedBuffer point_light_buffer;
   AllocatedBuffer directional_light_buffer;
   AllocatedBuffer light_matrix_buffer;
   AllocatedBuffer aabb_buffer;
+
+  AllocatedBuffer culled_draw_count_buffer;
+  AllocatedBuffer culled_object_buffer;
 
   std::vector<Object> scene;
   Object cube_obj;
@@ -59,6 +63,7 @@ struct Engine {
   Pipeline skybox_pipeline;
   Pipeline shadow_pipeline;
   Pipeline aabb_pipeline;
+  Pipeline cull_pipeline;
 
   VkDescriptorSet descriptor_set;
   VkDescriptorSetLayout descriptor_layout;
@@ -71,6 +76,13 @@ struct Engine {
 
   VkDescriptorSet shadow_descriptor_set;
   VkDescriptorSetLayout shadow_descriptor_set_layout;
+
+  VkDescriptorSet cull_descriptor_set;
+  VkDescriptorSetLayout cull_descriptor_set_layout;
+
+  GLFWwindow *window;
+
+  bool debug_aabb;
 
   void Init();
 

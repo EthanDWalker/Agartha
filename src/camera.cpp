@@ -18,7 +18,7 @@ void Camera::Create(VulkanContext &context,
                VMA_MEMORY_USAGE_GPU_ONLY, ubo);
 
   descriptor_builder.Reset();
-  descriptor_builder.BindBuffer(0, ubo.buffer);
+  descriptor_builder.BindUniformBuffer(0, ubo.buffer);
   descriptor_builder.Build(context, VK_SHADER_STAGE_ALL, descriptor_set,
                            descriptor_layout);
 };

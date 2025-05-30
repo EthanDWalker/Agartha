@@ -22,7 +22,9 @@ VkRenderingAttachmentInfo AttachmentInfo(VkImageView view,
                                          VkImageLayout layout);
 VkRenderingAttachmentInfo DepthAttachmentInfo(VkImageView image_view,
                                               VkImageLayout layout);
-VkRenderingInfo RenderingInfo(VkExtent2D render_extent,
+VkRenderingInfo RenderingInfo(VkExtent3D render_extent,
                               VkRenderingAttachmentInfo *color_attachment,
                               VkRenderingAttachmentInfo *depth_attachment);
+VkViewport Viewport(VkExtent3D extent);
+VkRect2D Scissor(VkExtent3D extent);
 } // namespace vkinit

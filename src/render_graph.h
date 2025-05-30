@@ -20,8 +20,9 @@ struct Dependency {
 };
 
 struct RenderPass {
-  Dependency dependencies;
+  Dependency dependency;
   std::function<void(VkCommandBuffer)> callback;
+  bool *condition;
 };
 
 struct DependencyBuilder {
@@ -38,20 +39,22 @@ struct DependencyBuilder {
   void AddDependency(VkAccessFlagBits2 src_access, VkAccessFlagBits2 dst_access,
                      VkPipelineStageFlagBits2 src_stage,
                      VkPipelineStageFlagBits2 dst_stage);
+  void AddImageTransition(VkImageLayout old_layout, VkImageLayout new_layout,
+                          AllocatedImage image);
 };
 
 struct RenderGraphBuilder {
   std::vector<std::vector<RenderPass>> render_graph;
 
   void AddPass(uint32_t level, Dependency dependency,
-               std::function<void(VkCommandBuffer)> &callback);
+               std::function<void(VkCommandBuffer)> callback, bool *condition = nullptr);
 };
 
 struct RenderGraph {
   std::vector<std::vector<RenderPass>> render_graph;
+  Dependency root_dep;
+  std::function<void(VkCommandBuffer, VkImage, VkExtent2D)> root_callback;
   Swapchain swapchain;
-  AllocatedImage draw_image;
-  AllocatedImage depth_image;
   FrameData frame_data[FRAME_OVERLAP];
   size_t frame_number;
   bool resize_requested;

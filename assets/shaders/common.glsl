@@ -38,21 +38,14 @@ struct AABB {
   float padding_1;
 };
 
-struct Frustum {
-  float near_plane;
-  float far_plane;
-  float fov_y;
-  float aspect_ratio;
-};
-
 layout(buffer_reference, std430) readonly buffer AabbBuffer {
     AABB aabbs[];
 };
 
-layout(buffer_reference, std430) readonly buffer VertexBuffer {
-    Vertex vertices[];
-};
-
 layout(buffer_reference, std430) readonly buffer InstanceBuffer {
     mat4 instances[];
+};
+
+layout(buffer_reference, std430) readonly buffer VertexBuffer {
+    Vertex vertices[];
 };
