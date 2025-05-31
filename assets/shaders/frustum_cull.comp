@@ -5,22 +5,43 @@ layout(local_size_x = 64) in;
 #extension GL_GOOGLE_include_directive : require
 #include "common.glsl"
 
-layout(push_constant) uniform constants {
-    AabbBuffer aabbBuffer;
-    uint aabb_length;
+layout(std430, set = 0, binding = 0) buffer DrawCommands {
+    DrawIndexedIndirectCommand drawCommands[];
 };
 
-layout(set = 0, binding = 0) uniform CameraUBO {
+layout(std430, set = 0, binding = 1) buffer DrawCount {
+    uint drawCount;
+};
+
+layout(set = 1, binding = 0) uniform CameraUBO {
     Camera camera;
 };
 
-layout(std430, set = 1, binding = 0) buffer OutUBO {
-    uint visibleObjectIndices[];
+layout(set = 2, binding = 0) readonly buffer Instances {
+    Instance instances[];
 };
 
-layout(std430, set = 1, binding = 1) buffer DrawCount {
-    uint drawCount;
+layout(set = 3, binding = 2) readonly buffer AABBs {
+    AABB aabbs[];
 };
+
+bool isAABBVisible(AABB box, mat4 viewProj);
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id == 0) {
+        drawCount = 0;
+    }
+    if (aabbs[id].min == vec3(0.0) && aabbs[id].max == vec3(0.0)) {
+        return;
+    }
+
+    mat4 viewProj = camera.projection * camera.view;
+
+    if (isAABBVisible(aabbs[id], viewProj)) {
+        uint index = atomicAdd(drawCount, 1);
+    }
+}
 
 bool isAABBVisible(AABB box, mat4 viewProj) {
     vec3 corners[8];
@@ -43,21 +64,4 @@ bool isAABBVisible(AABB box, mat4 viewProj) {
     }
 
     return !allOutside;
-}
-
-void main() {
-    uint id = gl_GlobalInvocationID.x;
-    if (id == 0) {
-        drawCount = 0;
-    }
-    if (id >= aabb_length) {
-        return;
-    }
-
-    mat4 viewProj = camera.projection * camera.view;
-
-    if (isAABBVisible(aabbBuffer.aabbs[id], viewProj)) {
-        uint index = atomicAdd(drawCount, 1);
-        visibleObjectIndices[index] = id;
-    }
 }

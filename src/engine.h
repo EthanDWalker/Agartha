@@ -7,10 +7,9 @@
 #include "Backend/immediate_submit.h"
 #include "Backend/pipeline.h"
 #include "GLFW/glfw3.h"
-#include "Managers/instance_manager.h"
+#include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
 #include "camera.h"
-#include "object.h"
 #include "render_graph.h"
 #include "skybox.h"
 #include "thread_pool.h"
@@ -36,7 +35,7 @@ struct Engine {
   ImmediateSubmit immediate_submit;
   Camera camera;
   TextureManager texture_manager;
-  InstanceManager instance_manager;
+  SceneManager scene_manager;
   DescriptorBuilder descriptor_builder;
   ThreadPool thread_pool;
   RenderGraph render_graph;
@@ -52,14 +51,8 @@ struct Engine {
   AllocatedBuffer point_light_buffer;
   AllocatedBuffer directional_light_buffer;
   AllocatedBuffer light_matrix_buffer;
-  AllocatedBuffer aabb_buffer;
-
   AllocatedBuffer culled_draw_count_buffer;
-  AllocatedBuffer culled_object_buffer;
-
-  std::vector<Object> scene;
-  Object cube_obj;
-  Object rectangle_obj;
+  AllocatedBuffer draw_indirect_buffer;
 
   Pipeline mesh_pipeline;
   Pipeline skybox_pipeline;
@@ -69,9 +62,6 @@ struct Engine {
   VkDescriptorSet mesh_descriptor_set;
   VkDescriptorSetLayout mesh_descriptor_layout;
 
-  VkDescriptorSet skybox_descriptor_set;
-  VkDescriptorSetLayout skybox_descriptor_layout;
-
   VkDescriptorSet shadow_descriptor_set;
   VkDescriptorSetLayout shadow_descriptor_set_layout;
 
@@ -79,8 +69,6 @@ struct Engine {
   VkDescriptorSetLayout cull_descriptor_set_layout;
 
   GLFWwindow *window;
-
-  bool debug_aabb;
 
   void Init();
 

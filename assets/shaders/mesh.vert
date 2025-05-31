@@ -5,11 +5,10 @@
 #extension GL_EXT_buffer_reference2 : require
 #include "common.glsl"
 
-layout(push_constant) uniform constants
-{
-    VertexBuffer vertexBuffer;
-    InstanceIndicesBuffer instanceIndicesBuffer;
+layout(set = 0, binding = 4) uniform LightMatrixUBO {
+    mat4 lightMatrix;
 };
+
 
 layout(set = 1, binding = 0) readonly buffer instanceBuffer {
   mat4 instances[];
@@ -19,8 +18,10 @@ layout(set = 3, binding = 0) uniform CameraUBO {
     Camera camera;
 };
 
-layout(binding = 7) uniform LightMatrixUBO {
-    mat4 lightMatrix;
+layout(push_constant) uniform constants
+{
+    VertexBuffer vertexBuffer;
+    InstanceIndicesBuffer instanceIndicesBuffer;
 };
 
 layout(location = 0) out vec3 vertColor;

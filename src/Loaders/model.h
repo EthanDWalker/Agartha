@@ -18,7 +18,8 @@ struct MeshData {
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   std::vector<glm::mat4> instances;
-  AABB aabb;
+  glm::vec3 collilder_min;
+  glm::vec3 collilder_max;
   MaterialData material_data;
 };
 

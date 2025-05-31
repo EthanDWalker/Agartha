@@ -250,19 +250,24 @@ void CreateSkybox(VulkanContext &context, ImmediateSubmit &immediate_submit,
   AllocatedImage skybox_image =
       texture_manager.texture_data[texture_manager.texture_indices[full_path]];
 
-  VkSampler sampler;
-  CreateImageSampler(context, sampler);
+  CreateImageSampler(context, skybox.sampler);
 
-  CreateEnvMap(context, immediate_submit, descriptor_builder, sampler,
+  CreateEnvMap(context, immediate_submit, descriptor_builder, skybox.sampler,
                skybox_image, skybox);
-  CreateIrradiance(context, immediate_submit, descriptor_builder, sampler,
+  CreateIrradiance(context, immediate_submit, descriptor_builder, skybox.sampler,
                    skybox);
-  CreatePrefilter(context, immediate_submit, descriptor_builder, sampler,
+  CreatePrefilter(context, immediate_submit, descriptor_builder, skybox.sampler,
                   skybox);
-  GenerateBrdfLut(context, immediate_submit, descriptor_builder, sampler,
+  GenerateBrdfLut(context, immediate_submit, descriptor_builder, skybox.sampler,
                   skybox);
 
-  DestroyImageSampler(context, sampler);
+  descriptor_builder.Reset();
+  descriptor_builder.BindCombinedImage(0, skybox.image.image_view, skybox.sampler);
+  descriptor_builder.BindImage(1, skybox.irradiance.image_view);
+  descriptor_builder.BindImage(2, skybox.prefilter.image_view);
+  descriptor_builder.BindImage(3, skybox.brdf.image_view);
+  descriptor_builder.Build(context, VK_SHADER_STAGE_ALL, skybox.descriptor_set,
+                           skybox.descriptor_layout);
 }
 
 void DestroySkybox(VulkanContext &context, Skybox &skybox) {
@@ -270,4 +275,7 @@ void DestroySkybox(VulkanContext &context, Skybox &skybox) {
   DestroyAllocatedImage(context, skybox.brdf);
   DestroyAllocatedImage(context, skybox.irradiance);
   DestroyAllocatedImage(context, skybox.prefilter);
+  vkDestroyDescriptorSetLayout(context.device, skybox.descriptor_layout,
+                               nullptr);
+  DestroyImageSampler(context, skybox.sampler);
 }

@@ -4,13 +4,6 @@
 #include <glm/vec4.hpp>
 #include <vulkan/vulkan.h>
 
-struct GpuObject {
-  VkDeviceAddress vertex_buffer;
-  VkDeviceAddress index_buffer;
-  VkDeviceAddress instance_buffer;
-  uint32_t aabb_buffer_index;
-};
-
 struct Vertex {
   glm::vec3 position;
   float uv_x;
@@ -36,9 +29,3 @@ struct Material {
   int32_t ambient_occlusion{-1};
 };
 
-struct AABB {
-  glm::vec3 min;
-  float padding;
-  glm::vec3 max;
-  float padding_1;
-};

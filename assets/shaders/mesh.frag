@@ -13,32 +13,29 @@ layout(location = 4) in vec4 iLightSpacePos;
 
 layout(location = 0) out vec4 oColor;
 
-layout(std140, binding = 0) uniform PointLightUBO {
+layout(std140, set = 0, binding = 0) uniform PointLightUBO {
     PointLight pointLight;
 };
 
-layout(std140, binding = 1) uniform DirectionalLightUBO {
+layout(std140, set = 0, binding = 1) uniform DirectionalLightUBO {
     DirectionalLight directionalLight;
 };
 
-layout(binding = 2) uniform sampler textureSampler;
+layout(set = 0, binding = 2) uniform sampler textureSampler;
 
-layout(binding = 3) uniform textureCube prefilterMap;
-layout(binding = 4) uniform textureCube irradianceMap;
-layout(binding = 5) uniform texture2D brdfLut;
-layout(binding = 6) uniform sampler2D shadowMap;
+layout(set = 0, binding = 3) uniform sampler2D shadowMap;
+
+layout(set = 2, binding = 0) uniform texture2D textures[];
+
+layout(set = 3, binding = 0) uniform CameraUBO {
+    Camera camera;
+};
 
 layout(push_constant) uniform constants
 {
     VertexBuffer vertexBuffer;
     InstanceIndicesBuffer instanceIndicesBuffer;
     Material material;
-};
-
-layout(set = 2, binding = 0) uniform texture2D textures[];
-
-layout(set = 3, binding = 0) uniform CameraUBO {
-    Camera camera;
 };
 
 const float PI = 3.14159265359;
@@ -86,8 +83,9 @@ float ShadowCalculation(vec3 L, vec3 N) {
 
 void main() {
     vec3 albedo = texture(sampler2D(textures[material.albedo], textureSampler), iUV).rgb;
-    float metallic = texture(sampler2D(textures[material.metal_roughness], textureSampler), iUV).b;
-    float roughness = texture(sampler2D(textures[material.metal_roughness], textureSampler), iUV).g;
+    vec3 mr = texture(sampler2D(textures[material.metal_roughness], textureSampler), iUV).rgb;
+    float metallic = mr.b;
+    float roughness = mr.g;
     vec3 emisive = texture(sampler2D(textures[material.emissive], textureSampler), iUV).rgb;
     float ao = texture(sampler2D(textures[material.ambient_occlusion], textureSampler), iUV).r;
 
@@ -99,6 +97,7 @@ void main() {
     F0 = mix(F0, albedo, metallic);
 
     vec3 Lo = vec3(0.0);
+
     // loop through lights but i only have 1
     {
         vec3 L = normalize(pointLight.position - iWorldPos);
@@ -152,27 +151,13 @@ void main() {
 
         Lo += shadow * (kD * albedo / PI + specular) * radiance * NdotL;
     }
+
     // end loop
     vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
 
     vec3 kS = F;
     vec3 kD = vec3(1.0) - kS;
     kD *= 1.0 - metallic;
-
-    /*
-                                vec3 irradience = texture(samplerCube(irradianceMap, textureSampler), N).rgb;
-                                vec3 diffuse = irradience * albedo;
-
-                                const float MAX_REFLECTION_LOD = 4.0;
-                                vec3 prefilteredColor = textureLod(samplerCube(prefilterMap, textureSampler), R, roughness * MAX_REFLECTION_LOD).rgb;
-                                vec2 brdf = texture(sampler2D(brdfLut, textureSampler), vec2(max(dot(N, V), 0.0), roughness)).rg;
-                                vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
-
-                                vec3 ambient = (kD * diffuse + specular);
-                                if (material.ambient_occlusion != -1) {
-                                    ambient *= ao;
-                                }
-                                */
 
     vec3 color = Lo + emisive + (F + albedo) * kD * ao;
 

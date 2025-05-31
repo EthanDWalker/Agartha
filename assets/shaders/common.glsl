@@ -23,6 +23,12 @@ struct Vertex {
     vec4 color;
 };
 
+struct Instance {
+    mat4 matrix;
+    vec3 color;
+    uint object_index;
+};
+
 struct Material {
     int albedo;
     int metal_roughness;
@@ -31,11 +37,23 @@ struct Material {
     int ambient_occlusion;
 };
 
+struct Object {
+    Material material;
+};
+
 struct AABB {
-  vec3 min;
-  float padding;
-  vec3 max;
-  float padding_1;
+    vec3 min;
+    float padding;
+    vec3 max;
+    float padding_1;
+};
+
+struct DrawIndexedIndirectCommand {
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint firstInstance;
 };
 
 layout(buffer_reference, std430) readonly buffer AabbBuffer {
@@ -48,4 +66,8 @@ layout(buffer_reference, std430) readonly buffer InstanceIndicesBuffer {
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {
     Vertex vertices[];
+};
+
+struct GpuMesh {
+    VertexBuffer vertex_address;
 };

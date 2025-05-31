@@ -16,7 +16,7 @@
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 
-AABB GetAABB(std::span<Vertex> vertices) {
+std::pair<glm::vec3, glm::vec3> GetAABB(std::span<Vertex> vertices) {
   glm::vec3 min{std::numeric_limits<float>::max()};
   glm::vec3 max{std::numeric_limits<float>::lowest()};
 
@@ -44,7 +44,7 @@ AABB GetAABB(std::span<Vertex> vertices) {
     }
   }
 
-  return {.min = min, .max = max};
+  return {min, max};
 }
 
 MaterialData ParseMaterialData(fastgltf::Material &material,
@@ -246,7 +246,8 @@ std::vector<MeshData> LoadModel(std::string path) {
             .vertices = vertices,
             .indices = indices,
             .instances = instances,
-            .aabb = new_aabb,
+            .collilder_min = new_aabb.first,
+            .collilder_max = new_aabb.second,
             .material_data = material_data,
         });
       }
