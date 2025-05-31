@@ -5,12 +5,16 @@ layout(local_size_x = 64) in;
 #extension GL_GOOGLE_include_directive : require
 #include "common.glsl"
 
-layout(std430, set = 0, binding = 0) buffer DrawCommands {
+layout(set = 0, binding = 0) buffer DrawCommands {
     DrawIndexedIndirectCommand drawCommands[];
 };
 
-layout(std430, set = 0, binding = 1) buffer DrawCount {
+layout(set = 0, binding = 1) buffer DrawCount {
     uint drawCount;
+};
+
+layout(set = 0, binding = 2) buffer VisibleInstances {
+    uint visibleInstances[];
 };
 
 layout(set = 1, binding = 0) uniform CameraUBO {
@@ -19,6 +23,10 @@ layout(set = 1, binding = 0) uniform CameraUBO {
 
 layout(set = 2, binding = 0) readonly buffer Instances {
     Instance instances[];
+};
+
+layout(set = 3, binding = 1) readonly buffer GpuMeshes {
+    GpuMesh gpuMeshes[];
 };
 
 layout(set = 3, binding = 2) readonly buffer AABBs {
@@ -40,6 +48,14 @@ void main() {
 
     if (isAABBVisible(aabbs[id], viewProj)) {
         uint index = atomicAdd(drawCount, 1);
+        visibleInstances[index] = id;
+        DrawIndexedIndirectCommand command;
+        command.indexCount = gpuMeshes[id].indexCount;
+        command.instanceCount = 1;
+        command.firstIndex = 0;
+        command.vertexOffset = 0;
+        command.firstInstance = 0;
+        drawCommands[index] = command;
     }
 }
 

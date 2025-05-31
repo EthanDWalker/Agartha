@@ -24,6 +24,9 @@ struct Mesh {
 
 struct GpuMesh {
   VkDeviceAddress vertex_address;
+  VkDeviceAddress index_address;
+  uint32_t index_count;
+  float padding;
 };
 
 struct AABB {

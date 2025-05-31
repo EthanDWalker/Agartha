@@ -6,6 +6,7 @@
 #include "Backend/init.h"
 #include "Backend/pipeline.h"
 #include "Loaders/model.h"
+#include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
 #include "fmt/format.h"
 #include "render_graph.h"
@@ -126,13 +127,17 @@ void Engine::CreateRenderGraph() {
         culled_draw_count_buffer, VK_ACCESS_2_SHADER_WRITE_BIT,
         VK_ACCESS_2_HOST_READ_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
         VK_PIPELINE_STAGE_2_HOST_BIT);
-    main_pass_dep.AddDependency(
-        draw_indirect_buffer, VK_ACCESS_2_SHADER_WRITE_BIT,
-        VK_ACCESS_2_HOST_READ_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_2_HOST_BIT);
+    main_pass_dep.AddDependency(draw_indirect_buffer,
+                                VK_ACCESS_2_SHADER_WRITE_BIT,
+                                VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
+                                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
+    main_pass_dep.AddDependency(visible_instances, VK_ACCESS_2_SHADER_WRITE_BIT,
+                                VK_ACCESS_2_SHADER_READ_BIT,
+                                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT);
 
     builder.AddPass(1, main_pass_dep.dependency, [&](VkCommandBuffer cmd) {
-      /*
       VkViewport viewport = vkinit::Viewport(draw_image.extent);
       vkCmdSetViewport(cmd, 0, 1, &viewport);
       VkRect2D scissor = vkinit::Scissor(draw_image.extent);
@@ -153,20 +158,21 @@ void Engine::CreateRenderGraph() {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         mesh_pipeline.obj);
 
-      VkDescriptorSet ds[] = {mesh_descriptor_set,
-                              instance_manager.descriptor_set,
-                              texture_manager.descriptor_set,
-                              camera.descriptor_set, skybox.descriptor_set};
+      VkDescriptorSet ds[] = {
+          mesh_descriptor_set,
+          texture_manager.descriptor_set,
+          camera.descriptor_set,
+          scene_manager.object_descriptor_set,
+          scene_manager.instance_descriptor_set,
+      };
 
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              mesh_pipeline.layout, 0, 4, ds, 0, nullptr);
+                              mesh_pipeline.layout, 0, 5, ds, 0, nullptr);
 
-      for (auto &object : scene) {
-        DrawObject(cmd, mesh_pipeline, object);
-      }
+      vkCmdDrawIndexedIndirect(cmd, draw_indirect_buffer.buffer, 0, 1,
+                               sizeof(VkDrawIndexedIndirectCommand));
 
       vkCmdEndRendering(cmd);
-      */
     });
   }
 
@@ -258,7 +264,7 @@ void Engine::Init() {
                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                VMA_MEMORY_USAGE_GPU_ONLY, light_matrix_buffer);
 
-  /*{
+  {
     descriptor_builder.Reset();
     descriptor_builder.BindUniformBuffer(0, point_light_buffer.buffer);
     descriptor_builder.BindUniformBuffer(1, directional_light_buffer.buffer);
@@ -266,6 +272,7 @@ void Engine::Init() {
     descriptor_builder.BindCombinedImage(3, shadow_image.image_view,
                                          shadow_sampler);
     descriptor_builder.BindUniformBuffer(4, light_matrix_buffer.buffer);
+    descriptor_builder.BindStorageBuffer(5, visible_instances.buffer);
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
         mesh_descriptor_set, mesh_descriptor_layout);
@@ -274,14 +281,15 @@ void Engine::Init() {
     pipeline_builder.SetShaders(context, "mesh.vert.spv", "mesh.frag.spv");
     pipeline_builder.Default();
     pipeline_builder.AddDescriptorSetLayout(mesh_descriptor_layout);
-    //
-  pipeline_builder.AddDescriptorSetLayout(instance_manager.descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         texture_manager.descriptor_set_layout);
     pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
-
+    pipeline_builder.AddDescriptorSetLayout(
+        scene_manager.object_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(
+        scene_manager.instance_descriptor_layout);
     pipeline_builder.Build(context, mesh_pipeline);
-  }*/
+  }
 
   /*{
     GraphicsPipelineBuilder pipeline_builder;
@@ -315,14 +323,19 @@ void Engine::Init() {
                  VMA_MEMORY_USAGE_GPU_ONLY, culled_draw_count_buffer);
 
     CreateBuffer(context,
-                 sizeof(VkDrawIndexedIndirectCommand) * 1000, // Max commands
+                 sizeof(VkDrawIndexedIndirectCommand) * SCENE_MAX_OBJECTS,
                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                      VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
                  VMA_MEMORY_USAGE_GPU_ONLY, draw_indirect_buffer);
 
+    CreateBuffer(context, sizeof(uint32_t) * SCENE_MAX_INSTANCES,
+                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
+                 visible_instances);
+
     descriptor_builder.Reset();
     descriptor_builder.BindStorageBuffer(0, draw_indirect_buffer.buffer);
     descriptor_builder.BindStorageBuffer(1, culled_draw_count_buffer.buffer);
+    descriptor_builder.BindStorageBuffer(2, visible_instances.buffer);
     descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
                              cull_descriptor_set, cull_descriptor_set_layout);
     ComputePipelineBuilder pipeline_builder{};
@@ -391,8 +404,9 @@ void Engine::Run() {
       render_graph.Resize(context, window);
     }
 
-    glfwSetWindowTitle(window,
-                       fmt::format("FPS: {}", 1 / timer.Elapsed()).c_str());
+    glfwSetWindowTitle(
+        window,
+        fmt::format("FPS: {}", std::round(1 / timer.Elapsed())).c_str());
   }
 }
 
@@ -423,6 +437,7 @@ void Engine::Destroy() {
   DestroyBuffer(context, light_matrix_buffer);
   DestroyBuffer(context, draw_indirect_buffer);
   DestroyBuffer(context, culled_draw_count_buffer);
+  DestroyBuffer(context, visible_instances);
 
   DestroyAllocatedImage(context, shadow_image);
   DestroyAllocatedImage(context, draw_image);

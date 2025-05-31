@@ -153,6 +153,7 @@ void RenderGraph::Render(VulkanContext &context) {
 
   for (auto &render_pass_level : render_graph) {
     for (auto &render_pass : render_pass_level) {
+
       if (render_pass.condition != nullptr) {
         if (*render_pass.condition == false) {
           continue;

@@ -10,6 +10,7 @@ layout(location = 1) in vec3 iNormal;
 layout(location = 2) in vec3 iWorldPos;
 layout(location = 3) in vec2 iUV;
 layout(location = 4) in vec4 iLightSpacePos;
+layout(location = 5) flat in uint iObjectIndex;
 
 layout(location = 0) out vec4 oColor;
 
@@ -25,17 +26,14 @@ layout(set = 0, binding = 2) uniform sampler textureSampler;
 
 layout(set = 0, binding = 3) uniform sampler2D shadowMap;
 
-layout(set = 2, binding = 0) uniform texture2D textures[];
+layout(set = 1, binding = 0) uniform texture2D textures[];
 
-layout(set = 3, binding = 0) uniform CameraUBO {
+layout(set = 2, binding = 0) uniform CameraUBO {
     Camera camera;
 };
 
-layout(push_constant) uniform constants
-{
-    VertexBuffer vertexBuffer;
-    InstanceIndicesBuffer instanceIndicesBuffer;
-    Material material;
+layout(set = 3, binding = 0) readonly buffer ObjectBuffer {
+    Object objects[];
 };
 
 const float PI = 3.14159265359;
@@ -80,14 +78,15 @@ float ShadowCalculation(vec3 L, vec3 N) {
 
     return shadow;
 }
-
 void main() {
-    vec3 albedo = texture(sampler2D(textures[material.albedo], textureSampler), iUV).rgb;
-    vec3 mr = texture(sampler2D(textures[material.metal_roughness], textureSampler), iUV).rgb;
+    Material mat = objects[iObjectIndex].material;
+
+    vec3 albedo = texture(sampler2D(textures[mat.albedo], textureSampler), iUV).rgb;
+    vec3 mr = texture(sampler2D(textures[mat.metal_roughness], textureSampler), iUV).rgb;
     float metallic = mr.b;
     float roughness = mr.g;
-    vec3 emisive = texture(sampler2D(textures[material.emissive], textureSampler), iUV).rgb;
-    float ao = texture(sampler2D(textures[material.ambient_occlusion], textureSampler), iUV).r;
+    vec3 emisive = texture(sampler2D(textures[mat.emissive], textureSampler), iUV).rgb;
+    float ao = texture(sampler2D(textures[mat.ambient_occlusion], textureSampler), iUV).r;
 
     vec3 N = getNormalFromMap();
     vec3 V = normalize(camera.viewPos - iWorldPos);
@@ -147,7 +146,7 @@ void main() {
 
         float NdotL = max(dot(N, L), 0.0);
 
-        float shadow = ShadowCalculation(L, N);
+        float shadow = 1.0; //ShadowCalculation(L, N);
 
         Lo += shadow * (kD * albedo / PI + specular) * radiance * NdotL;
     }
@@ -170,7 +169,8 @@ void main() {
 
 vec3 getNormalFromMap()
 {
-    vec3 tangentNormal = texture(sampler2D(textures[material.normal], textureSampler), iUV).xyz * 2.0 - 1.0;
+    Material mat = objects[iObjectIndex].material;
+    vec3 tangentNormal = texture(sampler2D(textures[mat.normal], textureSampler), iUV).xyz * 2.0 - 1.0;
 
     vec3 Q1 = dFdx(iWorldPos);
     vec3 Q2 = dFdy(iWorldPos);

@@ -1,4 +1,4 @@
-#version 450
+#version 460
 
 #extension GL_EXT_buffer_reference : require
 #extension GL_GOOGLE_include_directive : require
@@ -9,19 +9,20 @@ layout(set = 0, binding = 4) uniform LightMatrixUBO {
     mat4 lightMatrix;
 };
 
-
-layout(set = 1, binding = 0) readonly buffer instanceBuffer {
-  mat4 instances[];
+layout(set = 0, binding = 5) readonly buffer VisibileInstances {
+    uint visibleInstances[];
 };
 
-layout(set = 3, binding = 0) uniform CameraUBO {
+layout(set = 2, binding = 0) uniform CameraUBO {
     Camera camera;
 };
 
-layout(push_constant) uniform constants
-{
-    VertexBuffer vertexBuffer;
-    InstanceIndicesBuffer instanceIndicesBuffer;
+layout(set = 3, binding = 1) readonly buffer MeshBuffer {
+    GpuMesh gpuMeshes[];
+};
+
+layout(set = 4, binding = 0) readonly buffer InstanceBuffer {
+    Instance instances[];
 };
 
 layout(location = 0) out vec3 vertColor;
@@ -29,10 +30,13 @@ layout(location = 1) out vec3 vertNormal;
 layout(location = 2) out vec3 fragPos;
 layout(location = 3) out vec2 uv;
 layout(location = 4) out vec4 fragPosLight;
+layout(location = 5) flat out uint objectIndex;
 
 void main() {
-    mat4 instanceMatrix = instances[instanceIndicesBuffer.indices[gl_InstanceIndex]];
-    Vertex vertex = vertexBuffer.vertices[gl_VertexIndex];
+    Instance instance = instances[visibleInstances[gl_DrawID]];
+    objectIndex = instance.objectIndex;
+    mat4 instanceMatrix = instance.matrix;
+    Vertex vertex = gpuMeshes[instance.objectIndex].vertexBuffer.vertices[gl_VertexIndex];
     vec4 worldPos = instanceMatrix * vec4(vertex.position, 1.0);
 
     gl_Position = camera.projection * camera.view * worldPos;

@@ -3,6 +3,7 @@
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
 #include "Backend/immediate_submit.h"
+#include <fmt/base.h>
 #include "GLFW/glfw3.h"
 #include <glm/glm.hpp>
 

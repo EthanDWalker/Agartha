@@ -25,7 +25,8 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
                                    &context.surface));
 
   VkPhysicalDeviceFeatures features{};
-  features.geometryShader = VK_TRUE;
+  features.geometryShader = true;
+  features.multiDrawIndirect = true;
 
   VkPhysicalDeviceVulkan14Features features_14{};
   features_14.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
@@ -44,20 +45,22 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   features_12.descriptorBindingVariableDescriptorCount = true;
   features_12.descriptorBindingPartiallyBound = true;
 
-  VkPhysicalDeviceVulkan11Features features_11;
+  VkPhysicalDeviceVulkan11Features features_11{};
   features_11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+  features_11.shaderDrawParameters = true;
 
-  VkPhysicalDeviceRobustness2FeaturesEXT robustness2 = {};
+  VkPhysicalDeviceRobustness2FeaturesEXT robustness2{};
   robustness2.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
   robustness2.pNext = nullptr;
-  robustness2.nullDescriptor = VK_TRUE;
+  robustness2.nullDescriptor = true;
 
   vkb::PhysicalDeviceSelector physical_device_selector{vkb_instance};
   vkb::PhysicalDevice vkb_physical_device =
       physical_device_selector.set_minimum_version(1, 3)
           .set_required_features_13(features_13)
           .set_required_features_12(features_12)
+          .set_required_features_11(features_11)
           .set_required_features(features)
           .set_surface(context.surface)
           .add_required_extension("VK_EXT_robustness2")

@@ -26,7 +26,7 @@ struct Vertex {
 struct Instance {
     mat4 matrix;
     vec3 color;
-    uint object_index;
+    uint objectIndex;
 };
 
 struct Material {
@@ -56,18 +56,16 @@ struct DrawIndexedIndirectCommand {
     uint firstInstance;
 };
 
-layout(buffer_reference, std430) readonly buffer AabbBuffer {
-    AABB aabbs[];
-};
-
-layout(buffer_reference, std430) readonly buffer InstanceIndicesBuffer {
-    uint indices[];
-};
-
 layout(buffer_reference, std430) readonly buffer VertexBuffer {
     Vertex vertices[];
 };
 
+layout(buffer_reference, std430) readonly buffer IndexBuffer {
+    uint indices[];
+};
+
 struct GpuMesh {
-    VertexBuffer vertex_address;
+    VertexBuffer vertexBuffer;
+    IndexBuffer indexBuffer;
+    uint indexCount;
 };
