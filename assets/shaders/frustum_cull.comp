@@ -1,7 +1,6 @@
 #version 450
 layout(local_size_x = 64) in;
 
-#extension GL_EXT_buffer_reference : require
 #extension GL_GOOGLE_include_directive : require
 #include "common.glsl"
 
@@ -33,7 +32,7 @@ layout(set = 3, binding = 2) readonly buffer SphereBoundsBuffer {
     SphereBounds sphereBounds[];
 };
 
-bool isBoundingSphereVisible(mat4 viewProj, vec3 center, float radius);
+bool isBoundingSphereVisible(vec3 center, float radius);
 
 void main() {
     uint id = gl_GlobalInvocationID.x;
@@ -48,13 +47,10 @@ void main() {
 
     if (instance.matrix == mat4(0.0)) return;
 
-    mat4 viewProj = camera.projection * camera.view;
-
     uint objectId = instance.objectIndex;
     SphereBounds bounds = sphereBounds[objectId];
 
-    //if (isBoundingSphereVisible(viewProj, vec3(instance.matrix[3]) + bounds.center, bounds.radius)) {
-    if (true) {
+    if (isBoundingSphereVisible(vec3(instance.matrix * vec4(0.0)), bounds.radius)) {
         uint index = atomicAdd(drawCount, 1);
 
         visibleInstances[index] = id;
@@ -70,14 +66,15 @@ void main() {
     }
 }
 
-bool isBoundingSphereVisible(mat4 viewProj, vec3 center, float radius) {
-    vec4 clip = viewProj * vec4(center, 1.0);
+bool isBoundingSphereVisible(vec3 center, float radius) {
+    Frustum frustum = camera.frustum;
 
-    if (clip.z + radius < 0.0) return false;
-
-    float r = radius;
-
-    return abs(clip.x) <= clip.w + r &&
-        abs(clip.y) <= clip.w + r &&
-        clip.z - r <= clip.w;
+    return !(
+    dot(vec3(frustum.left), center) + frustum.left.w < -radius ||
+        dot(vec3(frustum.right), center) + frustum.right.w < -radius ||
+        dot(vec3(frustum.top), center) + frustum.top.w < -radius ||
+        dot(vec3(frustum.bottom), center) + frustum.bottom.w < -radius ||
+        dot(vec3(frustum.near), center) + frustum.near.w < -radius ||
+        dot(vec3(frustum.far), center) + frustum.far.w < -radius
+    );
 }

@@ -29,8 +29,8 @@ struct GpuMesh {
   uint32_t index_count;
 };
 
+// center is stored in instance
 struct SphereBounds {
-  glm::vec3 center;
   float radius;
 };
 

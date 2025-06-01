@@ -18,8 +18,7 @@ struct MeshData {
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   std::vector<glm::mat4> instances;
-  glm::vec3 sphere_bounds_center;
-  float sphere_bounds_radius;
+  float bounds_radius;
   MaterialData material_data;
 };
 

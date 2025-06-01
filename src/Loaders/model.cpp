@@ -234,12 +234,10 @@ std::vector<MeshData> LoadModel(std::string path) {
             .vertices = vertices,
             .indices = indices,
             .instances = instances,
-            .sphere_bounds_center = centroid,
-            .sphere_bounds_radius =
-                glm::length(new_sphere_bounds.first) >
-                        glm::length(new_sphere_bounds.second)
-                    ? glm::length(new_sphere_bounds.first)
-                    : glm::length(new_sphere_bounds.second),
+            .bounds_radius = glm::length(new_sphere_bounds.first) >
+                                     glm::length(new_sphere_bounds.second)
+                                 ? glm::length(new_sphere_bounds.first)
+                                 : glm::length(new_sphere_bounds.second),
             .material_data = material_data,
         });
       }

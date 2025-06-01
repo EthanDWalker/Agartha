@@ -3,8 +3,8 @@
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
 #include "Backend/immediate_submit.h"
-#include <fmt/base.h>
 #include "GLFW/glfw3.h"
+#include <fmt/base.h>
 #include <glm/glm.hpp>
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -13,19 +13,19 @@
 
 void Camera::Create(VulkanContext &context,
                     DescriptorBuilder &descriptor_builder) {
-  CreateBuffer(context, sizeof(CameraUboData),
+  CreateBuffer(context, sizeof(CameraBuffer),
                VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-               VMA_MEMORY_USAGE_GPU_ONLY, ubo);
+               VMA_MEMORY_USAGE_GPU_ONLY, buffer);
 
   descriptor_builder.Reset();
-  descriptor_builder.BindUniformBuffer(0, ubo.buffer);
+  descriptor_builder.BindUniformBuffer(0, buffer.buffer);
   descriptor_builder.Build(context, VK_SHADER_STAGE_ALL, descriptor_set,
                            descriptor_layout);
 };
 
 void Camera::Destroy(VulkanContext &context) {
-  DestroyBuffer(context, ubo);
+  DestroyBuffer(context, buffer);
   vkDestroyDescriptorSetLayout(context.device, descriptor_layout, nullptr);
 }
 
@@ -85,7 +85,12 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
     velocity.y = 0.0f;
 
   {
-    CameraUboData ubo_data{};
+    const float z_near = 0.01f;
+    const float z_far = 1000.0f;
+    const float aspect_ratio = window_width / static_cast<float>(window_height);
+    const float fov_y = glm::radians(70.0f);
+
+    CameraBuffer buffer_data{};
 
     glm::quat pitch_rotation = glm::angleAxis(pitch, glm::vec3{1.f, 0.f, 0.f});
     glm::quat yaw_rotation = glm::angleAxis(yaw, glm::vec3{0.f, -1.f, 0.f});
@@ -96,21 +101,31 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
 
     glm::mat4 view_matrix = glm::inverse(camera_translation * rotation_matrix);
 
-    ubo_data.view_matrix = view_matrix;
+    buffer_data.view_matrix = view_matrix;
 
-    glm::mat4 projection = glm::perspective(
-        glm::radians(70.f), window_width / static_cast<float>(window_height),
-        0.001f, 1000.f);
+    glm::mat4 projection = glm::perspective(fov_y, aspect_ratio, z_near, z_far);
 
     projection[1][1] *= -1;
 
-    ubo_data.projection_matrix = projection;
+    buffer_data.projection_matrix = projection;
 
     position += glm::vec3(rotation_matrix * glm::vec4(velocity * 0.5f, 0.0f));
 
-    ubo_data.view_pos = position;
+    buffer_data.view_pos = position;
 
-    UpdateBuffer(context, immediate_submit, &ubo_data, sizeof(CameraUboData), 0,
-                 ubo);
+    glm::mat4 clip = projection * view_matrix;
+
+    Frustum frustum{};
+    frustum.left = glm::normalize(clip[3] + clip[0]);
+    frustum.right = glm::normalize(clip[3] - clip[0]);
+    frustum.bottom = glm::normalize(clip[3] + clip[1]);
+    frustum.top = glm::normalize(clip[3] - clip[1]);
+    frustum.near = glm::normalize(clip[3] + clip[2]);
+    frustum.far = glm::normalize(clip[3] - clip[2]);
+
+    buffer_data.frustum = frustum;
+
+    UpdateBuffer(context, immediate_submit, &buffer_data, sizeof(CameraBuffer),
+                 0, buffer);
   }
 }

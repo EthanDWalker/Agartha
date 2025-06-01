@@ -6,11 +6,21 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
-struct CameraUboData {
+struct Frustum {
+  glm::vec4 top;
+  glm::vec4 bottom;
+  glm::vec4 right;
+  glm::vec4 left;
+  glm::vec4 far;
+  glm::vec4 near;
+};
+
+struct CameraBuffer {
   glm::mat4 view_matrix;
   glm::mat4 projection_matrix;
   glm::vec3 view_pos;
   float padding;
+  Frustum frustum;
 };
 
 struct Camera {
@@ -21,7 +31,7 @@ public:
   float pitch{0.0f};
   float yaw{0.0f};
 
-  AllocatedBuffer ubo;
+  AllocatedBuffer buffer;
   VkDescriptorSet descriptor_set;
   VkDescriptorSetLayout descriptor_layout;
 

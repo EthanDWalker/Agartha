@@ -1,9 +1,20 @@
 #extension GL_EXT_buffer_reference : require
 
+struct Frustum {
+    vec4 top;
+    vec4 bottom;
+    vec4 right;
+    vec4 left;
+    vec4 far;
+    vec4 near;
+};
+
 struct Camera {
     mat4 view;
     mat4 projection;
     vec3 viewPos;
+    float padding;
+    Frustum frustum;
 };
 
 struct PointLight {
@@ -41,7 +52,6 @@ struct Object {
 };
 
 struct SphereBounds {
-    vec3 center;
     float radius;
 };
 

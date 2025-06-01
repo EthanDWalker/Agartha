@@ -97,13 +97,7 @@ void Engine::CreateRenderGraph() {
     });
     */
 
-    DependencyBuilder cull_pass_dep{};
-    cull_pass_dep.AddDependency(camera.ubo, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                                VK_ACCESS_2_SHADER_READ_BIT,
-                                VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
-                                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-
-    builder.AddPass(0, cull_pass_dep.dependency, [&](VkCommandBuffer cmd) {
+    builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cull_pipeline.obj);
 
       std::array<VkDescriptorSet, 4> ds = {
@@ -130,20 +124,6 @@ void Engine::CreateRenderGraph() {
     main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                      draw_image);
-
-    main_pass_dep.AddDependency(
-        culled_draw_count_buffer, VK_ACCESS_2_SHADER_WRITE_BIT,
-        VK_ACCESS_2_HOST_READ_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_2_HOST_BIT);
-    main_pass_dep.AddDependency(draw_indirect_buffer,
-                                VK_ACCESS_2_SHADER_WRITE_BIT,
-                                VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
-                                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
-    main_pass_dep.AddDependency(
-        visible_instance_buffer, VK_ACCESS_2_SHADER_WRITE_BIT,
-        VK_ACCESS_2_SHADER_READ_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT);
 
     builder.AddPass(1, main_pass_dep.dependency, [&](VkCommandBuffer cmd) {
       VkViewport viewport = vkinit::Viewport(draw_image.extent);

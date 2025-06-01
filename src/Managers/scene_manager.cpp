@@ -60,8 +60,7 @@ uint32_t SceneManager::AddObject(VulkanContext &context,
                index * sizeof(Object), object_buffer);
 
   SphereBounds sphere_bounds{};
-  sphere_bounds.center = mesh_data.sphere_bounds_center;
-  sphere_bounds.radius = mesh_data.sphere_bounds_radius;
+  sphere_bounds.radius = mesh_data.bounds_radius;
   UpdateBuffer(context, immediate_submit, &sphere_bounds, sizeof(SphereBounds),
                index * sizeof(SphereBounds), sphere_bounds_buffer);
 
