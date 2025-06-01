@@ -97,7 +97,13 @@ void Engine::CreateRenderGraph() {
     });
     */
 
-    builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
+    DependencyBuilder cull_pass_dep{};
+    cull_pass_dep.AddDependency(camera.ubo, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                VK_ACCESS_2_SHADER_READ_BIT,
+                                VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+
+    builder.AddPass(0, cull_pass_dep.dependency, [&](VkCommandBuffer cmd) {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cull_pipeline.obj);
 
       std::array<VkDescriptorSet, 4> ds = {
@@ -124,6 +130,7 @@ void Engine::CreateRenderGraph() {
     main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                      draw_image);
+
     main_pass_dep.AddDependency(
         culled_draw_count_buffer, VK_ACCESS_2_SHADER_WRITE_BIT,
         VK_ACCESS_2_HOST_READ_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -135,9 +142,8 @@ void Engine::CreateRenderGraph() {
                                 VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
     main_pass_dep.AddDependency(
         visible_instance_buffer, VK_ACCESS_2_SHADER_WRITE_BIT,
-        VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_HOST_READ_BIT,
-        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_HOST_BIT);
+        VK_ACCESS_2_SHADER_READ_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT);
 
     builder.AddPass(1, main_pass_dep.dependency, [&](VkCommandBuffer cmd) {
       VkViewport viewport = vkinit::Viewport(draw_image.extent);
@@ -175,14 +181,7 @@ void Engine::CreateRenderGraph() {
         return;
       }
 
-      std::vector<uint32_t> visible_instances;
-
-      visible_instances.resize(draw_count);
-
-      memcpy(visible_instances.data(), visible_instance_buffer.info.pMappedData,
-             sizeof(uint32_t) * visible_instances.size());
-
-      VkDescriptorSet ds[] = {
+      std::array<VkDescriptorSet, 5> ds = {
           mesh_descriptor_set,
           texture_manager.descriptor_set,
           camera.descriptor_set,
@@ -191,21 +190,15 @@ void Engine::CreateRenderGraph() {
       };
 
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              mesh_pipeline.layout, 0, 5, ds, 0, nullptr);
+                              mesh_pipeline.layout, 0, ds.size(), ds.data(), 0,
+                              nullptr);
 
-      for (uint32_t i = 0; i < draw_count; i++) {
-        vkCmdBindIndexBuffer(
-            cmd,
-            scene_manager
-                .meshes[scene_manager.instance_mesh[visible_instances[i]]]
-                .index_buffer.buffer,
-            0, VK_INDEX_TYPE_UINT32);
+      vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
+                           VK_INDEX_TYPE_UINT32);
 
-        vkCmdDrawIndexedIndirect(
-            cmd, draw_indirect_buffer.buffer,
-            i * sizeof(VkDrawIndexedIndirectCommand), 1,
-            static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
-      }
+      vkCmdDrawIndexedIndirect(
+          cmd, draw_indirect_buffer.buffer, 0, draw_count,
+          static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
 
       vkCmdEndRendering(cmd);
     });
@@ -308,7 +301,7 @@ void Engine::Init() {
       VMA_MEMORY_USAGE_GPU_ONLY, draw_indirect_buffer);
 
   CreateBuffer(context, sizeof(uint32_t) * SCENE_MAX_INSTANCES,
-               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO,
+               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
                visible_instance_buffer);
 
   {
@@ -408,7 +401,7 @@ void Engine::Run() {
   const float near_plane = 0.1f;
 
   {
-    glm::vec3 light_dir = normalize(glm::vec3(-1.0f, -4.0f, -1.0f));
+    glm::vec3 light_dir = normalize(directional_light.direction);
     glm::vec3 light_pos = glm::zero<glm::vec3>() - light_dir * distance;
     glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
 

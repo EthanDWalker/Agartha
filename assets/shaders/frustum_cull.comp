@@ -42,25 +42,30 @@ void main() {
         drawCount = 0;
     }
 
+    barrier();
+
     Instance instance = instances[id];
 
-    if (instance.matrix == mat4(0.0)) {
-        return;
-    }
+    if (instance.matrix == mat4(0.0)) return;
 
     mat4 viewProj = camera.projection * camera.view;
 
     uint objectId = instance.objectIndex;
+    SphereBounds bounds = sphereBounds[objectId];
 
-    if (isBoundingSphereVisible(viewProj, sphereBounds[objectId].center, sphereBounds[objectId].radius)) {
+    //if (isBoundingSphereVisible(viewProj, vec3(instance.matrix[3]) + bounds.center, bounds.radius)) {
+    if (true) {
         uint index = atomicAdd(drawCount, 1);
+
         visibleInstances[index] = id;
+
         DrawIndexedIndirectCommand command;
         command.indexCount = gpuMeshes[objectId].indexCount;
         command.instanceCount = 1;
-        command.firstIndex = 0;
+        command.firstIndex = gpuMeshes[objectId].firstIndex;
         command.vertexOffset = 0;
         command.firstInstance = index;
+
         drawCommands[index] = command;
     }
 }
@@ -72,8 +77,7 @@ bool isBoundingSphereVisible(mat4 viewProj, vec3 center, float radius) {
 
     float r = radius;
 
-    return !(abs(clip.x) <= clip.w + r &&
+    return abs(clip.x) <= clip.w + r &&
         abs(clip.y) <= clip.w + r &&
-        clip.z - r >= 0.0 &&
-        clip.z + r <= clip.w);
+        clip.z - r <= clip.w;
 }

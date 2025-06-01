@@ -3,6 +3,7 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
+#include "Backend/immediate_submit.h"
 #include "Loaders/model.h"
 #include "types.h"
 #include <glm/vec3.hpp>
@@ -12,6 +13,7 @@
 
 const uint32_t SCENE_MAX_OBJECTS = 1000;
 const uint32_t SCENE_MAX_INSTANCES = 2000;
+const uint32_t SCENE_MAX_INDICES = 2000000;
 
 struct Object {
   Material material;
@@ -19,14 +21,12 @@ struct Object {
 
 struct Mesh {
   AllocatedBuffer vertex_buffer;
-  AllocatedBuffer index_buffer;
 };
 
 struct GpuMesh {
   VkDeviceAddress vertex_address;
-  VkDeviceAddress index_address;
+  uint32_t first_index;
   uint32_t index_count;
-  float padding;
 };
 
 struct SphereBounds {
@@ -45,9 +45,9 @@ struct SceneManager {
   AllocatedBuffer mesh_buffer;
   AllocatedBuffer sphere_bounds_buffer;
   AllocatedBuffer instance_buffer;
+  AllocatedBuffer index_buffer;
 
   std::vector<Mesh> meshes;
-  std::vector<uint32_t> instance_mesh;
 
   std::queue<uint32_t> removed_objects;
   std::queue<uint32_t> removed_instances;
@@ -60,6 +60,7 @@ struct SceneManager {
 
   uint32_t object_index;
   uint32_t instance_index;
+  uint32_t last_index;
 
   void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
 

@@ -169,7 +169,6 @@ std::vector<MeshData> LoadModel(std::string path) {
             Vertex vertex;
             vertex.position = position / 30.f;
             vertex.normal = {1, 0, 0};
-            vertex.color = glm::vec4{1.f};
             vertex.uv_x = 0;
             vertex.uv_y = 0;
             vertices[index] = vertex;
@@ -192,15 +191,6 @@ std::vector<MeshData> LoadModel(std::string path) {
             [&](glm::vec2 uv, std::size_t index) {
               vertices[index].uv_x = uv.x;
               vertices[index].uv_y = uv.y;
-            });
-      }
-
-      auto color = p.findAttribute("COLOR_0");
-      if (color != p.attributes.end()) {
-        fastgltf::iterateAccessorWithIndex<glm::vec4>(
-            asset.get(), asset->accessors[color->accessorIndex],
-            [&](glm::vec4 color, std::size_t index) {
-              vertices[index].color = color;
             });
       }
 

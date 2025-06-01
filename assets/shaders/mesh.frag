@@ -5,12 +5,11 @@
 #extension GL_EXT_samplerless_texture_functions : require
 #include "common.glsl"
 
-layout(location = 0) in vec3 iColor;
-layout(location = 1) in vec3 iNormal;
-layout(location = 2) in vec3 iWorldPos;
-layout(location = 3) in vec2 iUV;
-layout(location = 4) in vec4 iLightSpacePos;
-layout(location = 5) flat in uint iObjectIndex;
+layout(location = 0) in vec3 iNormal;
+layout(location = 1) in vec3 iWorldPos;
+layout(location = 2) in vec2 iUV;
+layout(location = 3) in vec4 iLightSpacePos;
+layout(location = 4) flat in uint iObjectIndex;
 
 layout(location = 0) out vec4 oColor;
 

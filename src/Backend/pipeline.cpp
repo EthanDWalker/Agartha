@@ -163,11 +163,9 @@ void GraphicsPipelineBuilder::SetMultisampling(
 
 void GraphicsPipelineBuilder::SetNoMultisampling() {
   multisample.sampleShadingEnable = VK_FALSE;
-  // multisampling defaulted to no multisampling (1 sample per pixel)
   multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
   multisample.minSampleShading = 1.0f;
   multisample.pSampleMask = nullptr;
-  // no alpha to coverage either
   multisample.alphaToCoverageEnable = VK_FALSE;
   multisample.alphaToOneEnable = VK_FALSE;
 }
@@ -288,8 +286,8 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
   vertex_input_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-  VkGraphicsPipelineCreateInfo pipeline_ci = {
-      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+  VkGraphicsPipelineCreateInfo pipeline_ci = {};
+  pipeline_ci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
   pipeline_ci.pNext = &render_info;
 
   std::vector<VkPipelineShaderStageCreateInfo> shader_stages = {};

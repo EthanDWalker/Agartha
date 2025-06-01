@@ -25,12 +25,11 @@ layout(set = 4, binding = 0) readonly buffer InstanceBuffer {
     Instance instances[];
 };
 
-layout(location = 0) out vec3 vertColor;
-layout(location = 1) out vec3 vertNormal;
-layout(location = 2) out vec3 fragPos;
-layout(location = 3) out vec2 uv;
-layout(location = 4) out vec4 fragPosLight;
-layout(location = 5) flat out uint objectIndex;
+layout(location = 0) out vec3 vertNormal;
+layout(location = 1) out vec3 fragPos;
+layout(location = 2) out vec2 uv;
+layout(location = 3) out vec4 fragPosLight;
+layout(location = 4) flat out uint objectIndex;
 
 void main() {
     Instance instance = instances[visibleInstances[gl_InstanceIndex]];
@@ -40,8 +39,6 @@ void main() {
     vec4 worldPos = instanceMatrix * vec4(vertex.position, 1.0);
 
     gl_Position = camera.projection * camera.view * worldPos;
-
-    vertColor = vertex.color.xyz;
 
     mat3 normalMatrix = transpose(inverse(mat3(instanceMatrix)));
 

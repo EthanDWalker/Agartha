@@ -60,7 +60,7 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
       physical_device_selector.set_minimum_version(1, 3)
           .set_required_features_13(features_13)
           .set_required_features_12(features_12)
-          .set_required_features_11(features_11)
+          //.set_required_features_11(features_11)
           .set_required_features(features)
           .set_surface(context.surface)
           .add_required_extension("VK_EXT_robustness2")
