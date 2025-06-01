@@ -41,11 +41,9 @@ struct Object {
     Material material;
 };
 
-struct AABB {
-    vec3 min;
-    float padding;
-    vec3 max;
-    float padding_1;
+struct SphereBounds {
+    vec3 center;
+    float radius;
 };
 
 struct DrawIndexedIndirectCommand {

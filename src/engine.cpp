@@ -15,6 +15,7 @@
 #include <GLFW/glfw3.h>
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <fmt/base.h>
 #include <vector>
 #include <vulkan/vulkan_core.h>
@@ -108,7 +109,7 @@ void Engine::CreateRenderGraph() {
                               cull_pipeline.layout, 0, ds.size(), ds.data(), 0,
                               nullptr);
 
-      vkCmdDispatch(cmd, std::ceil(scene_manager.object_index / 64.0f), 1, 1);
+      vkCmdDispatch(cmd, std::ceil(scene_manager.instance_index / 64.0f), 1, 1);
     });
   }
 
@@ -132,10 +133,11 @@ void Engine::CreateRenderGraph() {
                                 VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
                                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                                 VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT);
-    main_pass_dep.AddDependency(visible_instances, VK_ACCESS_2_SHADER_WRITE_BIT,
-                                VK_ACCESS_2_SHADER_READ_BIT,
-                                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                                VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT);
+    main_pass_dep.AddDependency(
+        visible_instance_buffer, VK_ACCESS_2_SHADER_WRITE_BIT,
+        VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_HOST_READ_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_HOST_BIT);
 
     builder.AddPass(1, main_pass_dep.dependency, [&](VkCommandBuffer cmd) {
       VkViewport viewport = vkinit::Viewport(draw_image.extent);
@@ -143,8 +145,14 @@ void Engine::CreateRenderGraph() {
       VkRect2D scissor = vkinit::Scissor(draw_image.extent);
       vkCmdSetScissor(cmd, 0, 1, &scissor);
 
+      VkClearColorValue clear_color_value{};
+      clear_color_value = {0.0f, 0.0f, 0.0f, 0.0f};
+
+      VkClearValue clear_value{};
+      clear_value.color = clear_color_value;
+
       VkRenderingAttachmentInfo color_att =
-          vkinit::AttachmentInfo(draw_image.image_view, nullptr, nullptr,
+          vkinit::AttachmentInfo(draw_image.image_view, nullptr, &clear_value,
                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
       VkRenderingAttachmentInfo depth_att = vkinit::DepthAttachmentInfo(
@@ -158,6 +166,22 @@ void Engine::CreateRenderGraph() {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         mesh_pipeline.obj);
 
+      uint32_t draw_count = 0;
+      memcpy(&draw_count, culled_draw_count_buffer.info.pMappedData,
+             sizeof(uint32_t));
+
+      if (draw_count > scene_manager.instance_index) {
+        vkCmdEndRendering(cmd);
+        return;
+      }
+
+      std::vector<uint32_t> visible_instances;
+
+      visible_instances.resize(draw_count);
+
+      memcpy(visible_instances.data(), visible_instance_buffer.info.pMappedData,
+             sizeof(uint32_t) * visible_instances.size());
+
       VkDescriptorSet ds[] = {
           mesh_descriptor_set,
           texture_manager.descriptor_set,
@@ -169,8 +193,19 @@ void Engine::CreateRenderGraph() {
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                               mesh_pipeline.layout, 0, 5, ds, 0, nullptr);
 
-      vkCmdDrawIndexedIndirect(cmd, draw_indirect_buffer.buffer, 0, 1,
-                               sizeof(VkDrawIndexedIndirectCommand));
+      for (uint32_t i = 0; i < draw_count; i++) {
+        vkCmdBindIndexBuffer(
+            cmd,
+            scene_manager
+                .meshes[scene_manager.instance_mesh[visible_instances[i]]]
+                .index_buffer.buffer,
+            0, VK_INDEX_TYPE_UINT32);
+
+        vkCmdDrawIndexedIndirect(
+            cmd, draw_indirect_buffer.buffer,
+            i * sizeof(VkDrawIndexedIndirectCommand), 1,
+            static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
+      }
 
       vkCmdEndRendering(cmd);
     });
@@ -264,6 +299,18 @@ void Engine::Init() {
                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                VMA_MEMORY_USAGE_GPU_ONLY, light_matrix_buffer);
 
+  CreateBuffer(context, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+               VMA_MEMORY_USAGE_AUTO, culled_draw_count_buffer);
+
+  CreateBuffer(
+      context, sizeof(VkDrawIndexedIndirectCommand) * SCENE_MAX_OBJECTS,
+      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+      VMA_MEMORY_USAGE_GPU_ONLY, draw_indirect_buffer);
+
+  CreateBuffer(context, sizeof(uint32_t) * SCENE_MAX_INSTANCES,
+               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO,
+               visible_instance_buffer);
+
   {
     descriptor_builder.Reset();
     descriptor_builder.BindUniformBuffer(0, point_light_buffer.buffer);
@@ -272,7 +319,7 @@ void Engine::Init() {
     descriptor_builder.BindCombinedImage(3, shadow_image.image_view,
                                          shadow_sampler);
     descriptor_builder.BindUniformBuffer(4, light_matrix_buffer.buffer);
-    descriptor_builder.BindStorageBuffer(5, visible_instances.buffer);
+    descriptor_builder.BindStorageBuffer(5, visible_instance_buffer.buffer);
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
         mesh_descriptor_set, mesh_descriptor_layout);
@@ -319,23 +366,10 @@ void Engine::Init() {
   }*/
 
   {
-    CreateBuffer(context, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                 VMA_MEMORY_USAGE_GPU_ONLY, culled_draw_count_buffer);
-
-    CreateBuffer(context,
-                 sizeof(VkDrawIndexedIndirectCommand) * SCENE_MAX_OBJECTS,
-                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                     VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-                 VMA_MEMORY_USAGE_GPU_ONLY, draw_indirect_buffer);
-
-    CreateBuffer(context, sizeof(uint32_t) * SCENE_MAX_INSTANCES,
-                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
-                 visible_instances);
-
     descriptor_builder.Reset();
     descriptor_builder.BindStorageBuffer(0, draw_indirect_buffer.buffer);
     descriptor_builder.BindStorageBuffer(1, culled_draw_count_buffer.buffer);
-    descriptor_builder.BindStorageBuffer(2, visible_instances.buffer);
+    descriptor_builder.BindStorageBuffer(2, visible_instance_buffer.buffer);
     descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
                              cull_descriptor_set, cull_descriptor_set_layout);
     ComputePipelineBuilder pipeline_builder{};
@@ -437,7 +471,7 @@ void Engine::Destroy() {
   DestroyBuffer(context, light_matrix_buffer);
   DestroyBuffer(context, draw_indirect_buffer);
   DestroyBuffer(context, culled_draw_count_buffer);
-  DestroyBuffer(context, visible_instances);
+  DestroyBuffer(context, visible_instance_buffer);
 
   DestroyAllocatedImage(context, shadow_image);
   DestroyAllocatedImage(context, draw_image);

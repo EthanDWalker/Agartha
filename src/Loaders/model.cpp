@@ -16,7 +16,7 @@
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 
-std::pair<glm::vec3, glm::vec3> GetAABB(std::span<Vertex> vertices) {
+std::pair<glm::vec3, glm::vec3> GetSphereBounds(std::span<Vertex> vertices) {
   glm::vec3 min{std::numeric_limits<float>::max()};
   glm::vec3 max{std::numeric_limits<float>::lowest()};
 
@@ -232,13 +232,11 @@ std::vector<MeshData> LoadModel(std::string path) {
       } else {
         unique_check_sums.push_back(check_sum);
 
-        auto desired_aabb = GetAABB(vertices);
-
         for (auto &vertex : vertices) {
           vertex.position -= centroid;
         }
 
-        auto new_aabb = GetAABB(vertices);
+        auto new_sphere_bounds = GetSphereBounds(vertices);
 
         std::vector<glm::mat4> instances = {new_instance};
 
@@ -246,8 +244,12 @@ std::vector<MeshData> LoadModel(std::string path) {
             .vertices = vertices,
             .indices = indices,
             .instances = instances,
-            .collilder_min = new_aabb.first,
-            .collilder_max = new_aabb.second,
+            .sphere_bounds_center = centroid,
+            .sphere_bounds_radius =
+                glm::length(new_sphere_bounds.first) >
+                        glm::length(new_sphere_bounds.second)
+                    ? glm::length(new_sphere_bounds.first)
+                    : glm::length(new_sphere_bounds.second),
             .material_data = material_data,
         });
       }

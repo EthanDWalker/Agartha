@@ -33,7 +33,7 @@ layout(location = 4) out vec4 fragPosLight;
 layout(location = 5) flat out uint objectIndex;
 
 void main() {
-    Instance instance = instances[visibleInstances[gl_DrawID]];
+    Instance instance = instances[visibleInstances[gl_InstanceIndex]];
     objectIndex = instance.objectIndex;
     mat4 instanceMatrix = instance.matrix;
     Vertex vertex = gpuMeshes[instance.objectIndex].vertexBuffer.vertices[gl_VertexIndex];

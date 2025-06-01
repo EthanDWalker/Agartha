@@ -1,5 +1,4 @@
 #include "scene_manager.h"
-#include "Backend/buffer.h"
 #include <cassert>
 
 void SceneManager::Init(VulkanContext &context,
@@ -12,10 +11,10 @@ void SceneManager::Init(VulkanContext &context,
                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                VMA_MEMORY_USAGE_GPU_ONLY, mesh_buffer);
-  CreateBuffer(context, sizeof(AABB) * SCENE_MAX_OBJECTS,
+  CreateBuffer(context, sizeof(SphereBounds) * SCENE_MAX_OBJECTS,
                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-               VMA_MEMORY_USAGE_GPU_ONLY, aabb_buffer);
+               VMA_MEMORY_USAGE_GPU_ONLY, sphere_bounds_buffer);
 
   CreateBuffer(context, sizeof(Instance) * SCENE_MAX_INSTANCES,
                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
@@ -25,7 +24,7 @@ void SceneManager::Init(VulkanContext &context,
   descriptor_builder.Reset();
   descriptor_builder.BindStorageBuffer(0, object_buffer.buffer);
   descriptor_builder.BindStorageBuffer(1, mesh_buffer.buffer);
-  descriptor_builder.BindStorageBuffer(2, aabb_buffer.buffer);
+  descriptor_builder.BindStorageBuffer(2, sphere_bounds_buffer.buffer);
   descriptor_builder.Build(context, VK_SHADER_STAGE_ALL, object_descriptor_set,
                            object_descriptor_layout);
 
@@ -53,12 +52,12 @@ uint32_t SceneManager::AddObject(VulkanContext &context,
   UpdateBuffer(context, immediate_submit, &object, sizeof(Object),
                index * sizeof(Object), object_buffer);
 
-  AABB aabb{};
-  aabb.min = mesh_data.collilder_min;
-  aabb.max = mesh_data.collilder_max;
+  SphereBounds sphere_bounds{};
+  sphere_bounds.center = mesh_data.sphere_bounds_center;
+  sphere_bounds.radius = mesh_data.sphere_bounds_radius;
 
-  UpdateBuffer(context, immediate_submit, &aabb, sizeof(AABB),
-               index * sizeof(AABB), aabb_buffer);
+  UpdateBuffer(context, immediate_submit, &sphere_bounds, sizeof(SphereBounds),
+               index * sizeof(SphereBounds), sphere_bounds_buffer);
 
   Mesh mesh{};
 
@@ -74,7 +73,8 @@ uint32_t SceneManager::AddObject(VulkanContext &context,
   CreateBufferData(context, immediate_submit, mesh_data.indices.data(),
                    index_buffer_size,
                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                       VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                       VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                       VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                    mesh.index_buffer);
 
   meshes.push_back(mesh);
@@ -119,9 +119,10 @@ void SceneManager::RemoveObject(VulkanContext &context,
                                 uint32_t index) {
   assert(index < object_index && "Cannot remove unused index");
 
-  AABB zero_aabb{};
-  UpdateBuffer(context, immediate_submit, &zero_aabb, sizeof(AABB),
-               index * sizeof(AABB), aabb_buffer);
+  SphereBounds zero_sphere_bounds{};
+  UpdateBuffer(context, immediate_submit, &zero_sphere_bounds,
+               sizeof(SphereBounds), index * sizeof(SphereBounds),
+               sphere_bounds_buffer);
 
   Mesh zero_mesh{};
   UpdateBuffer(context, immediate_submit, &zero_mesh, sizeof(Mesh),
@@ -149,6 +150,8 @@ uint32_t SceneManager::AddInstance(VulkanContext &context,
   UpdateBuffer(context, immediate_submit, instance, sizeof(Instance),
                index * sizeof(Instance), instance_buffer);
 
+  instance_mesh.push_back(instance->object_index);
+
   if (removed_instances.empty()) {
     return instance_index++;
   } else {
@@ -165,6 +168,8 @@ void SceneManager::EditInstance(VulkanContext &context,
 
   UpdateBuffer(context, immediate_submit, instance, sizeof(Instance),
                index * sizeof(Instance), instance_buffer);
+
+  instance_mesh[index] = instance->object_index;
 }
 
 void SceneManager::RemoveInstance(VulkanContext &context,
@@ -177,6 +182,8 @@ void SceneManager::RemoveInstance(VulkanContext &context,
                index * sizeof(Instance), instance_buffer);
 
   removed_instances.push(index);
+
+  instance_mesh[index] = 0;
 }
 
 void SceneManager::Destroy(VulkanContext &context) {
@@ -185,7 +192,7 @@ void SceneManager::Destroy(VulkanContext &context) {
     DestroyBuffer(context, mesh.index_buffer);
   }
 
-  DestroyBuffer(context, aabb_buffer);
+  DestroyBuffer(context, sphere_bounds_buffer);
   DestroyBuffer(context, mesh_buffer);
   DestroyBuffer(context, object_buffer);
   DestroyBuffer(context, instance_buffer);

@@ -53,7 +53,7 @@ struct Engine {
   AllocatedBuffer light_matrix_buffer;
   AllocatedBuffer culled_draw_count_buffer;
   AllocatedBuffer draw_indirect_buffer;
-  AllocatedBuffer visible_instances;
+  AllocatedBuffer visible_instance_buffer;
 
   Pipeline mesh_pipeline;
   Pipeline skybox_pipeline;

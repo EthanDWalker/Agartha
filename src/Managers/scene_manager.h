@@ -29,11 +29,9 @@ struct GpuMesh {
   float padding;
 };
 
-struct AABB {
-  glm::vec3 min;
-  float padding;
-  glm::vec3 max;
-  float padding_1;
+struct SphereBounds {
+  glm::vec3 center;
+  float radius;
 };
 
 struct Instance {
@@ -45,10 +43,11 @@ struct Instance {
 struct SceneManager {
   AllocatedBuffer object_buffer;
   AllocatedBuffer mesh_buffer;
-  AllocatedBuffer aabb_buffer;
+  AllocatedBuffer sphere_bounds_buffer;
   AllocatedBuffer instance_buffer;
 
   std::vector<Mesh> meshes;
+  std::vector<uint32_t> instance_mesh;
 
   std::queue<uint32_t> removed_objects;
   std::queue<uint32_t> removed_instances;
