@@ -11,8 +11,7 @@ struct AllocatedImage {
   VkFormat format;
 };
 
-void GenerateMipmaps(VulkanContext &context, uint32_t mipLevels,
-                     AllocatedImage &image);
+void GenerateMipmaps(VkCommandBuffer cmd, AllocatedImage &image);
 
 void CreateImageSampler(VulkanContext &context, VkSampler &sampler);
 
@@ -21,7 +20,7 @@ void DestroyImageSampler(VulkanContext &context, VkSampler &sampler);
 void CreateAllocatedImage(
     VulkanContext &context, VkExtent3D size, VkFormat format,
     VkImageUsageFlags usage_flags, AllocatedImage &image,
-    uint32_t mip_levels = 1, bool cube_map = false,
+    bool mipmapped = false, bool cube_map = false,
     VkSampleCountFlagBits sample_count = VK_SAMPLE_COUNT_1_BIT);
 
 void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,

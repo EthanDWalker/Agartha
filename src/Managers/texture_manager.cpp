@@ -31,13 +31,15 @@ void TextureManager::Init(VulkanContext &context,
     ImageData image_data;
     AllocatedImage texture_image;
     std::string file_name;
+    bool success = false;
   };
 
   std::vector<std::future<LoadedImageTask>> futures;
 
   std::mutex queue_mutex;
 
-  for (const auto &file : std::filesystem::directory_iterator(texture_dir)) {
+  for (const auto &file :
+       std::filesystem::recursive_directory_iterator(texture_dir)) {
     if (file.is_directory()) {
       continue;
     }
@@ -45,15 +47,17 @@ void TextureManager::Init(VulkanContext &context,
 
     futures.push_back(std::async(std::launch::async, [file_name, &context,
                                                       &queue_mutex]() {
-      LoadedImageTask task;
+      LoadedImageTask task{};
       task.file_name = file_name;
 
       VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
       bool float_load = false;
+
       if (file_name.ends_with(".hdr")) {
         format = VK_FORMAT_R32G32B32A32_SFLOAT;
         float_load = true;
       }
+
       LoadImageData(file_name, task.image_data, float_load);
 
       VkExtent3D image_extent = {
@@ -77,9 +81,7 @@ void TextureManager::Init(VulkanContext &context,
                            VK_IMAGE_USAGE_SAMPLED_BIT |
                                VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                                VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                           task.texture_image);
-
-      std::lock_guard<std::mutex> lock(queue_mutex);
+                           task.texture_image, true);
 
       ImmediateSubmit::SubmitAsync(context, [&](VkCommandBuffer cmd) {
         TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
@@ -102,10 +104,16 @@ void TextureManager::Init(VulkanContext &context,
         TransitionImage(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                         task.texture_image.image);
+        GenerateMipmaps(cmd, task.texture_image);
+
+        queue_mutex.lock();
       });
+
+      queue_mutex.unlock();
 
       DestroyBuffer(context, upload_buffer);
 
+      task.success = true;
       return task;
     }));
   }
@@ -115,6 +123,10 @@ void TextureManager::Init(VulkanContext &context,
 
   for (auto &future : futures) {
     LoadedImageTask image_task = future.get();
+
+    if (image_task.success == false) {
+      continue;
+    }
 
     texture_data[file_index] = image_task.texture_image;
 
@@ -132,6 +144,8 @@ void TextureManager::Init(VulkanContext &context,
       abort();
     }
   }
+
+  fmt::println("{}", file_index);
 
   VkWriteDescriptorSet write{};
   write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

@@ -215,7 +215,7 @@ void Engine::Init() {
 
   immediate_submit.Create(context);
   descriptor_builder.Init(context);
-  thread_pool.Create(context);
+  // thread_pool.Create(context);
   camera.Create(context, descriptor_builder);
   texture_manager.Init(context, descriptor_builder);
   scene_manager.Init(context, descriptor_builder);
@@ -438,7 +438,7 @@ void Engine::Destroy() {
   descriptor_builder.Destroy(context);
   scene_manager.Destroy(context);
   ui_manager.Destroy();
-  thread_pool.Destroy(context);
+  // thread_pool.Destroy(context);
   immediate_submit.Destroy(context);
   camera.Destroy(context);
 

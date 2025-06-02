@@ -64,7 +64,7 @@ void CreateEnvMap(VulkanContext &context, ImmediateSubmit &immediate_submit,
 
   CreateAllocatedImage(context, cube_map_size, VK_FORMAT_R16G16B16A16_SFLOAT,
                        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-                       skybox.image, 1, true);
+                       skybox.image, false, true);
 
   Pipeline compute_pipeline;
   VkDescriptorSetLayout ds_layout;
@@ -110,7 +110,7 @@ void CreateIrradiance(VulkanContext &context, ImmediateSubmit &immediate_submit,
 
   CreateAllocatedImage(context, cube_map_size, VK_FORMAT_R16G16B16A16_SFLOAT,
                        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-                       skybox.irradiance, 1, true);
+                       skybox.irradiance, false, true);
 
   Pipeline compute_pipeline;
   VkDescriptorSetLayout ds_layout;
@@ -159,9 +159,7 @@ void CreatePrefilter(VulkanContext &context, ImmediateSubmit &immediate_submit,
                        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
                            VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                            VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                       skybox.prefilter, MIP_LEVELS, true);
-
-  GenerateMipmaps(context, MIP_LEVELS, skybox.prefilter);
+                       skybox.prefilter, true, true);
 
   Pipeline compute_pipeline;
   VkDescriptorSetLayout ds_layout;
@@ -254,15 +252,16 @@ void CreateSkybox(VulkanContext &context, ImmediateSubmit &immediate_submit,
 
   CreateEnvMap(context, immediate_submit, descriptor_builder, skybox.sampler,
                skybox_image, skybox);
-  CreateIrradiance(context, immediate_submit, descriptor_builder, skybox.sampler,
-                   skybox);
+  CreateIrradiance(context, immediate_submit, descriptor_builder,
+                   skybox.sampler, skybox);
   CreatePrefilter(context, immediate_submit, descriptor_builder, skybox.sampler,
                   skybox);
   GenerateBrdfLut(context, immediate_submit, descriptor_builder, skybox.sampler,
                   skybox);
 
   descriptor_builder.Reset();
-  descriptor_builder.BindCombinedImage(0, skybox.image.image_view, skybox.sampler);
+  descriptor_builder.BindCombinedImage(0, skybox.image.image_view,
+                                       skybox.sampler);
   descriptor_builder.BindImage(1, skybox.irradiance.image_view);
   descriptor_builder.BindImage(2, skybox.prefilter.image_view);
   descriptor_builder.BindImage(3, skybox.brdf.image_view);
