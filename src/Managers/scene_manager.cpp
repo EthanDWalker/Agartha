@@ -44,7 +44,7 @@ void SceneManager::Init(VulkanContext &context,
 
 uint32_t SceneManager::AddObject(VulkanContext &context,
                                  ImmediateSubmit &immediate_submit,
-                                 MeshData &mesh_data, Material &material) {
+                                 MeshData &mesh_data, Material material) {
   uint32_t index;
   if (removed_objects.empty()) {
     index = object_index;
@@ -75,17 +75,20 @@ uint32_t SceneManager::AddObject(VulkanContext &context,
                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                    mesh.vertex_buffer);
+  mesh.index_count = mesh_data.indices.size();
+  mesh.first_index = last_index;
   meshes.push_back(mesh);
 
   GpuMesh gpu_mesh{};
+
+  gpu_mesh.index_count = mesh_data.indices.size();
+  gpu_mesh.first_index = last_index;
 
   VkBufferDeviceAddressInfo device_address_info{};
   device_address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
   device_address_info.buffer = mesh.vertex_buffer.buffer;
   gpu_mesh.vertex_address =
       vkGetBufferDeviceAddress(context.device, &device_address_info);
-  gpu_mesh.index_count = mesh_data.indices.size();
-  gpu_mesh.first_index = last_index;
 
   UpdateBuffer(context, immediate_submit, &gpu_mesh, sizeof(GpuMesh),
                index * sizeof(GpuMesh), mesh_buffer);

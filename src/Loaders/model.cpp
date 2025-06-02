@@ -78,6 +78,7 @@ MaterialData ParseMaterialData(fastgltf::Material &material,
 }
 
 std::vector<MeshData> LoadModel(std::string path) {
+  SCOPED_TIMER("model parse")
   std::string full_file_path = gltf_file_path + path;
 
   std::filesystem::path file_path = full_file_path;
@@ -243,7 +244,6 @@ std::vector<MeshData> LoadModel(std::string path) {
       }
     }
   }
-  fmt::println("model loaded in {} ms", timer.ElapsedMillis());
 
   return mesh_data;
 }

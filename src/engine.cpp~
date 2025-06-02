@@ -29,13 +29,13 @@ void Engine::CreateRenderGraph() {
   RenderGraphBuilder builder{};
 
   {
-    DependencyBuilder shadow_pass_dep{};
-    shadow_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
-                                       VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                                       shadow_image);
+    /*
+  DependencyBuilder shadow_pass_dep{};
+  shadow_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
+                                     VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                                     shadow_image);
 
-    builder.AddPass(0, shadow_pass_dep.dependency, [&](VkCommandBuffer cmd) {
-      /*
+  builder.AddPass(0, shadow_pass_dep.dependency, [&](VkCommandBuffer cmd) {
       VkViewport viewport = vkinit::Viewport(shadow_image.extent);
       vkCmdSetViewport(cmd, 0, 1, &viewport);
       VkRect2D scissor = vkinit::Scissor(shadow_image.extent);
@@ -63,7 +63,60 @@ void Engine::CreateRenderGraph() {
       }
 
       vkCmdEndRendering(cmd);
+  });
     */
+
+    DependencyBuilder skybox_pass_dep{};
+
+    skybox_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
+                                       VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                                       depth_image);
+    skybox_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
+                                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                       draw_image);
+
+    builder.AddPass(0, skybox_pass_dep.dependency, [&](VkCommandBuffer cmd) {
+      VkViewport viewport = vkinit::Viewport(draw_image.extent);
+      vkCmdSetViewport(cmd, 0, 1, &viewport);
+      VkRect2D scissor = vkinit::Scissor(draw_image.extent);
+      vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+      VkRenderingAttachmentInfo color_att =
+          vkinit::AttachmentInfo(draw_image.image_view, nullptr, nullptr,
+                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+      VkRenderingAttachmentInfo depth_att = vkinit::DepthAttachmentInfo(
+          depth_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+
+      VkRenderingInfo rendering_info =
+          vkinit::RenderingInfo(draw_image.extent, &color_att, &depth_att);
+
+      vkCmdBeginRendering(cmd, &rendering_info);
+
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        skybox_pipeline.obj);
+
+      VkDescriptorSet ds[] = {skybox.descriptor_set, camera.descriptor_set};
+
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              skybox_pipeline.layout, 0, 2, ds, 0, nullptr);
+
+      Mesh mesh = scene_manager.meshes.back();
+      fmt::println("{}", mesh.index_count);
+      fmt::println("{}", mesh.first_index);
+
+      vkCmdPushConstants(cmd, skybox_pipeline.layout,
+                         VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VkDeviceAddress),
+                         &mesh.vertex_buffer);
+
+      /*
+      vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
+                           VK_INDEX_TYPE_UINT32);
+
+      vkCmdDrawIndexed(cmd, mesh.index_count, 1, mesh.first_index, 0, 0);
+      */
+
+      vkCmdEndRendering(cmd);
     });
 
     builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
@@ -84,15 +137,6 @@ void Engine::CreateRenderGraph() {
 
   {
     DependencyBuilder main_pass_dep{};
-    main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                     shadow_image);
-    main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
-                                     VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                                     depth_image);
-    main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
-                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                     draw_image);
 
     builder.AddPass(1, main_pass_dep.dependency, [&](VkCommandBuffer cmd) {
       VkViewport viewport = vkinit::Viewport(draw_image.extent);
@@ -118,68 +162,36 @@ void Engine::CreateRenderGraph() {
 
       vkCmdBeginRendering(cmd, &rendering_info);
 
-      {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          mesh_pipeline.obj);
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        mesh_pipeline.obj);
 
-        uint32_t draw_count = 0;
-        memcpy(&draw_count, culled_draw_count_buffer.info.pMappedData,
-               sizeof(uint32_t));
+      uint32_t draw_count = 0;
+      memcpy(&draw_count, culled_draw_count_buffer.info.pMappedData,
+             sizeof(uint32_t));
 
-        if (draw_count > scene_manager.instance_index) {
-          vkCmdEndRendering(cmd);
-          return;
-        }
-
-        std::array<VkDescriptorSet, 5> ds = {
-            mesh_descriptor_set,
-            texture_manager.descriptor_set,
-            camera.descriptor_set,
-            scene_manager.object_descriptor_set,
-            scene_manager.instance_descriptor_set,
-        };
-
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                mesh_pipeline.layout, 0, ds.size(), ds.data(),
-                                0, nullptr);
-
-        vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
-                             VK_INDEX_TYPE_UINT32);
-
-        vkCmdDrawIndexedIndirect(
-            cmd, draw_indirect_buffer.buffer, 0, draw_count,
-            static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
+      if (draw_count > scene_manager.instance_index) {
+        vkCmdEndRendering(cmd);
+        return;
       }
 
-      {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          skybox_pipeline.obj);
+      std::array<VkDescriptorSet, 5> ds = {
+          mesh_descriptor_set,
+          texture_manager.descriptor_set,
+          camera.descriptor_set,
+          scene_manager.object_descriptor_set,
+          scene_manager.instance_descriptor_set,
+      };
 
-        std::array<VkDescriptorSet, 2> ds = {skybox.descriptor_set,
-                                             camera.descriptor_set};
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              mesh_pipeline.layout, 0, ds.size(), ds.data(), 0,
+                              nullptr);
 
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                skybox_pipeline.layout, 0, ds.size(), ds.data(),
-                                0, nullptr);
+      vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
+                           VK_INDEX_TYPE_UINT32);
 
-        Mesh mesh = scene_manager.meshes.back();
-
-        VkBufferDeviceAddressInfo address_info{};
-        address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-        address_info.buffer = mesh.vertex_buffer.buffer;
-
-        VkDeviceAddress vertex_address =
-            vkGetBufferDeviceAddress(context.device, &address_info);
-
-        vkCmdPushConstants(cmd, skybox_pipeline.layout,
-                           VK_SHADER_STAGE_VERTEX_BIT, 0,
-                           sizeof(VkDeviceAddress), &vertex_address);
-
-        vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
-                             VK_INDEX_TYPE_UINT32);
-
-        vkCmdDrawIndexed(cmd, mesh.index_count, 1, mesh.first_index, 0, 0);
-      }
+      vkCmdDrawIndexedIndirect(
+          cmd, draw_indirect_buffer.buffer, 0, draw_count,
+          static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
 
       ui_manager.Render(cmd);
 
@@ -337,8 +349,8 @@ void Engine::Init() {
                              shadow_descriptor_set_layout);
     GraphicsPipelineBuilder pipeline_builder;
     pipeline_builder.Default();
-    pipeline_builder.SetShaders(context, "shadow.vert.spv",
-  "shadow.frag.spv"); pipeline_builder.SetDepthFormat(shadow_image.format);
+    pipeline_builder.SetShaders(context, "shadow.vert.spv", "shadow.frag.spv");
+    pipeline_builder.SetDepthFormat(shadow_image.format);
     pipeline_builder.AddDescriptorSetLayout(shadow_descriptor_set_layout);
     pipeline_builder.AddDescriptorSetLayout(instance_manager.descriptor_layout);
     pipeline_builder.Build(context, shadow_pipeline);

@@ -9,6 +9,7 @@
 #include "GLFW/glfw3.h"
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
+#include "Managers/ui_manager.h"
 #include "camera.h"
 #include "render_graph.h"
 #include "skybox.h"
@@ -36,6 +37,7 @@ struct Engine {
   Camera camera;
   TextureManager texture_manager;
   SceneManager scene_manager;
+  UiManager ui_manager;
   DescriptorBuilder descriptor_builder;
   ThreadPool thread_pool;
   RenderGraph render_graph;

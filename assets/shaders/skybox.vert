@@ -12,13 +12,12 @@ layout(push_constant) uniform constants
 };
 
 layout(set = 1, binding = 0) uniform CameraUBO {
-  Camera camera;
+    Camera camera;
 };
 
-void main()
-{
+void main() {
     localPos = vertexBuffer.vertices[gl_VertexIndex].position;
     mat4 rotView = mat4(mat3(camera.view));
     vec4 clipPos = camera.projection * rotView * vec4(localPos, 1.0);
-    gl_Position = clipPos.xyww; // so it always is at the back
+    gl_Position = clipPos.xyww;
 }

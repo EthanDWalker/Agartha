@@ -21,6 +21,8 @@ struct Object {
 
 struct Mesh {
   AllocatedBuffer vertex_buffer;
+  uint32_t first_index;
+  uint32_t index_count;
 };
 
 struct GpuMesh {
@@ -65,7 +67,7 @@ struct SceneManager {
   void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
 
   uint32_t AddObject(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                     MeshData &data, Material &material);
+                     MeshData &data, Material material = {});
 
   void RemoveObject(VulkanContext &context, ImmediateSubmit &immediate_submit,
                     uint32_t index);
