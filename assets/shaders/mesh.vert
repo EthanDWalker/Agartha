@@ -5,12 +5,12 @@
 #extension GL_EXT_buffer_reference2 : require
 #include "common.glsl"
 
-layout(set = 0, binding = 4) uniform LightMatrixUBO {
-    mat4 lightMatrix;
+layout(set = 0, binding = 3) readonly buffer VisibileInstances {
+    uint visibleInstances[];
 };
 
-layout(set = 0, binding = 5) readonly buffer VisibileInstances {
-    uint visibleInstances[];
+layout(set = 0, binding = 5) uniform LightMatrixUBO {
+    mat4 lightMatrix;
 };
 
 layout(set = 2, binding = 0) uniform CameraUBO {
@@ -28,7 +28,7 @@ layout(set = 4, binding = 0) readonly buffer InstanceBuffer {
 layout(location = 0) out vec3 vertNormal;
 layout(location = 1) out vec3 fragPos;
 layout(location = 2) out vec2 uv;
-layout(location = 3) out vec4 fragPosLight;
+layout(location = 3) out vec4 lightSpace;
 layout(location = 4) flat out uint objectIndex;
 
 void main() {
@@ -42,11 +42,11 @@ void main() {
 
     mat3 normalMatrix = transpose(inverse(mat3(instanceMatrix)));
 
+    lightSpace = lightMatrix * worldPos;
+
     vertNormal = normalMatrix * vertex.normal;
 
     fragPos = vec3(worldPos);
-
-    fragPosLight = lightMatrix * worldPos;
 
     uv = vec2(vertex.uv_x, vertex.uv_y);
 }

@@ -20,10 +20,11 @@ struct Camera {
 struct PointLight {
     vec4 color;
     vec3 position;
+    float padding;
 };
 
 struct DirectionalLight {
-    vec3 direction;
+    vec4 direction; // w is intesity
 };
 
 struct Vertex {

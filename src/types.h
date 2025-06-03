@@ -14,10 +14,11 @@ struct Vertex {
 struct PointLight {
   glm::vec4 color; // w = intensity
   glm::vec3 position;
+  float padding;
 };
 
 struct DirectionalLight {
-  glm::vec3 direction;
+  glm::vec4 direction;
 };
 
 struct Material {
@@ -27,4 +28,3 @@ struct Material {
   int32_t normal{-1};
   int32_t ambient_occlusion{-1};
 };
-

@@ -109,7 +109,7 @@ void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
   image.format = format;
   image.extent = size;
 
-  uint32_t mip_levels = CalculateMipLevels(size);
+  uint32_t mip_levels = mipmapped ? CalculateMipLevels(size) : 1;
 
   VkImageCreateInfo image_ci =
       vkinit::ImageCI(format, usage_flags, size, mip_levels);

@@ -168,7 +168,7 @@ void SceneManager::EditInstance(VulkanContext &context,
 void SceneManager::RemoveInstance(VulkanContext &context,
                                   ImmediateSubmit &immediate_submit,
                                   uint32_t index) {
-  assert(index < instance_index && "Cannot remove useset index");
+  assert(index < instance_index && "Cannot remove un set index");
 
   Instance zero_instance{};
   UpdateBuffer(context, immediate_submit, &zero_instance, sizeof(Instance),

@@ -8,7 +8,7 @@
 layout(location = 0) in vec3 iNormal;
 layout(location = 1) in vec3 iWorldPos;
 layout(location = 2) in vec2 iUV;
-layout(location = 3) in vec4 iLightSpacePos;
+layout(location = 3) in vec4 iLightSpace;
 layout(location = 4) flat in uint iObjectIndex;
 
 layout(location = 0) out vec4 oColor;
@@ -23,7 +23,7 @@ layout(std140, set = 0, binding = 1) uniform DirectionalLightUBO {
 
 layout(set = 0, binding = 2) uniform sampler textureSampler;
 
-layout(set = 0, binding = 3) uniform sampler2D shadowMap;
+layout(set = 0, binding = 4) uniform sampler2D shadowMap;
 
 layout(set = 1, binding = 0) uniform texture2D textures[];
 
@@ -46,37 +46,34 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness);
 
 vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
 
-float ShadowCalculation(vec3 L, vec3 N) {
-    vec3 projCoords = iLightSpacePos.xyz / iLightSpacePos.w;
+float ShadowCalculation(vec3 L, vec3 N);
 
-    projCoords = projCoords * 0.5 + 0.5;
+vec3 ComputeFog(
+    vec3 cameraPos,
+    vec3 fragPos,
+    vec3 lightPos,
+    vec4 lightColor,
+    float fogDensity
+) {
+    vec3 viewDir = fragPos - cameraPos;
+    float viewLength = length(viewDir);
+    vec3 viewDirNorm = normalize(viewDir);
 
-    if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
-        return 0.0;
+    vec3 lightToCamera = cameraPos - lightPos;
+    float lightToCameraLength = length(lightToCamera);
+    vec3 lightToCameraNorm = normalize(lightToCamera);
 
-    float closestDepth = texture(shadowMap, projCoords.xy).r;
+    float h = length(cross(viewDirNorm, lightToCamera));
 
-    float currentDepth = projCoords.z;
+    float a = dot(lightToCamera, viewDirNorm);
+    float b = a + viewLength;
 
-    currentDepth = (1.0 - currentDepth) * 2;
+    float scattering = atan(b / h) - atan(a / h);
+    scattering /= h;
 
-    float bias = max(0.05 * (1.0 - dot(N, L)), 0.005);
-
-    float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
-
-    for (int x = -1; x <= 1; ++x)
-    {
-        for (int y = -1; y <= 1; ++y)
-        {
-            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
-            shadow += currentDepth + bias < pcfDepth ? 0.0 : 1.0;
-        }
-    }
-    shadow /= 9.0;
-
-    return shadow;
+    return lightColor.xyz * lightColor.w * scattering * fogDensity;
 }
+
 void main() {
     Material mat = objects[iObjectIndex].material;
 
@@ -121,11 +118,12 @@ void main() {
         float NdotL = max(dot(N, L), 0.0);
 
         Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+        Lo += ComputeFog(camera.viewPos, iWorldPos, pointLight.position, pointLight.color, 0.001);
     }
 
     // directional light
     {
-        vec3 L = normalize(-directionalLight.direction);
+        vec3 L = normalize(-directionalLight.direction.xyz);
         vec3 H = normalize(V + L);
 
         vec3 radiance = vec3(1.0, 0.8, 0.5);
@@ -145,12 +143,12 @@ void main() {
 
         float NdotL = max(dot(N, L), 0.0);
 
-        float shadow = 1.0; //ShadowCalculation(L, N);
+        float shadow = ShadowCalculation(L, N) + .05;
 
         Lo += shadow * (kD * albedo / PI + specular) * radiance * NdotL;
     }
-
     // end loop
+
     vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
 
     vec3 kS = F;
@@ -159,7 +157,6 @@ void main() {
 
     vec3 color = Lo + emisive + (F + albedo) * kD * ao;
 
-    // HDR
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
 
@@ -203,8 +200,7 @@ float DistributionGGX(vec3
 }
 
 // Approximates how much of the subsurace mircofacets are shadowed by others
-float GeometrySchlickGGX(float NdotV, float roughness)
-{
+float GeometrySchlickGGX(float NdotV, float roughness) {
     float r = (roughness + 1.0);
     float k = (r * r) / 8.0;
 
@@ -213,8 +209,7 @@ float GeometrySchlickGGX(float NdotV, float roughness)
 
     return num / denom;
 }
-float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
-{
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     float NdotV = max(dot(N, V), 0.0);
     float NdotL = max(dot(N, L), 0.0);
     float ggx2 = GeometrySchlickGGX(NdotV, roughness);
@@ -227,7 +222,38 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 // vec3 F0 = vec3(0.04); // Base reflectivity
 // F0      = mix(F0, surfaceColor.rgb, metalness);
 // cosTheta is dot product between normal and halfway(or view dir)
-vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
-{
+vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+float ShadowCalculation(vec3 L, vec3 N) {
+    vec3 projCoords = iLightSpace.xyz / iLightSpace.w;
+
+    projCoords = projCoords * 0.5 + 0.5;
+
+    if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 1.0;
+
+    float closestDepth = texture(shadowMap, projCoords.xy).r;
+
+    float currentDepth = projCoords.z;
+
+    currentDepth = (1.0 - currentDepth) * 2;
+
+    float bias = max(0.05 * (1.0 - dot(N, L)), 0.005);
+
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+
+    for (int x = -1; x <= 1; ++x)
+    {
+        for (int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth + bias < pcfDepth ? 0.0 : 1.0;
+        }
+    }
+    shadow /= 9.0;
+
+    return shadow;
 }

@@ -13,7 +13,6 @@
 #include "camera.h"
 #include "render_graph.h"
 #include "skybox.h"
-#include "thread_pool.h"
 #include "types.h"
 
 #if defined(DEBUG)
@@ -24,11 +23,14 @@ constexpr bool DEBUG = false;
 
 static PointLight point_light{
     .color = {1.0, 1.0, 1.0, 1.0},
-    .position = {-0.0, 2.0, 2.0},
+    .position = {0.0, 2.0, 2.0},
 };
 
 static DirectionalLight directional_light{
-    .direction = {glm::normalize(glm::vec3(-1.0f, -4.0f, -1.0f))},
+    .direction =
+        {
+            glm::vec4(glm::normalize(glm::vec3(-1.0f, -4.0f, -1.0f)), 1.0),
+        },
 };
 
 struct Engine {
@@ -39,7 +41,6 @@ struct Engine {
   SceneManager scene_manager;
   UiManager ui_manager;
   DescriptorBuilder descriptor_builder;
-  ThreadPool thread_pool;
   RenderGraph render_graph;
 
   Skybox skybox;
@@ -52,24 +53,34 @@ struct Engine {
 
   AllocatedBuffer point_light_buffer;
   AllocatedBuffer directional_light_buffer;
+
   AllocatedBuffer light_matrix_buffer;
+
   AllocatedBuffer culled_draw_count_buffer;
   AllocatedBuffer draw_indirect_buffer;
   AllocatedBuffer visible_instance_buffer;
+
+  AllocatedBuffer shadow_culled_draw_count_buffer;
+  AllocatedBuffer shadow_draw_indirect_buffer;
+  AllocatedBuffer shadow_visible_instance_buffer;
 
   Pipeline mesh_pipeline;
   Pipeline skybox_pipeline;
   Pipeline shadow_pipeline;
   Pipeline cull_pipeline;
+  Pipeline shadow_cull_pipeline;
 
   VkDescriptorSet mesh_descriptor_set;
   VkDescriptorSetLayout mesh_descriptor_layout;
 
-  VkDescriptorSet shadow_descriptor_set;
-  VkDescriptorSetLayout shadow_descriptor_set_layout;
-
   VkDescriptorSet cull_descriptor_set;
-  VkDescriptorSetLayout cull_descriptor_set_layout;
+  VkDescriptorSetLayout cull_descriptor_layout;
+
+  VkDescriptorSet shadow_descriptor_set;
+  VkDescriptorSetLayout shadow_descriptor_layout;
+
+  VkDescriptorSet shadow_cull_descriptor_set;
+  VkDescriptorSetLayout shadow_cull_descriptor_layout;
 
   GLFWwindow *window;
 

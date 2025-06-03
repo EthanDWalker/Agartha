@@ -1,0 +1,57 @@
+#version 450
+layout(local_size_x = 64) in;
+
+// for now just draw all
+// used for shadow cascades later on
+
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
+
+layout(set = 0, binding = 0) buffer DrawCommands {
+    DrawIndexedIndirectCommand drawCommands[];
+};
+
+layout(set = 0, binding = 1) buffer DrawCount {
+    uint drawCount;
+};
+
+layout(set = 0, binding = 2) buffer VisibleInstancesBuffer {
+    uint visibleInstances[];
+};
+
+layout(set = 1, binding = 0) readonly buffer Instances {
+    Instance instances[];
+};
+
+layout(set = 2, binding = 1) readonly buffer GpuMeshes {
+    GpuMesh gpuMeshes[];
+};
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+
+    if (id == 0) {
+        drawCount = 0;
+    }
+
+    barrier();
+
+    Instance instance = instances[id];
+
+    if (instance.matrix == mat4(0.0)) return;
+
+    uint objectId = instance.objectIndex;
+
+    uint index = atomicAdd(drawCount, 1);
+
+    visibleInstances[index] = id;
+
+    DrawIndexedIndirectCommand command;
+    command.indexCount = gpuMeshes[objectId].indexCount;
+    command.instanceCount = 1;
+    command.firstIndex = gpuMeshes[objectId].firstIndex;
+    command.vertexOffset = 0;
+    command.firstInstance = index;
+
+    drawCommands[index] = command;
+}
