@@ -9,7 +9,6 @@
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
 #include "Managers/ui_manager.h"
-#include "Primitives/cube.h"
 #include "fmt/format.h"
 #include "render_graph.h"
 #include "timer.h"
@@ -184,37 +183,6 @@ void Engine::CreateRenderGraph() {
             static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
       }
 
-      {
-        std::lock_guard<std::mutex> lock(texture_manager.texture_mutex);
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          skybox_pipeline.obj);
-
-        std::array<VkDescriptorSet, 2> ds = {skybox.descriptor_set,
-                                             camera.descriptor_set};
-
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                skybox_pipeline.layout, 0, ds.size(), ds.data(),
-                                0, nullptr);
-
-        Mesh mesh = scene_manager.meshes.back();
-
-        VkBufferDeviceAddressInfo address_info{};
-        address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-        address_info.buffer = mesh.vertex_buffer.buffer;
-
-        VkDeviceAddress vertex_address =
-            vkGetBufferDeviceAddress(context.device, &address_info);
-
-        vkCmdPushConstants(cmd, skybox_pipeline.layout,
-                           VK_SHADER_STAGE_VERTEX_BIT, 0,
-                           sizeof(VkDeviceAddress), &vertex_address);
-
-        vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
-                             VK_INDEX_TYPE_UINT32);
-
-        vkCmdDrawIndexed(cmd, mesh.index_count, 1, mesh.first_index, 0, 0);
-      }
-
       ui_manager.Render(cmd);
 
       vkCmdEndRendering(cmd);
@@ -302,9 +270,6 @@ void Engine::Init() {
 
   CreateImageSampler(context, sampler);
 
-  CreateSkybox(context, immediate_submit, descriptor_builder, texture_manager,
-               "sunset", skybox);
-
   CreateBufferData(context, immediate_submit, &point_light, sizeof(PointLight),
                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, point_light_buffer);
 
@@ -366,19 +331,6 @@ void Engine::Init() {
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);
     pipeline_builder.Build(context, mesh_pipeline);
-  }
-
-  {
-    GraphicsPipelineBuilder pipeline_builder;
-    pipeline_builder.SetShaders(context, "skybox.vert.spv", "skybox.frag.spv");
-    pipeline_builder.Default();
-    pipeline_builder.SetCullMode(VK_CULL_MODE_BACK_BIT,
-                                 VK_FRONT_FACE_CLOCKWISE);
-    pipeline_builder.AddDescriptorSetLayout(skybox.descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
-    pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT,
-                                          sizeof(VkDeviceAddress));
-    pipeline_builder.Build(context, skybox_pipeline);
   }
 
   {
@@ -451,17 +403,6 @@ void Engine::Init() {
     }
   }
 
-  MeshData cube_data{};
-  cube_data.indices = cube_indices;
-  cube_data.vertices = cube_vertices;
-  cube_data.bounds_radius = 2;
-  cube_data.instances = {glm::mat4(1.0)};
-
-  scene_manager.AddObject(context, immediate_submit, cube_data, {});
-
-  camera.position = {2, 2, 2};
-  camera.Update(context, immediate_submit, window, 0.001f);
-
   CreateRenderGraph();
 }
 
@@ -529,8 +470,6 @@ void Engine::Destroy() {
   DestroyImageSampler(context, sampler);
   DestroyImageSampler(context, shadow_sampler);
 
-  DestroySkybox(context, skybox);
-
   DestroyBuffer(context, point_light_buffer);
   DestroyBuffer(context, directional_light_buffer);
   DestroyBuffer(context, light_matrix_buffer);
@@ -548,7 +487,6 @@ void Engine::Destroy() {
   DestroyAllocatedImage(context, main_image);
 
   DestroyPipeline(context, mesh_pipeline);
-  DestroyPipeline(context, skybox_pipeline);
   DestroyPipeline(context, shadow_pipeline);
   DestroyPipeline(context, cull_pipeline);
   DestroyPipeline(context, shadow_cull_pipeline);

@@ -53,9 +53,11 @@ void ImmediateSubmit::SubmitAsync(
   VkSubmitInfo2 submit_info =
       vkinit::SubmitInfo(&cmd_submit_info, nullptr, nullptr);
 
-  std::lock_guard<std::mutex> lock(queue_mutex);
+  {
+    std::lock_guard<std::mutex> lock(queue_mutex);
 
-  VK_CHECK(vkQueueSubmit2(context.graphics_queue, 1, &submit_info, fence));
+    VK_CHECK(vkQueueSubmit2(context.graphics_queue, 1, &submit_info, fence));
+  }
 
   VK_CHECK(vkWaitForFences(context.device, 1, &fence, VK_TRUE,
                            std::numeric_limits<uint32_t>::max()));
@@ -109,9 +111,11 @@ void ImmediateSubmit::Submit(
   VkSubmitInfo2 submit_info =
       vkinit::SubmitInfo(&cmd_submit_info, nullptr, nullptr);
 
-  std::lock_guard<std::mutex> lock(queue_mutex);
+  {
+    std::lock_guard<std::mutex> lock(queue_mutex);
 
-  VK_CHECK(vkQueueSubmit2(context.graphics_queue, 1, &submit_info, fence));
+    VK_CHECK(vkQueueSubmit2(context.graphics_queue, 1, &submit_info, fence));
+  }
 
   VK_CHECK(vkWaitForFences(context.device, 1, &fence, VK_TRUE,
                            std::numeric_limits<uint32_t>::max()));

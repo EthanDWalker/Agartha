@@ -12,7 +12,6 @@
 #include "Managers/ui_manager.h"
 #include "camera.h"
 #include "render_graph.h"
-#include "skybox.h"
 #include "types.h"
 
 #if defined(DEBUG)
@@ -43,7 +42,6 @@ struct Engine {
   DescriptorBuilder descriptor_builder;
   RenderGraph render_graph;
 
-  Skybox skybox;
   VkSampler sampler;
   VkSampler shadow_sampler;
 
@@ -66,7 +64,6 @@ struct Engine {
   AllocatedBuffer shadow_visible_instance_buffer;
 
   Pipeline mesh_pipeline;
-  Pipeline skybox_pipeline;
   Pipeline shadow_pipeline;
   Pipeline cull_pipeline;
   Pipeline shadow_cull_pipeline;
