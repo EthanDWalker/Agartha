@@ -48,31 +48,7 @@ vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
 
 float ShadowCalculation(vec3 L, vec3 N);
 
-vec3 ComputeFog(
-    vec3 cameraPos,
-    vec3 fragPos,
-    vec3 lightPos,
-    vec4 lightColor,
-    float fogDensity
-) {
-    vec3 viewDir = fragPos - cameraPos;
-    float viewLength = length(viewDir);
-    vec3 viewDirNorm = normalize(viewDir);
-
-    vec3 lightToCamera = cameraPos - lightPos;
-    float lightToCameraLength = length(lightToCamera);
-    vec3 lightToCameraNorm = normalize(lightToCamera);
-
-    float h = length(cross(viewDirNorm, lightToCamera));
-
-    float a = dot(lightToCamera, viewDirNorm);
-    float b = a + viewLength;
-
-    float scattering = atan(b / h) - atan(a / h);
-    scattering /= h;
-
-    return lightColor.xyz * lightColor.w * scattering * fogDensity;
-}
+vec3 ComputeFog(vec3 lightPos, vec4 lightColor, float fogDensity);
 
 void main() {
     Material mat = objects[iObjectIndex].material;
@@ -93,7 +69,6 @@ void main() {
 
     vec3 Lo = vec3(0.0);
 
-    // loop through lights but i only have 1
     {
         vec3 L = normalize(pointLight.position - iWorldPos);
         vec3 H = normalize(V + L);
@@ -118,10 +93,9 @@ void main() {
         float NdotL = max(dot(N, L), 0.0);
 
         Lo += (kD * albedo / PI + specular) * radiance * NdotL;
-        Lo += ComputeFog(camera.viewPos, iWorldPos, pointLight.position, pointLight.color, 0.001);
+        Lo += ComputeFog(pointLight.position, pointLight.color, 0.001);
     }
 
-    // directional light
     {
         vec3 L = normalize(-directionalLight.direction.xyz);
         vec3 H = normalize(V + L);
@@ -147,7 +121,6 @@ void main() {
 
         Lo += shadow * (kD * albedo / PI + specular) * radiance * NdotL;
     }
-    // end loop
 
     vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
 
@@ -256,4 +229,24 @@ float ShadowCalculation(vec3 L, vec3 N) {
     shadow /= 9.0;
 
     return shadow;
+}
+
+vec3 ComputeFog(vec3 lightPos, vec4 lightColor, float fogDensity) {
+    vec3 viewDir = iWorldPos - camera.viewPos;
+    float viewLength = length(viewDir);
+    vec3 viewDirNorm = normalize(viewDir);
+
+    vec3 lightToCamera = camera.viewPos - lightPos;
+    float lightToCameraLength = length(lightToCamera);
+    vec3 lightToCameraNorm = normalize(lightToCamera);
+
+    float h = length(cross(viewDirNorm, lightToCamera));
+
+    float a = dot(lightToCamera, viewDirNorm);
+    float b = a + viewLength;
+
+    float scattering = atan(b / h) - atan(a / h);
+    scattering /= h;
+
+    return lightColor.xyz * lightColor.w * scattering * fogDensity;
 }

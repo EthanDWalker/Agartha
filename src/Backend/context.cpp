@@ -44,6 +44,10 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   features_12.runtimeDescriptorArray = true;
   features_12.descriptorBindingVariableDescriptorCount = true;
   features_12.descriptorBindingPartiallyBound = true;
+  features_12.descriptorBindingUniformBufferUpdateAfterBind = true;
+  features_12.descriptorBindingSampledImageUpdateAfterBind = true;
+  features_12.descriptorBindingStorageBufferUpdateAfterBind = true;
+  features_12.descriptorBindingStorageImageUpdateAfterBind = true;
 
   VkPhysicalDeviceVulkan11Features features_11{};
   features_11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;

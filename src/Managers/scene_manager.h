@@ -13,7 +13,7 @@
 
 const uint32_t SCENE_MAX_OBJECTS = 1000;
 const uint32_t SCENE_MAX_INSTANCES = 2000;
-const uint32_t SCENE_MAX_INDICES = 2000000;
+const uint32_t SCENE_MAX_INDICES = 10000000;
 
 struct Object {
   Material material;

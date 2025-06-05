@@ -10,6 +10,8 @@ struct ImageData {
   int32_t height;
 };
 
+void GetImageInfo(std::string file_name, int32_t *width, int32_t *height);
+
 void LoadImageData(std::string file_name, ImageData &image_data,
                    bool float_data = false, bool flip = false);
 

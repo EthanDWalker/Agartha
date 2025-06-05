@@ -11,6 +11,8 @@ struct AllocatedImage {
   VkFormat format;
 };
 
+uint32_t CalculateMipLevels(VkExtent3D image_extent);
+
 void GenerateMipmaps(VkCommandBuffer cmd, AllocatedImage &image);
 
 void CreateImageSampler(VulkanContext &context, VkSampler &sampler);

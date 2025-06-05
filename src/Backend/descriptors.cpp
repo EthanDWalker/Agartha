@@ -117,17 +117,6 @@ void DescriptorBuilder::BindImages(uint32_t binding,
   writes.push_back(image_write_array);
 }
 
-void DescriptorBuilder::BindNullImages(uint32_t binding, uint32_t amount) {
-  VkDescriptorSetLayoutBinding new_binding{};
-  new_binding.binding = binding;
-  new_binding.descriptorCount = amount;
-  new_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-
-  bindings.push_back(new_binding);
-
-  writes.push_back(nullptr);
-}
-
 void DescriptorBuilder::BindStorageImages(
     uint32_t binding, std::vector<VkImageView> image_views) {
   VkDescriptorSetLayoutBinding new_binding{};
@@ -200,10 +189,26 @@ void DescriptorBuilder::Build(VulkanContext &context,
     binding.stageFlags = stage_flags;
   }
 
+  std::vector<VkDescriptorBindingFlags> binding_flags{};
+  binding_flags.resize(bindings.size());
+
+  for (auto &flag : binding_flags) {
+    flag = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+  }
+
+  VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags_info{};
+  binding_flags_info.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+  binding_flags_info.bindingCount = binding_flags.size();
+  binding_flags_info.pBindingFlags = binding_flags.data();
+
   VkDescriptorSetLayoutCreateInfo ds_layout_ci{};
   ds_layout_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   ds_layout_ci.bindingCount = bindings.size();
   ds_layout_ci.pBindings = bindings.data();
+  ds_layout_ci.flags =
+      VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+  ds_layout_ci.pNext = &binding_flags_info;
 
   VK_CHECK(vkCreateDescriptorSetLayout(context.device, &ds_layout_ci, nullptr,
                                        &layout));
@@ -266,6 +271,7 @@ void DescriptorPool::NewPool(VulkanContext &context) {
   descriptor_pool_ci.pPoolSizes = pool_sizes.data();
   descriptor_pool_ci.poolSizeCount = pool_sizes.size();
   descriptor_pool_ci.maxSets = 256;
+  descriptor_pool_ci.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
 
   VK_CHECK(vkCreateDescriptorPool(context.device, &descriptor_pool_ci, nullptr,
                                   &current_pool));

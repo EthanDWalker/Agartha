@@ -129,7 +129,7 @@ void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
                           &image.image, &image.allocation, nullptr));
 
   VkImageAspectFlags aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT;
-  if (format == VK_FORMAT_D32_SFLOAT) {
+  if (format == VK_FORMAT_D32_SFLOAT || format == VK_FORMAT_D16_UNORM) {
     aspect_flags = VK_IMAGE_ASPECT_DEPTH_BIT;
   }
 

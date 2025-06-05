@@ -6,21 +6,26 @@
 #include "Loaders/model.h"
 #include "types.h"
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 
 static const std::filesystem::path texture_dir = "../assets/textures/";
 
-struct TextureManager {
-  const uint32_t MAX_TEXTURES = 1024;
+const uint32_t MAX_TEXTURES = 1024;
 
+struct TextureManager {
   VkDescriptorSet descriptor_set;
   VkDescriptorSetLayout descriptor_set_layout;
 
   std::vector<AllocatedImage> texture_data;
   std::unordered_map<std::string, uint32_t> texture_indices;
+  std::mutex texture_mutex;
+
+  uint32_t texture_index;
 
   void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
-  Material GetMaterial(MaterialData data);
+  uint32_t GetTexture(VulkanContext &context, std::string filename);
+  Material GetMaterial(VulkanContext &context, MaterialData data);
   void Destroy(VulkanContext &context);
 };

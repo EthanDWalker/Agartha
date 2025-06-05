@@ -47,6 +47,7 @@ struct Engine {
   VkSampler sampler;
   VkSampler shadow_sampler;
 
+  AllocatedImage main_image;
   AllocatedImage draw_image;
   AllocatedImage depth_image;
   AllocatedImage shadow_image;

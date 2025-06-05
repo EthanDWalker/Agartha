@@ -8,6 +8,7 @@
 #include <fastgltf/util.hpp>
 #include <filesystem>
 #include <fmt/base.h>
+#include <future>
 #include <iterator>
 #include <limits>
 #include <string>
@@ -139,7 +140,6 @@ std::vector<MeshData> LoadModel(std::string path) {
   std::vector<MeshData> mesh_data;
   std::vector<size_t> unique_check_sums;
 
-  Timer timer{};
   for (fastgltf::Mesh &mesh : asset->meshes) {
     mesh_data.reserve(mesh.primitives.size() + mesh_data.size());
     unique_check_sums.reserve(mesh.primitives.size() +

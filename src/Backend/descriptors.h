@@ -51,7 +51,6 @@ struct DescriptorBuilder {
                          std::vector<VkImageView> image_views);
   void BindSampler(uint32_t binding, VkSampler sampler);
   void BindImage(uint32_t binding, VkImageView image_view);
-  void BindNullImages(uint32_t binding, uint32_t amount);
   void BindImages(uint32_t binding, std::span<AllocatedImage> image_views);
 
   void Build(VulkanContext &context, VkShaderStageFlags stage_flags,

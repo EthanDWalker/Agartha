@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fmt/base.h>
+#include <mutex>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -119,15 +120,15 @@ void Engine::CreateRenderGraph() {
                                      depth_image);
     main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                     draw_image);
+                                     main_image);
     main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                      shadow_image);
 
     builder.AddPass(2, main_pass_dep.dependency, [&](VkCommandBuffer cmd) {
-      VkViewport viewport = vkinit::Viewport(draw_image.extent);
+      VkViewport viewport = vkinit::Viewport(main_image.extent);
       vkCmdSetViewport(cmd, 0, 1, &viewport);
-      VkRect2D scissor = vkinit::Scissor(draw_image.extent);
+      VkRect2D scissor = vkinit::Scissor(main_image.extent);
       vkCmdSetScissor(cmd, 0, 1, &scissor);
 
       VkClearColorValue clear_color_value{};
@@ -137,18 +138,20 @@ void Engine::CreateRenderGraph() {
       clear_value.color = clear_color_value;
 
       VkRenderingAttachmentInfo color_att =
-          vkinit::AttachmentInfo(draw_image.image_view, nullptr, &clear_value,
+          vkinit::AttachmentInfo(main_image.image_view, nullptr, &clear_value,
                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
       VkRenderingAttachmentInfo depth_att = vkinit::DepthAttachmentInfo(
           depth_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
       VkRenderingInfo rendering_info =
-          vkinit::RenderingInfo(draw_image.extent, &color_att, &depth_att);
+          vkinit::RenderingInfo(main_image.extent, &color_att, &depth_att);
 
       vkCmdBeginRendering(cmd, &rendering_info);
 
       {
+        std::lock_guard<std::mutex> lock(texture_manager.texture_mutex);
+
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           mesh_pipeline.obj);
 
@@ -182,6 +185,7 @@ void Engine::CreateRenderGraph() {
       }
 
       {
+        std::lock_guard<std::mutex> lock(texture_manager.texture_mutex);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           skybox_pipeline.obj);
 
@@ -217,18 +221,19 @@ void Engine::CreateRenderGraph() {
     });
   }
 
+  // draw image switched with main image
   render_graph.Init(context, window);
   render_graph.render_graph = builder.render_graph;
   render_graph.root_callback = [&](VkCommandBuffer cmd, VkImage swapchain_image,
                                    VkExtent2D swapchain_extent) {
     TransitionImage(cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, draw_image.image);
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, main_image.image);
 
     TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, swapchain_image);
 
-    CopyImageToImage(cmd, draw_image.image, swapchain_image,
-                     {draw_image.extent.width, draw_image.extent.height},
+    CopyImageToImage(cmd, main_image.image, swapchain_image,
+                     {main_image.extent.width, main_image.extent.height},
                      swapchain_extent);
 
     TransitionImage(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -259,12 +264,19 @@ void Engine::Init() {
 
   CreateAllocatedImage(
       context, draw_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+          VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+      main_image);
+
+  CreateAllocatedImage(
+      context, draw_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-          VK_IMAGE_USAGE_STORAGE_BIT,
+          VK_IMAGE_USAGE_TRANSFER_DST_BIT,
       draw_image);
 
   CreateAllocatedImage(context, draw_image_extent, VK_FORMAT_D32_SFLOAT,
-                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                           VK_IMAGE_USAGE_SAMPLED_BIT,
                        depth_image);
 
   CreateAllocatedImage(context, {1024 * 4, 1024 * 4, 1}, VK_FORMAT_D32_SFLOAT,
@@ -433,11 +445,12 @@ void Engine::Init() {
     SCOPED_TIMER("Scene load");
     for (auto &mesh_data : gltf_data) {
       Material object_material =
-          texture_manager.GetMaterial(mesh_data.material_data);
+          texture_manager.GetMaterial(context, mesh_data.material_data);
       scene_manager.AddObject(context, immediate_submit, mesh_data,
                               object_material);
     }
   }
+
   MeshData cube_data{};
   cube_data.indices = cube_indices;
   cube_data.vertices = cube_vertices;
@@ -532,6 +545,7 @@ void Engine::Destroy() {
   DestroyAllocatedImage(context, draw_image);
   DestroyAllocatedImage(context, depth_image);
   DestroyAllocatedImage(context, shadow_image);
+  DestroyAllocatedImage(context, main_image);
 
   DestroyPipeline(context, mesh_pipeline);
   DestroyPipeline(context, skybox_pipeline);

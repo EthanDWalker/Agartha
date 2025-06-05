@@ -86,7 +86,7 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
 
   {
     const float z_near = 0.01f;
-    const float z_far = 1000.0f;
+    const float z_far = 1000000.0f;
     const float aspect_ratio = window_width / static_cast<float>(window_height);
     const float fov_y = glm::radians(70.0f);
 
@@ -124,6 +124,8 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
     frustum.far = glm::normalize(clip[3] - clip[2]);
 
     buffer_data.frustum = frustum;
+
+    buffer_data.inv_view_proj = glm::inverse(projection * view_matrix);
 
     UpdateBuffer(context, immediate_submit, &buffer_data, sizeof(CameraBuffer),
                  0, buffer);

@@ -6,6 +6,12 @@
 #include <fmt/core.h>
 #include <stb_image.h>
 
+void GetImageInfo(std::string file_name, int32_t *width, int32_t *height) {
+  std::string full_path = image_file_path + file_name;
+  int32_t comp;
+  stbi_info(full_path.c_str(), width, height, &comp);
+}
+
 void LoadImageData(std::string file_name, ImageData &image_data,
                    bool float_data, bool flip) {
   stbi_set_flip_vertically_on_load(flip);
