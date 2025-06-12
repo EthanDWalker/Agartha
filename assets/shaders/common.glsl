@@ -19,7 +19,8 @@ struct Camera {
     vec3 viewPos;
     float padding;
     Frustum frustum;
-    mat4 invViewProj;
+    mat4 invView;
+    mat4 invProj;
 };
 
 struct PointLight {

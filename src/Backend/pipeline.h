@@ -3,8 +3,6 @@
 #include <optional>
 #include <string>
 #include <vector>
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_core.h>
 
 const std::string shader_file_path = "../assets/shaders/";
 

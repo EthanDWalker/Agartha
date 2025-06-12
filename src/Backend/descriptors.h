@@ -6,7 +6,6 @@
 #include <span>
 #include <utility>
 #include <vector>
-#include <vulkan/vulkan.h>
 
 struct DescriptorPool {
   static constexpr std::array<std::pair<VkDescriptorType, float>, 6>

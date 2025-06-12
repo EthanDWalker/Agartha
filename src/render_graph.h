@@ -8,8 +8,6 @@
 #include <cstdint>
 #include <functional>
 #include <vector>
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_core.h>
 
 constexpr uint8_t FRAME_OVERLAP = 3;
 

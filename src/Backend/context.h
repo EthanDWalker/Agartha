@@ -1,10 +1,12 @@
 #pragma once
 #include <cstdint>
-#define GLFW_INCLUDE_VULKAN
+#include <mutex>
+#include <Volk/volk.h>
 #include <GLFW/glfw3.h>
 #include <vma/vk_mem_alloc.h>
 
 struct VulkanContext {
+  std::mutex graphics_queue_mutex;
   VkInstance instance;
   VkDevice device;
   VkPhysicalDevice physical_device;

@@ -9,20 +9,22 @@
 #include <glm/vec3.hpp>
 #include <queue>
 #include <vector>
-#include <vulkan/vulkan.h>
 
-const uint32_t SCENE_MAX_OBJECTS = 1000;
-const uint32_t SCENE_MAX_INSTANCES = 2000;
-const uint32_t SCENE_MAX_INDICES = 10000000;
+const uint32_t SCENE_MAX_OBJECTS = 2048;
+const uint32_t SCENE_MAX_INSTANCES = 4096;
+const uint32_t SCENE_MAX_INDICES = 10000000; // 10 million
 
 struct Object {
   Material material;
 };
 
-struct Mesh {
-  AllocatedBuffer vertex_buffer;
-  uint32_t first_index;
-  uint32_t index_count;
+struct SphereBounds {
+  float radius;
+};
+
+struct AabbBounds {
+  glm::vec4 min;
+  glm::vec4 max;
 };
 
 struct GpuMesh {
@@ -31,22 +33,12 @@ struct GpuMesh {
   uint32_t index_count;
 };
 
-// center is stored in instance
-struct SphereBounds {
-  float radius;
-};
-
-struct Instance {
-  glm::mat4 matrix;
-  glm::vec3 color;
-  uint32_t object_index;
-};
-
 struct SceneManager {
   AllocatedBuffer object_buffer;
   AllocatedBuffer mesh_buffer;
   AllocatedBuffer sphere_bounds_buffer;
   AllocatedBuffer instance_buffer;
+  AllocatedBuffer aabb_bounds_buffer;
   AllocatedBuffer index_buffer;
 
   std::vector<Mesh> meshes;
@@ -60,20 +52,26 @@ struct SceneManager {
   VkDescriptorSet instance_descriptor_set;
   VkDescriptorSetLayout instance_descriptor_layout;
 
+  std::mutex object_mutex;
+  std::mutex instance_mutex;
+
   uint32_t object_index;
   uint32_t instance_index;
   uint32_t last_index;
 
   void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
 
-  uint32_t AddObject(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                     MeshData &data, Material material = {});
+  std::vector<uint32_t> AddObjects(VulkanContext &context,
+                                   std::vector<MeshData> data,
+                                   std::vector<Material> materials = {});
+
+  uint32_t AddObject(VulkanContext &context, MeshData &data,
+                     Material material = {});
 
   void RemoveObject(VulkanContext &context, ImmediateSubmit &immediate_submit,
                     uint32_t index);
 
-  uint32_t AddInstance(VulkanContext &context,
-                       ImmediateSubmit &immediate_submit, Instance *instance);
+  uint32_t AddInstance(VulkanContext &context, Instance *instance);
 
   void EditInstance(VulkanContext &context, ImmediateSubmit &immediate_submit,
                     Instance *instance, uint32_t index);

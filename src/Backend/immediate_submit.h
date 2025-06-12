@@ -2,7 +2,6 @@
 
 #include "Backend/context.h"
 #include <functional>
-#include <vulkan/vulkan.h>
 
 struct ImmediateSubmit {
   VkCommandPool command_pool;

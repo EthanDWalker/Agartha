@@ -8,7 +8,6 @@
 #include <fastgltf/util.hpp>
 #include <filesystem>
 #include <fmt/base.h>
-#include <future>
 #include <iterator>
 #include <limits>
 #include <string>
@@ -17,41 +16,24 @@
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 
-std::pair<glm::vec3, glm::vec3> GetSphereBounds(std::span<Vertex> vertices) {
-  glm::vec3 min{std::numeric_limits<float>::max()};
-  glm::vec3 max{std::numeric_limits<float>::lowest()};
-
+void GetMeshBounds(std::span<Vertex> vertices, float &sphere_bounds,
+                   std::pair<glm::vec3, glm::vec3> &aabb_bounds) {
+  aabb_bounds.first = glm::vec3(std::numeric_limits<float>::max());
+  aabb_bounds.second = glm::vec3(std::numeric_limits<float>::min());
   for (const auto &vertex : vertices) {
     glm::vec3 position = vertex.position;
-
-    if (vertex.position.x < min.x) {
-      min.x = vertex.position.x;
+    float length = glm::length(position);
+    if (length > sphere_bounds) {
+      sphere_bounds = length;
     }
-    if (vertex.position.y < min.y) {
-      min.y = vertex.position.y;
-    }
-    if (vertex.position.z < min.z) {
-      min.z = vertex.position.z;
-    }
-
-    if (vertex.position.x > max.x) {
-      max.x = vertex.position.x;
-    }
-    if (vertex.position.y > max.y) {
-      max.y = vertex.position.y;
-    }
-    if (vertex.position.z > max.z) {
-      max.z = vertex.position.z;
-    }
+    aabb_bounds.first = glm::min(aabb_bounds.first, position);
+    aabb_bounds.second = glm::max(aabb_bounds.second, position);
   }
-
-  return {min, max};
 }
 
 MaterialData ParseMaterialData(fastgltf::Material &material,
                                std::span<size_t> textures,
                                std::span<std::string> images) {
-
   MaterialData new_material;
   new_material.albedo =
       material.pbrData.baseColorTexture.has_value()
@@ -227,19 +209,19 @@ std::vector<MeshData> LoadModel(std::string path) {
           vertex.position -= centroid;
         }
 
-        auto new_sphere_bounds = GetSphereBounds(vertices);
+        float bounds_radius;
+        std::pair<glm::vec3, glm::vec3> aabb_bounds;
+        GetMeshBounds(vertices, bounds_radius, aabb_bounds);
 
         std::vector<glm::mat4> instances = {new_instance};
 
         mesh_data.push_back({
+            .material_data = material_data,
             .vertices = vertices,
             .indices = indices,
             .instances = instances,
-            .bounds_radius = glm::length(new_sphere_bounds.first) >
-                                     glm::length(new_sphere_bounds.second)
-                                 ? glm::length(new_sphere_bounds.first)
-                                 : glm::length(new_sphere_bounds.second),
-            .material_data = material_data,
+            .aabb_bounds = aabb_bounds,
+            .bounds_radius = bounds_radius,
         });
       }
     }

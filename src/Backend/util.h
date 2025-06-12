@@ -1,8 +1,9 @@
 #pragma once
+#include "buffer.h"
+#include "context.h"
 #include <assert.h>
 #include <fmt/core.h>
 #include <vulkan/vk_enum_string_helper.h>
-#include <vulkan/vulkan.h>
 
 #define VK_CHECK(x)                                                            \
   do {                                                                         \
@@ -12,3 +13,6 @@
       assert(err >= 0);                                                        \
     }                                                                          \
   } while (0)
+
+VkDeviceAddress GetDeviceAddress(VulkanContext &context,
+                                 AllocatedBuffer &buffer);

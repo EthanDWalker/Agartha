@@ -4,8 +4,6 @@
 #include <limits>
 #include <mutex>
 
-std::mutex queue_mutex;
-
 void ImmediateSubmit::SubmitAsync(
     VulkanContext &context,
     std::function<void(VkCommandBuffer cmd)> &&function) {
@@ -54,7 +52,7 @@ void ImmediateSubmit::SubmitAsync(
       vkinit::SubmitInfo(&cmd_submit_info, nullptr, nullptr);
 
   {
-    std::lock_guard<std::mutex> lock(queue_mutex);
+    std::lock_guard<std::mutex> lock(context.graphics_queue_mutex);
 
     VK_CHECK(vkQueueSubmit2(context.graphics_queue, 1, &submit_info, fence));
   }
@@ -112,7 +110,7 @@ void ImmediateSubmit::Submit(
       vkinit::SubmitInfo(&cmd_submit_info, nullptr, nullptr);
 
   {
-    std::lock_guard<std::mutex> lock(queue_mutex);
+    std::lock_guard<std::mutex> lock(context.graphics_queue_mutex);
 
     VK_CHECK(vkQueueSubmit2(context.graphics_queue, 1, &submit_info, fence));
   }

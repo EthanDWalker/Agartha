@@ -1,7 +1,6 @@
 #pragma once
 #include "Backend/context.h"
 #include <vector>
-#include <vulkan/vulkan.h>
 
 struct Swapchain {
   std::vector<VkImage> images;

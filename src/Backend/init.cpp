@@ -1,5 +1,4 @@
 #include "init.h"
-#include <vulkan/vulkan_core.h>
 
 namespace vkinit {
 VkCommandBufferBeginInfo

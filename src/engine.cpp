@@ -5,22 +5,23 @@
 #include "Backend/descriptors.h"
 #include "Backend/init.h"
 #include "Backend/pipeline.h"
+#include "Backend/raytracing.h"
+#include "Backend/util.h"
 #include "Loaders/model.h"
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
-#include "Managers/ui_manager.h"
 #include "fmt/format.h"
 #include "render_graph.h"
 #include "timer.h"
 #include "types.h"
 #include <GLFW/glfw3.h>
+#include <Volk/volk.h>
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <fmt/base.h>
 #include <mutex>
 #include <vector>
-#include <vulkan/vulkan_core.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
@@ -29,6 +30,21 @@ void Engine::CreateRenderGraph() {
   RenderGraphBuilder builder{};
 
   {
+    builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cull_pipeline.obj);
+
+      std::array<VkDescriptorSet, 4> ds = {
+          cull_descriptor_set, camera.descriptor_set,
+          scene_manager.instance_descriptor_set,
+          scene_manager.object_descriptor_set};
+
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              cull_pipeline.layout, 0, ds.size(), ds.data(), 0,
+                              nullptr);
+
+      vkCmdDispatch(cmd, std::ceil(scene_manager.instance_index / 64.0f), 1, 1);
+    });
+
     builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                         shadow_cull_pipeline.obj);
@@ -46,21 +62,6 @@ void Engine::CreateRenderGraph() {
   }
 
   {
-    builder.AddPass(1, {}, [&](VkCommandBuffer cmd) {
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cull_pipeline.obj);
-
-      std::array<VkDescriptorSet, 4> ds = {
-          cull_descriptor_set, camera.descriptor_set,
-          scene_manager.instance_descriptor_set,
-          scene_manager.object_descriptor_set};
-
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                              cull_pipeline.layout, 0, ds.size(), ds.data(), 0,
-                              nullptr);
-
-      vkCmdDispatch(cmd, std::ceil(scene_manager.instance_index / 64.0f), 1, 1);
-    });
-
     DependencyBuilder shadow_pass_dep{};
 
     shadow_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
@@ -152,7 +153,7 @@ void Engine::CreateRenderGraph() {
         std::lock_guard<std::mutex> lock(texture_manager.texture_mutex);
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          mesh_pipeline.obj);
+                          main_pipeline.obj);
 
         uint32_t draw_count = 0;
         memcpy(&draw_count, culled_draw_count_buffer.info.pMappedData,
@@ -164,7 +165,7 @@ void Engine::CreateRenderGraph() {
         }
 
         std::array<VkDescriptorSet, 5> ds = {
-            mesh_descriptor_set,
+            main_descriptor_set,
             texture_manager.descriptor_set,
             camera.descriptor_set,
             scene_manager.object_descriptor_set,
@@ -172,7 +173,7 @@ void Engine::CreateRenderGraph() {
         };
 
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                mesh_pipeline.layout, 0, ds.size(), ds.data(),
+                                main_pipeline.layout, 0, ds.size(), ds.data(),
                                 0, nullptr);
 
         vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
@@ -182,8 +183,6 @@ void Engine::CreateRenderGraph() {
             cmd, draw_indirect_buffer.buffer, 0, draw_count,
             static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
       }
-
-      ui_manager.Render(cmd);
 
       vkCmdEndRendering(cmd);
     });
@@ -221,8 +220,6 @@ void Engine::Init() {
   camera.Create(context, descriptor_builder);
   texture_manager.Init(context, descriptor_builder);
   scene_manager.Init(context, descriptor_builder);
-  ui_manager.Create(context, VK_FORMAT_R16G16B16A16_SFLOAT,
-                    VK_FORMAT_D32_SFLOAT, window);
 
   VkExtent3D draw_image_extent = {
       1600,
@@ -232,15 +229,8 @@ void Engine::Init() {
 
   CreateAllocatedImage(
       context, draw_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
-      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-          VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
       main_image);
-
-  CreateAllocatedImage(
-      context, draw_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
-      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-          VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-      draw_image);
 
   CreateAllocatedImage(context, draw_image_extent, VK_FORMAT_D32_SFLOAT,
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
@@ -317,12 +307,13 @@ void Engine::Init() {
     descriptor_builder.BindUniformBuffer(5, light_matrix_buffer.buffer);
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
-        mesh_descriptor_set, mesh_descriptor_layout);
+        main_descriptor_set, main_descriptor_layout);
 
     GraphicsPipelineBuilder pipeline_builder;
-    pipeline_builder.SetShaders(context, "mesh.vert.spv", "mesh.frag.spv");
+    pipeline_builder.SetShaders(context, "main_pass.vert.spv",
+                                "main_pass.frag.spv");
     pipeline_builder.Default();
-    pipeline_builder.AddDescriptorSetLayout(mesh_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(main_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         texture_manager.descriptor_set_layout);
     pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
@@ -330,7 +321,7 @@ void Engine::Init() {
         scene_manager.object_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);
-    pipeline_builder.Build(context, mesh_pipeline);
+    pipeline_builder.Build(context, main_pipeline);
   }
 
   {
@@ -391,17 +382,26 @@ void Engine::Init() {
     pipeline_builder.Build(context, shadow_cull_pipeline);
   }
 
-  std::vector<MeshData> gltf_data = LoadModel("Sponza.gltf");
-
-  {
+  std::thread([&]() {
     SCOPED_TIMER("Scene load");
-    for (auto &mesh_data : gltf_data) {
-      Material object_material =
-          texture_manager.GetMaterial(context, mesh_data.material_data);
-      scene_manager.AddObject(context, immediate_submit, mesh_data,
-                              object_material);
+    auto gltf_data = LoadModel("Sponza.gltf");
+
+    for (auto &mesh : gltf_data) {
+      scene_manager.AddObject(
+          context, mesh,
+          texture_manager.GetMaterial(context, mesh.material_data));
     }
-  }
+
+    {
+      ASBuilder as_builder{};
+      as_builder.SetMesh(context, scene_manager.meshes.front(),
+                         GetDeviceAddress(context, scene_manager.index_buffer));
+      AccelerationStructure as = as_builder.CreateBottomLevelAS(
+          context, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+
+      DestroyAccelerationStructure(context, as);
+    }
+  }).detach();
 
   CreateRenderGraph();
 }
@@ -429,20 +429,23 @@ void Engine::Run() {
                  light_matrix_buffer);
   }
 
+  float delta_time;
   while (!glfwWindowShouldClose(window)) {
     Timer timer{};
     glfwPollEvents();
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+      vkDeviceWaitIdle(context.device);
       glfwSetWindowShouldClose(window, true);
     }
 
-    camera.Update(context, immediate_submit, window, 0.001f);
+    camera.Update(context, immediate_submit, window, delta_time);
 
     render_graph.Render(context);
     if (render_graph.resize_requested == true) {
       render_graph.Resize(context, window);
     }
 
+    delta_time = timer.Elapsed();
     glfwSetWindowTitle(
         window,
         fmt::format("FPS: {}", std::round(1 / timer.Elapsed())).c_str());
@@ -456,11 +459,10 @@ void Engine::Destroy() {
   texture_manager.Destroy(context);
   descriptor_builder.Destroy(context);
   scene_manager.Destroy(context);
-  ui_manager.Destroy();
   immediate_submit.Destroy(context);
   camera.Destroy(context);
 
-  vkDestroyDescriptorSetLayout(context.device, mesh_descriptor_layout, nullptr);
+  vkDestroyDescriptorSetLayout(context.device, main_descriptor_layout, nullptr);
   vkDestroyDescriptorSetLayout(context.device, shadow_descriptor_layout,
                                nullptr);
   vkDestroyDescriptorSetLayout(context.device, cull_descriptor_layout, nullptr);
@@ -481,12 +483,11 @@ void Engine::Destroy() {
   DestroyBuffer(context, shadow_draw_indirect_buffer);
   DestroyBuffer(context, shadow_visible_instance_buffer);
 
-  DestroyAllocatedImage(context, draw_image);
   DestroyAllocatedImage(context, depth_image);
   DestroyAllocatedImage(context, shadow_image);
   DestroyAllocatedImage(context, main_image);
 
-  DestroyPipeline(context, mesh_pipeline);
+  DestroyPipeline(context, main_pipeline);
   DestroyPipeline(context, shadow_pipeline);
   DestroyPipeline(context, cull_pipeline);
   DestroyPipeline(context, shadow_cull_pipeline);

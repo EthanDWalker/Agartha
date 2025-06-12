@@ -1,8 +1,8 @@
 #pragma once
+#include "Backend/buffer.h"
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
-#include <vulkan/vulkan.h>
 
 struct Vertex {
   glm::vec3 position;
@@ -27,4 +27,16 @@ struct Material {
   int32_t emissive{-1};
   int32_t normal{-1};
   int32_t ambient_occlusion{-1};
+};
+
+struct Mesh {
+  AllocatedBuffer vertex_buffer;
+  uint32_t first_index;
+  uint32_t index_count;
+};
+
+struct Instance {
+  glm::mat4 matrix;
+  glm::vec3 color;
+  uint32_t object_index;
 };

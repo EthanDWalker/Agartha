@@ -1,6 +1,5 @@
 #pragma once
 #include "Backend/context.h"
-#include <vulkan/vulkan.h>
 
 struct FrameData {
   VkCommandPool command_pool;

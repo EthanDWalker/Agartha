@@ -3,8 +3,6 @@
 #include "Backend/init.h"
 #include "Backend/util.h"
 #include <cstdint>
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_core.h>
 
 uint32_t CalculateMipLevels(VkExtent3D image_extent) {
   return uint32_t(std::floor(

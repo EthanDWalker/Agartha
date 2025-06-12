@@ -15,11 +15,12 @@ struct MaterialData {
 };
 
 struct MeshData {
+  MaterialData material_data;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   std::vector<glm::mat4> instances;
+  std::pair<glm::vec3, glm::vec3> aabb_bounds;
   float bounds_radius;
-  MaterialData material_data;
 };
 
 std::vector<MeshData> LoadModel(std::string path);

@@ -21,7 +21,8 @@ struct CameraBuffer {
   glm::vec3 view_pos;
   float padding;
   Frustum frustum;
-  glm::mat4 inv_view_proj;
+  glm::mat4 inv_view;
+  glm::mat4 inv_proj;
 };
 
 struct Camera {

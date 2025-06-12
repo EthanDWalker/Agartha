@@ -1,12 +1,14 @@
 #include "context.h"
+#include "fmt/base.h"
+#define VOLK_IMPLEMENTATION
 #include "Backend/util.h"
 #include <GLFW/glfw3.h>
 #include <VkBootstrap.h>
+#include <Volk/volk.h>
 #include <cassert>
-#include <vma/vk_mem_alloc.h>
-#include <vulkan/vulkan.h>
 
 void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
+  volkInitialize();
   vkb::InstanceBuilder instance_builder;
   auto instance_return = instance_builder.set_app_name("Engine")
                              .request_validation_layers()
@@ -19,6 +21,7 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   vkb::Instance vkb_instance = instance_return.value();
 
   context.instance = vkb_instance.instance;
+  volkLoadInstance(context.instance);
   context.debug_messenger = vkb_instance.debug_messenger;
 
   VK_CHECK(glfwCreateWindowSurface(context.instance, window, nullptr,
@@ -49,26 +52,33 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   features_12.descriptorBindingStorageBufferUpdateAfterBind = true;
   features_12.descriptorBindingStorageImageUpdateAfterBind = true;
 
-  VkPhysicalDeviceVulkan11Features features_11{};
-  features_11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-  features_11.shaderDrawParameters = true;
-
   VkPhysicalDeviceRobustness2FeaturesEXT robustness2{};
   robustness2.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
   robustness2.pNext = nullptr;
   robustness2.nullDescriptor = true;
 
+  VkPhysicalDeviceAccelerationStructureFeaturesKHR as_features{};
+  as_features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+  as_features.accelerationStructure = true;
+
   vkb::PhysicalDeviceSelector physical_device_selector{vkb_instance};
   vkb::PhysicalDevice vkb_physical_device =
       physical_device_selector.set_minimum_version(1, 3)
           .set_required_features_13(features_13)
           .set_required_features_12(features_12)
-          //.set_required_features_11(features_11)
           .set_required_features(features)
           .set_surface(context.surface)
           .add_required_extension("VK_EXT_robustness2")
           .add_required_extension_features(robustness2)
+          .add_required_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
+          .add_required_extension_features(as_features)
+          .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
+          .add_required_extension(
+              VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
+          .add_required_extension(VK_KHR_SPIRV_1_4_EXTENSION_NAME)
+          .add_required_extension(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)
           .select()
           .value();
   context.physical_device = vkb_physical_device.physical_device;
@@ -77,17 +87,23 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
 
   vkb::Device vkb_device = device_builder.build().value();
   context.device = vkb_device.device;
+  volkLoadDevice(context.device);
 
   context.graphics_queue =
       vkb_device.get_queue(vkb::QueueType::graphics).value();
   context.graphics_queue_index =
       vkb_device.get_queue_index(vkb::QueueType::graphics).value();
 
+  VmaVulkanFunctions vulkan_functions{};
+  vulkan_functions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+  vulkan_functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
   VmaAllocatorCreateInfo allocator_ci{};
   allocator_ci.device = context.device;
   allocator_ci.instance = context.instance;
   allocator_ci.physicalDevice = context.physical_device;
   allocator_ci.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+  allocator_ci.pVulkanFunctions = &vulkan_functions;
   VK_CHECK(vmaCreateAllocator(&allocator_ci, &context.allocator));
 }
 

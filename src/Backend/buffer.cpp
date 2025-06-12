@@ -51,6 +51,31 @@ void CreateBufferData(VulkanContext &context, ImmediateSubmit immediate_submit,
   DestroyBuffer(context, upload_buffer);
 }
 
+void CreateBufferDataAsync(VulkanContext &context, void *data, size_t size,
+                           VkBufferUsageFlags usage, AllocatedBuffer &buffer) {
+  AllocatedBuffer upload_buffer;
+  CreateBuffer(context, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+               VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
+
+  memcpy(upload_buffer.allocation->GetMappedData(), data, size);
+
+  CreateBuffer(context, size,
+               VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                   VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
+               VMA_MEMORY_USAGE_GPU_ONLY, buffer);
+
+  ImmediateSubmit::SubmitAsync(context, [&](VkCommandBuffer cmd) {
+    VkBufferCopy buffer_copy{};
+    buffer_copy.size = size;
+    buffer_copy.dstOffset = 0;
+    buffer_copy.srcOffset = 0;
+
+    vkCmdCopyBuffer(cmd, upload_buffer.buffer, buffer.buffer, 1, &buffer_copy);
+  });
+
+  DestroyBuffer(context, upload_buffer);
+}
+
 // Size is the size of the new data not the entire buffer
 void UpdateBuffer(VulkanContext &context, ImmediateSubmit &immediate_submit,
                   void *data, size_t size, size_t offset,
@@ -62,6 +87,26 @@ void UpdateBuffer(VulkanContext &context, ImmediateSubmit &immediate_submit,
   memcpy(upload_buffer.info.pMappedData, data, size);
 
   immediate_submit.Submit(context, [&](VkCommandBuffer cmd) {
+    VkBufferCopy buffer_copy{};
+    buffer_copy.size = size;
+    buffer_copy.dstOffset = offset;
+    buffer_copy.srcOffset = 0;
+
+    vkCmdCopyBuffer(cmd, upload_buffer.buffer, buffer.buffer, 1, &buffer_copy);
+  });
+
+  DestroyBuffer(context, upload_buffer);
+}
+
+void UpdateBufferAsync(VulkanContext &context, void *data, size_t size,
+                       size_t offset, AllocatedBuffer &buffer) {
+  AllocatedBuffer upload_buffer;
+  CreateBuffer(context, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+               VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
+
+  memcpy(upload_buffer.info.pMappedData, data, size);
+
+  ImmediateSubmit::SubmitAsync(context, [&](VkCommandBuffer cmd) {
     VkBufferCopy buffer_copy{};
     buffer_copy.size = size;
     buffer_copy.dstOffset = offset;

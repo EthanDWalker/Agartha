@@ -26,11 +26,8 @@ static PointLight point_light{
 };
 
 static DirectionalLight directional_light{
-    .direction =
-        {
-            glm::vec4(glm::normalize(glm::vec3(-1.0f, -4.0f, -1.0f)), 1.0),
-        },
-};
+    .direction = {
+        glm::vec4(glm::normalize(glm::vec3(-1.0f, -4.0f, -1.0f)), 1.0)}};
 
 struct Engine {
   VulkanContext context;
@@ -46,7 +43,6 @@ struct Engine {
   VkSampler shadow_sampler;
 
   AllocatedImage main_image;
-  AllocatedImage draw_image;
   AllocatedImage depth_image;
   AllocatedImage shadow_image;
 
@@ -63,13 +59,13 @@ struct Engine {
   AllocatedBuffer shadow_draw_indirect_buffer;
   AllocatedBuffer shadow_visible_instance_buffer;
 
-  Pipeline mesh_pipeline;
+  Pipeline main_pipeline;
   Pipeline shadow_pipeline;
   Pipeline cull_pipeline;
   Pipeline shadow_cull_pipeline;
 
-  VkDescriptorSet mesh_descriptor_set;
-  VkDescriptorSetLayout mesh_descriptor_layout;
+  VkDescriptorSet main_descriptor_set;
+  VkDescriptorSetLayout main_descriptor_layout;
 
   VkDescriptorSet cull_descriptor_set;
   VkDescriptorSetLayout cull_descriptor_layout;

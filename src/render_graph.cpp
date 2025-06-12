@@ -9,7 +9,7 @@
 #include "GLFW/glfw3.h"
 #include <cstdint>
 #include <limits>
-#include <vulkan/vulkan_core.h>
+#include <mutex>
 
 void DependencyBuilder::AddDependency(AllocatedBuffer buffer,
                                       VkAccessFlagBits2 src_access,
@@ -155,7 +155,7 @@ void RenderGraph::Render(VulkanContext &context) {
     for (auto &render_pass : render_pass_level) {
 
       if (render_pass.condition != nullptr) {
-        if (*render_pass.condition == false) {
+        if (render_pass.condition == false) {
           continue;
         }
       }
@@ -214,8 +214,11 @@ void RenderGraph::Render(VulkanContext &context) {
   VkSubmitInfo2 submit_info = vkinit::SubmitInfo(
       &cmd_submit_info, &signal_semaphore_info, &wait_semaphore_info);
 
-  VK_CHECK(vkQueueSubmit2(context.graphics_queue, 1, &submit_info,
-                          frame.render_fence));
+  {
+    std::lock_guard<std::mutex> lock(context.graphics_queue_mutex);
+    VK_CHECK(vkQueueSubmit2(context.graphics_queue, 1, &submit_info,
+                            frame.render_fence));
+  }
 
   VkPresentInfoKHR present_info{};
   present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -226,6 +229,7 @@ void RenderGraph::Render(VulkanContext &context) {
   present_info.pImageIndices = &swapchain_image_index;
 
   {
+    std::lock_guard<std::mutex> lock(context.graphics_queue_mutex);
     VkResult e = vkQueuePresentKHR(context.graphics_queue, &present_info);
     if (e == VK_ERROR_OUT_OF_DATE_KHR) {
       resize_requested = true;

@@ -48,11 +48,11 @@ vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
 
 float ShadowCalculation(vec3 L, vec3 N);
 
-vec3 ComputeFog(vec3 lightPos, vec4 lightColor, float fogDensity);
-
 void main() {
     Material mat = objects[iObjectIndex].material;
 
+    vec4 albedo_a = texture(sampler2D(textures[mat.albedo], textureSampler), iUV);
+    if (albedo_a.a < 0.5) discard;
     vec3 albedo = texture(sampler2D(textures[mat.albedo], textureSampler), iUV).rgb;
     vec3 mr = texture(sampler2D(textures[mat.metal_roughness], textureSampler), iUV).rgb;
     float metallic = mr.b;
@@ -93,7 +93,6 @@ void main() {
         float NdotL = max(dot(N, L), 0.0);
 
         Lo += (kD * albedo / PI + specular) * radiance * NdotL;
-        Lo += ComputeFog(pointLight.position, pointLight.color, 0.001);
     }
 
     {
@@ -136,8 +135,7 @@ void main() {
     oColor = vec4(color, 1.0);
 }
 
-vec3 getNormalFromMap()
-{
+vec3 getNormalFromMap() {
     Material mat = objects[iObjectIndex].material;
     vec3 tangentNormal = texture(sampler2D(textures[mat.normal], textureSampler), iUV).xyz * 2.0 - 1.0;
 
@@ -155,11 +153,7 @@ vec3 getNormalFromMap()
 }
 
 // Approximates the number subsurface mircofacets that align with the half way ray
-float DistributionGGX(vec3
-    N, vec3
-    H, float
-    roughness)
-{
+float DistributionGGX(vec3 N, vec3 H, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;
     float NdotH = max(dot(N, H), 0.0);
@@ -229,24 +223,4 @@ float ShadowCalculation(vec3 L, vec3 N) {
     shadow /= 9.0;
 
     return shadow;
-}
-
-vec3 ComputeFog(vec3 lightPos, vec4 lightColor, float fogDensity) {
-    vec3 viewDir = iWorldPos - camera.viewPos;
-    float viewLength = length(viewDir);
-    vec3 viewDirNorm = normalize(viewDir);
-
-    vec3 lightToCamera = camera.viewPos - lightPos;
-    float lightToCameraLength = length(lightToCamera);
-    vec3 lightToCameraNorm = normalize(lightToCamera);
-
-    float h = length(cross(viewDirNorm, lightToCamera));
-
-    float a = dot(lightToCamera, viewDirNorm);
-    float b = a + viewLength;
-
-    float scattering = atan(b / h) - atan(a / h);
-    scattering /= h;
-
-    return lightColor.xyz * lightColor.w * scattering * fogDensity;
 }

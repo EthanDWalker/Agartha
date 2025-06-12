@@ -6,8 +6,6 @@
 #include <fmt/base.h>
 #include <fstream>
 #include <vector>
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_core.h>
 
 bool LoadShaderModule(std::string_view file_path, VkDevice device,
                       VkShaderModule *out_shader_module) {
@@ -132,7 +130,7 @@ void GraphicsPipelineBuilder::Default() {
   SetCullMode(VK_CULL_MODE_FRONT_BIT, VK_FRONT_FACE_CLOCKWISE);
   SetPolygonMode(VK_POLYGON_MODE_FILL);
   SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-  SetBlendingAlpha();
+  SetNoBlending();
   SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
   SetDepthFormat(VK_FORMAT_D32_SFLOAT);
   SetNoMultisampling();

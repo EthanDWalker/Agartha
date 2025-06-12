@@ -31,6 +31,9 @@ layout(location = 2) out vec2 uv;
 layout(location = 3) out vec4 lightSpace;
 layout(location = 4) flat out uint objectIndex;
 
+const float near = 0.1;
+const float far = 10000.0;
+
 void main() {
     Instance instance = instances[visibleInstances[gl_InstanceIndex]];
     objectIndex = instance.objectIndex;
@@ -38,7 +41,9 @@ void main() {
     Vertex vertex = gpuMeshes[instance.objectIndex].vertexBuffer.vertices[gl_VertexIndex];
     vec4 worldPos = instanceMatrix * vec4(vertex.position, 1.0);
 
-    gl_Position = camera.projection * camera.view * worldPos;
+    vec4 pos = camera.projection * camera.view * worldPos;
+
+    gl_Position = pos;
 
     mat3 normalMatrix = transpose(inverse(mat3(instanceMatrix)));
 

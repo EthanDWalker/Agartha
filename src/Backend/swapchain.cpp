@@ -1,8 +1,6 @@
 #include "swapchain.h"
 #include <VkBootstrap.h>
 #include <cstdint>
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_core.h>
 
 void CreateVulkanSwapchain(VulkanContext &vulkan_context, uint32_t width,
                      uint32_t height, Swapchain &swapchain) {
