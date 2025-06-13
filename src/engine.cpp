@@ -1,6 +1,7 @@
 #include "engine.h"
 #include "Backend/acceleration_structure.h"
 #include "Backend/allocated_image.h"
+#include "Backend/binding_table.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
@@ -67,6 +68,8 @@ void Engine::CreateRenderGraph() {
     shadow_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
                                        VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                                        shadow_image);
+    shadow_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
+                                       VK_IMAGE_LAYOUT_GENERAL, ray_test_image);
 
     builder.AddPass(1, shadow_pass_dep.dependency, [&](VkCommandBuffer cmd) {
       VkViewport viewport = vkinit::Viewport(shadow_image.extent);
@@ -110,6 +113,47 @@ void Engine::CreateRenderGraph() {
           static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
 
       vkCmdEndRendering(cmd);
+
+      if (ray_tracing_pipeline.obj != VK_NULL_HANDLE &&
+          shader_binding_table.closest_hit_address != 0) {
+        auto properties = GetRaytracingPipelineProperties(context);
+
+        const uint32_t handle_size_aligned =
+            AlignedSize(properties.shaderGroupHandleSize,
+                        properties.shaderGroupHandleAlignment);
+
+        VkStridedDeviceAddressRegionKHR raygen_entry{};
+        raygen_entry.deviceAddress = shader_binding_table.ray_gen_address;
+        raygen_entry.stride = handle_size_aligned;
+        raygen_entry.size = handle_size_aligned;
+
+        VkStridedDeviceAddressRegionKHR miss_entry{};
+        miss_entry.deviceAddress = shader_binding_table.miss_address;
+        miss_entry.stride = handle_size_aligned;
+        miss_entry.size = handle_size_aligned;
+
+        VkStridedDeviceAddressRegionKHR hit_entry{};
+        hit_entry.deviceAddress = shader_binding_table.closest_hit_address;
+        hit_entry.stride = handle_size_aligned;
+        hit_entry.size = handle_size_aligned;
+
+        VkStridedDeviceAddressRegionKHR callable_entry{};
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                          ray_tracing_pipeline.obj);
+
+        std::array<VkDescriptorSet, 2> ds = {
+            ray_tracing_descriptor_set,
+            camera.descriptor_set,
+        };
+
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                                ray_tracing_pipeline.layout, 0, ds.size(),
+                                ds.data(), 0, nullptr);
+
+        vkCmdTraceRaysKHR(cmd, &raygen_entry, &miss_entry, &hit_entry,
+                          &callable_entry, 1, 1, 1);
+      }
     });
   }
 
@@ -215,6 +259,7 @@ void Engine::Init() {
 
   InitVulkanContext(window, DEBUG, context);
 
+  VkStridedDeviceAddressRegionKHR raygenShaderSbtEntry{};
   immediate_submit.Create(context);
   descriptor_builder.Init(context);
   camera.Create(context, descriptor_builder);
@@ -241,6 +286,11 @@ void Engine::Init() {
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                            VK_IMAGE_USAGE_SAMPLED_BIT,
                        shadow_image);
+
+  CreateAllocatedImage(context, {1024, 1024, 1}, VK_FORMAT_R8G8B8A8_UNORM,
+                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                           VK_IMAGE_USAGE_STORAGE_BIT,
+                       ray_test_image);
 
   VkSamplerCreateInfo shadow_sampler_ci{};
   shadow_sampler_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -407,11 +457,6 @@ void Engine::Init() {
       tlas = as_builder.CreateTopLevelAS(
           context, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 
-      CreateAllocatedImage(context, {1024, 1024, 1}, VK_FORMAT_R8G8B8A8_UNORM,
-                           VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                               VK_IMAGE_USAGE_STORAGE_BIT,
-                           ray_test_image);
-
       descriptor_builder.Reset();
       descriptor_builder.BindAccelerationStructure(0, tlas.obj);
       descriptor_builder.BindStorageImage(1, ray_test_image.image_view);
@@ -425,6 +470,10 @@ void Engine::Init() {
       pipeline_builder.AddDescriptorSetLayout(ray_tracing_descriptor_layout);
       pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
       pipeline_builder.Build(context, 2, ray_tracing_pipeline);
+
+      CreateShaderBindingTable(context, ray_tracing_pipeline,
+                               pipeline_builder.shader_groups,
+                               shader_binding_table);
     }
   }).detach();
 
@@ -501,6 +550,8 @@ void Engine::Destroy() {
 
   DestroyAccelerationStructure(context, blas);
   DestroyAccelerationStructure(context, tlas);
+
+  DestroyShaderBindingTable(context, shader_binding_table);
 
   DestroyBuffer(context, point_light_buffer);
   DestroyBuffer(context, directional_light_buffer);

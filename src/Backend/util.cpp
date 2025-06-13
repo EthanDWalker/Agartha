@@ -16,3 +16,11 @@ VkDeviceAddress GetDeviceAddress(VulkanContext &context,
   return vkGetAccelerationStructureDeviceAddressKHR(context.device,
                                                     &device_address_info);
 }
+
+uint32_t AlignedSize(uint32_t value, uint32_t alignment) {
+  return (value + alignment - 1) & ~(alignment - 1);
+}
+
+size_t AlignedSize(size_t value, size_t alignment) {
+  return (value + alignment - 1) & ~(alignment - 1);
+}

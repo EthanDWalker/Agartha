@@ -17,3 +17,7 @@ VkDeviceAddress GetDeviceAddress(VulkanContext &context, VkBuffer buffer);
 
 VkDeviceAddress GetDeviceAddress(VulkanContext &context,
                                  VkAccelerationStructureKHR as);
+
+uint32_t AlignedSize(uint32_t value, uint32_t alignment);
+
+size_t AlignedSize(size_t value, size_t alignment);

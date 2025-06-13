@@ -2,6 +2,7 @@
 
 #include "Backend/acceleration_structure.h"
 #include "Backend/allocated_image.h"
+#include "Backend/binding_table.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
@@ -39,6 +40,8 @@ struct Engine {
   UiManager ui_manager;
   DescriptorBuilder descriptor_builder;
   RenderGraph render_graph;
+
+  ShaderBindingTable shader_binding_table;
 
   AccelerationStructure tlas;
   AccelerationStructure blas;
