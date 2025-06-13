@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Backend/acceleration_structure.h"
 #include "Backend/allocated_image.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
@@ -39,12 +40,13 @@ struct Engine {
   DescriptorBuilder descriptor_builder;
   RenderGraph render_graph;
 
-  VkSampler sampler;
-  VkSampler shadow_sampler;
+  AccelerationStructure tlas;
+  AccelerationStructure blas;
 
   AllocatedImage main_image;
   AllocatedImage depth_image;
   AllocatedImage shadow_image;
+  AllocatedImage ray_test_image;
 
   AllocatedBuffer point_light_buffer;
   AllocatedBuffer directional_light_buffer;
@@ -63,9 +65,16 @@ struct Engine {
   Pipeline shadow_pipeline;
   Pipeline cull_pipeline;
   Pipeline shadow_cull_pipeline;
+  Pipeline ray_tracing_pipeline;
+
+  VkSampler sampler;
+  VkSampler shadow_sampler;
 
   VkDescriptorSet main_descriptor_set;
   VkDescriptorSetLayout main_descriptor_layout;
+
+  VkDescriptorSet ray_tracing_descriptor_set;
+  VkDescriptorSetLayout ray_tracing_descriptor_layout;
 
   VkDescriptorSet cull_descriptor_set;
   VkDescriptorSetLayout cull_descriptor_layout;

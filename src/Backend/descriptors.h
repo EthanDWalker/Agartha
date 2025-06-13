@@ -8,14 +8,15 @@
 #include <vector>
 
 struct DescriptorPool {
-  static constexpr std::array<std::pair<VkDescriptorType, float>, 6>
+  static constexpr std::array<std::pair<VkDescriptorType, float>, 7>
       pool_ratios{{
-          {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1.0f},
           {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3.0f},
           {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 3.0f},
-          {VK_DESCRIPTOR_TYPE_SAMPLER, 0.1f},
+          {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1.0f},
           {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1.0f},
           {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1.0f},
+          {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1.0f},
+          {VK_DESCRIPTOR_TYPE_SAMPLER, 0.1f},
       }};
 
   uint32_t alloc_scaler{100};
@@ -43,14 +44,19 @@ struct DescriptorBuilder {
 
   void BindUniformBuffer(uint32_t binding, VkBuffer buffer);
   void BindStorageBuffer(uint32_t binding, VkBuffer buffer);
+
   void BindCombinedImage(uint32_t binding, VkImageView image_view,
                          VkSampler sampler);
   void BindStorageImage(uint32_t binding, VkImageView image_view);
   void BindStorageImages(uint32_t binding,
                          std::vector<VkImageView> image_views);
+
   void BindSampler(uint32_t binding, VkSampler sampler);
   void BindImage(uint32_t binding, VkImageView image_view);
   void BindImages(uint32_t binding, std::span<AllocatedImage> image_views);
+
+  void BindAccelerationStructure(uint32_t binding,
+                                 VkAccelerationStructureKHR &as);
 
   void Build(VulkanContext &context, VkShaderStageFlags stage_flags,
              VkDescriptorSet &set, VkDescriptorSetLayout &layout);

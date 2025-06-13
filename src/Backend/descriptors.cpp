@@ -21,6 +21,27 @@ void DescriptorBuilder::Destroy(VulkanContext &context) {
   }
 }
 
+void DescriptorBuilder::BindAccelerationStructure(
+    uint32_t binding, VkAccelerationStructureKHR &as) {
+  VkDescriptorSetLayoutBinding new_binding{};
+  new_binding.binding = binding;
+  new_binding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+  new_binding.descriptorCount = 1;
+
+  bindings.push_back(new_binding);
+
+  VkWriteDescriptorSetAccelerationStructureKHR *as_write =
+      (VkWriteDescriptorSetAccelerationStructureKHR *)malloc(
+          sizeof(VkWriteDescriptorSetAccelerationStructureKHR));
+  memset(as_write, 0, sizeof(VkWriteDescriptorSetAccelerationStructureKHR));
+  as_write->sType =
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+  as_write->accelerationStructureCount = 1;
+  as_write->pAccelerationStructures = &as;
+
+  writes.push_back(as_write);
+}
+
 void DescriptorBuilder::BindUniformBuffer(uint32_t binding, VkBuffer buffer) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
@@ -235,6 +256,10 @@ void DescriptorBuilder::Build(VulkanContext &context,
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
       write.pBufferInfo = (VkDescriptorBufferInfo *)writes[binding.binding];
+      break;
+    }
+    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
+      write.pNext = writes[binding.binding];
       break;
     }
     default: {

@@ -2,6 +2,7 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/immediate_submit.h"
+#include "Backend/util.h"
 #include <cassert>
 #include <mutex>
 
@@ -83,11 +84,8 @@ SceneManager::AddObjects(VulkanContext &context, std::vector<MeshData> data,
                               VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                           new_meshes[i].vertex_buffer);
 
-    VkBufferDeviceAddressInfo device_address_info{};
-    device_address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    device_address_info.buffer = new_meshes[i].vertex_buffer.buffer;
     gpu_meshes[i].vertex_address =
-        vkGetBufferDeviceAddress(context.device, &device_address_info);
+        GetDeviceAddress(context, new_meshes[i].vertex_buffer.buffer);
     gpu_meshes[i].index_count = data[i].indices.size();
     gpu_meshes[i].first_index = last_index;
 

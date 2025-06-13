@@ -53,6 +53,104 @@ bool LoadShaderModule(std::string_view file_path, VkDevice device,
   return true;
 }
 
+void RaytracingPipelineBuilder::SetShaders(VulkanContext &context,
+                                           std::string ray_gen,
+                                           std::string miss,
+                                           std::string closest_hit) {
+  VkRayTracingShaderGroupCreateInfoKHR shader_group{};
+  shader_group.sType =
+      VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+  shader_group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+  shader_group.generalShader = ShaderStages::RAY_GEN;
+  shader_group.closestHitShader = VK_SHADER_UNUSED_KHR;
+  shader_group.anyHitShader = VK_SHADER_UNUSED_KHR;
+  shader_group.intersectionShader = VK_SHADER_UNUSED_KHR;
+  shader_groups[ShaderStages::RAY_GEN] = shader_group;
+
+  shader_group.generalShader = ShaderStages::MISS;
+  shader_groups[ShaderStages::MISS] = shader_group;
+
+  shader_group.generalShader = VK_SHADER_UNUSED_KHR;
+  shader_group.closestHitShader = ShaderStages::CLOSEST_HIT;
+  shader_group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+  shader_groups[ShaderStages::CLOSEST_HIT] = shader_group;
+
+  if (!LoadShaderModule(shader_file_path + ray_gen, context.device,
+                        &shader_modules[ShaderStages::RAY_GEN])) {
+    fmt::println("[ERROR] failed to load {}", ray_gen);
+  }
+
+  if (!LoadShaderModule(shader_file_path + miss, context.device,
+                        &shader_modules[ShaderStages::MISS])) {
+    fmt::println("[ERROR] failed to load {}", miss);
+  }
+
+  if (!LoadShaderModule(shader_file_path + closest_hit, context.device,
+                        &shader_modules[ShaderStages::CLOSEST_HIT])) {
+    fmt::println("[ERROR] failed to load {}", closest_hit);
+  }
+}
+
+void RaytracingPipelineBuilder::AddDescriptorSetLayout(
+    VkDescriptorSetLayout layout) {
+  descriptor_set_layouts.push_back(layout);
+}
+
+void RaytracingPipelineBuilder::AddPushConstantRange(uint32_t size) {
+  VkPushConstantRange range{};
+  uint32_t offset = 0;
+  for (auto &range : push_constant_ranges) {
+    offset += range.offset;
+  }
+  range.offset = offset;
+  range.size = size;
+  range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+  push_constant_ranges.push_back(range);
+}
+
+void RaytracingPipelineBuilder::Build(VulkanContext &context,
+                                      uint8_t max_recursion,
+                                      Pipeline &pipeline) {
+  VkPipelineLayoutCreateInfo pipeline_layout_ci{};
+  pipeline_layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipeline_layout_ci.pPushConstantRanges = push_constant_ranges.data();
+  pipeline_layout_ci.pushConstantRangeCount = push_constant_ranges.size();
+  pipeline_layout_ci.pSetLayouts = descriptor_set_layouts.data();
+  pipeline_layout_ci.setLayoutCount = descriptor_set_layouts.size();
+
+  VK_CHECK(vkCreatePipelineLayout(context.device, &pipeline_layout_ci, nullptr,
+                                  &pipeline.layout));
+
+  VkPipelineShaderStageCreateInfo
+      shader_stage_cis[ShaderStages::SHADER_STAGE_COUNT] = {};
+
+  for (uint8_t i = 0; i < ShaderStages::SHADER_STAGE_COUNT; i++) {
+    shader_stage_cis[i].sType =
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shader_stage_cis[i].module = shader_modules[i];
+    shader_stage_cis[i].pName = "main";
+  }
+  shader_stage_cis[0].stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+  shader_stage_cis[1].stage = VK_SHADER_STAGE_MISS_BIT_KHR;
+  shader_stage_cis[2].stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
+  VkRayTracingPipelineCreateInfoKHR pipeline_ci{};
+  pipeline_ci.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+  pipeline_ci.stageCount = ShaderStages::SHADER_STAGE_COUNT;
+  pipeline_ci.pStages = shader_stage_cis;
+  pipeline_ci.groupCount = ShaderStages::SHADER_STAGE_COUNT;
+  pipeline_ci.pGroups = shader_groups;
+  pipeline_ci.maxPipelineRayRecursionDepth = max_recursion;
+  pipeline_ci.layout = pipeline.layout;
+
+  vkCreateRayTracingPipelinesKHR(context.device, {}, VK_NULL_HANDLE, 1,
+                                 &pipeline_ci, nullptr, &pipeline.obj);
+
+  for (uint8_t i = 0; i < ShaderStages::SHADER_STAGE_COUNT; i++) {
+    vkDestroyShaderModule(context.device, shader_modules[i], nullptr);
+  }
+}
+
 void ComputePipelineBuilder::SetShader(VulkanContext &context,
                                        std::string comp) {
   if (!LoadShaderModule(shader_file_path + comp, context.device, &shader)) {

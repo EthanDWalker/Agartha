@@ -11,6 +11,31 @@ struct Pipeline {
   VkPipelineLayout layout;
 };
 
+struct RaytracingPipelineBuilder {
+  enum ShaderStages : uint8_t {
+    RAY_GEN = 0,
+    MISS = 1,
+    CLOSEST_HIT = 2,
+    SHADER_STAGE_COUNT = 3,
+  };
+
+  std::vector<VkPushConstantRange> push_constant_ranges{};
+  std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};
+
+  VkRayTracingShaderGroupCreateInfoKHR
+      shader_groups[ShaderStages::SHADER_STAGE_COUNT];
+
+  VkShaderModule shader_modules[ShaderStages::SHADER_STAGE_COUNT];
+
+  void SetShaders(VulkanContext &context, std::string ray_gen, std::string miss,
+                  std::string closest_hit);
+
+  void AddPushConstantRange(uint32_t size);
+  void AddDescriptorSetLayout(VkDescriptorSetLayout layout);
+
+  void Build(VulkanContext &context, uint8_t max_recursion, Pipeline &pipeline);
+};
+
 struct ComputePipelineBuilder {
   std::vector<VkPushConstantRange> push_constant_ranges{};
   std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};

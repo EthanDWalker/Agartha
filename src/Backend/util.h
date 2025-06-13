@@ -1,5 +1,4 @@
 #pragma once
-#include "buffer.h"
 #include "context.h"
 #include <assert.h>
 #include <fmt/core.h>
@@ -14,5 +13,7 @@
     }                                                                          \
   } while (0)
 
+VkDeviceAddress GetDeviceAddress(VulkanContext &context, VkBuffer buffer);
+
 VkDeviceAddress GetDeviceAddress(VulkanContext &context,
-                                 AllocatedBuffer &buffer);
+                                 VkAccelerationStructureKHR as);

@@ -79,6 +79,7 @@ file(GLOB SHADER_SRC
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.frag 
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.vert 
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.comp
+
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.geom
 )
 
@@ -98,5 +99,27 @@ foreach(SHADER ${SHADER_SRC})
 
   list(APPEND COMPILED_SHADERS ${COMPILED_FILE})
 endforeach()
+
+file(GLOB RT_SHADER_SRC
+    ${CMAKE_SOURCE_DIR}/assets/shaders/*.rchit
+    ${CMAKE_SOURCE_DIR}/assets/shaders/*.rmiss
+    ${CMAKE_SOURCE_DIR}/assets/shaders/*.rgen
+)
+
+foreach(SHADER ${RT_SHADER_SRC})
+  get_filename_component(FILE_NAME ${SHADER} NAME)
+  set(COMPILED_FILE ${CMAKE_SOURCE_DIR}/assets/shaders/${FILE_NAME}.spv)
+
+  add_custom_command(
+      OUTPUT ${COMPILED_FILE}
+      COMMAND ${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE} ${SHADER} -o ${COMPILED_FILE} --target-env vulkan1.2
+      DEPENDS ${SHADER}
+      COMMENT "Compiling shader ${FILE_NAME}"
+      VERBATIM
+  )
+
+  list(APPEND COMPILED_SHADERS ${COMPILED_FILE})
+endforeach()
+
 
 add_custom_target(compile_shaders ALL DEPENDS ${COMPILED_SHADERS})

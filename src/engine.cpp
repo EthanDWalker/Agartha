@@ -1,11 +1,11 @@
 #include "engine.h"
+#include "Backend/acceleration_structure.h"
 #include "Backend/allocated_image.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
 #include "Backend/init.h"
 #include "Backend/pipeline.h"
-#include "Backend/raytracing.h"
 #include "Backend/util.h"
 #include "Loaders/model.h"
 #include "Managers/scene_manager.h"
@@ -382,7 +382,7 @@ void Engine::Init() {
     pipeline_builder.Build(context, shadow_cull_pipeline);
   }
 
-  std::thread([&]() {
+  std::thread([this]() {
     SCOPED_TIMER("Scene load");
     auto gltf_data = LoadModel("Sponza.gltf");
 
@@ -394,12 +394,37 @@ void Engine::Init() {
 
     {
       ASBuilder as_builder{};
-      as_builder.SetMesh(context, scene_manager.meshes.front(),
-                         GetDeviceAddress(context, scene_manager.index_buffer));
-      AccelerationStructure as = as_builder.CreateBottomLevelAS(
+      as_builder.SetMesh(
+          context, scene_manager.meshes.front(),
+          GetDeviceAddress(context, scene_manager.index_buffer.buffer));
+      blas = as_builder.CreateBottomLevelAS(
+          context, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+      Instance instance{};
+      instance.matrix = glm::mat4(1.0);
+      instance.object_index = 0;
+      std::vector<Instance> instances = {instance};
+      as_builder.SetInstances(context, instances, blas);
+      tlas = as_builder.CreateTopLevelAS(
           context, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 
-      DestroyAccelerationStructure(context, as);
+      CreateAllocatedImage(context, {1024, 1024, 1}, VK_FORMAT_R8G8B8A8_UNORM,
+                           VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                               VK_IMAGE_USAGE_STORAGE_BIT,
+                           ray_test_image);
+
+      descriptor_builder.Reset();
+      descriptor_builder.BindAccelerationStructure(0, tlas.obj);
+      descriptor_builder.BindStorageImage(1, ray_test_image.image_view);
+      descriptor_builder.Build(context, VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+                               ray_tracing_descriptor_set,
+                               ray_tracing_descriptor_layout);
+
+      RaytracingPipelineBuilder pipeline_builder{};
+      pipeline_builder.SetShaders(context, "test.rgen.spv", "test.rmiss.spv",
+                                  "test.rchit.spv");
+      pipeline_builder.AddDescriptorSetLayout(ray_tracing_descriptor_layout);
+      pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
+      pipeline_builder.Build(context, 2, ray_tracing_pipeline);
     }
   }).detach();
 
@@ -468,9 +493,14 @@ void Engine::Destroy() {
   vkDestroyDescriptorSetLayout(context.device, cull_descriptor_layout, nullptr);
   vkDestroyDescriptorSetLayout(context.device, shadow_cull_descriptor_layout,
                                nullptr);
+  vkDestroyDescriptorSetLayout(context.device, ray_tracing_descriptor_layout,
+                               nullptr);
 
   DestroyImageSampler(context, sampler);
   DestroyImageSampler(context, shadow_sampler);
+
+  DestroyAccelerationStructure(context, blas);
+  DestroyAccelerationStructure(context, tlas);
 
   DestroyBuffer(context, point_light_buffer);
   DestroyBuffer(context, directional_light_buffer);
@@ -486,11 +516,13 @@ void Engine::Destroy() {
   DestroyAllocatedImage(context, depth_image);
   DestroyAllocatedImage(context, shadow_image);
   DestroyAllocatedImage(context, main_image);
+  DestroyAllocatedImage(context, ray_test_image);
 
   DestroyPipeline(context, main_pipeline);
   DestroyPipeline(context, shadow_pipeline);
   DestroyPipeline(context, cull_pipeline);
   DestroyPipeline(context, shadow_cull_pipeline);
+  DestroyPipeline(context, ray_tracing_pipeline);
 
   DestroyVulkanContext(context);
 

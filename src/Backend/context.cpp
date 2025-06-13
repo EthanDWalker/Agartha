@@ -1,5 +1,4 @@
 #include "context.h"
-#include "fmt/base.h"
 #define VOLK_IMPLEMENTATION
 #include "Backend/util.h"
 #include <GLFW/glfw3.h>
@@ -62,6 +61,12 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   as_features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
   as_features.accelerationStructure = true;
+  as_features.descriptorBindingAccelerationStructureUpdateAfterBind = true;
+
+  VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracing_features{};
+  raytracing_features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+  raytracing_features.rayTracingPipeline = true;
 
   vkb::PhysicalDeviceSelector physical_device_selector{vkb_instance};
   vkb::PhysicalDevice vkb_physical_device =
@@ -75,6 +80,7 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
           .add_required_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
           .add_required_extension_features(as_features)
           .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
+          .add_required_extension_features(raytracing_features)
           .add_required_extension(
               VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
           .add_required_extension(VK_KHR_SPIRV_1_4_EXTENSION_NAME)
