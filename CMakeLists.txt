@@ -85,6 +85,8 @@ file(GLOB SHADER_SRC
 
 set(COMPILED_SHADERS)
 
+set(SHADER_DEPENDS ${CMAKE_SOURCE_DIR}/assets/shaders/*.glsl)
+
 foreach(SHADER ${SHADER_SRC})
   get_filename_component(FILE_NAME ${SHADER} NAME)
   set(COMPILED_FILE ${CMAKE_SOURCE_DIR}/assets/shaders/${FILE_NAME}.spv)
@@ -92,7 +94,7 @@ foreach(SHADER ${SHADER_SRC})
   add_custom_command(
       OUTPUT ${COMPILED_FILE}
       COMMAND ${Vulkan_GLSLC_EXECUTABLE} ${SHADER} -o ${COMPILED_FILE}
-      DEPENDS ${SHADER}
+      DEPENDS ${SHADER} ${SHADER_DEPENDS}
       COMMENT "Compiling shader ${FILE_NAME}"
       VERBATIM
   )
@@ -113,7 +115,7 @@ foreach(SHADER ${RT_SHADER_SRC})
   add_custom_command(
       OUTPUT ${COMPILED_FILE}
       COMMAND ${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE} ${SHADER} -o ${COMPILED_FILE} --target-env vulkan1.2
-      DEPENDS ${SHADER}
+      DEPENDS ${SHADER} ${SHADER_DEPENDS}
       COMMENT "Compiling shader ${FILE_NAME}"
       VERBATIM
   )

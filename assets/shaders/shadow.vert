@@ -23,9 +23,9 @@ layout(set = 2, binding = 1) readonly buffer MeshBuffer {
 
 void main() {
     Instance instance = instances[visibleInstances[gl_InstanceIndex]];
-    uint objectIndex = instance.objectIndex;
-    mat4 instanceMatrix = instance.matrix;
-    Vertex vertex = gpuMeshes[instance.objectIndex].vertexBuffer.vertices[gl_VertexIndex];
+    uint objectIndex = GetObjectIndex(instance);
+    mat4 instanceMatrix = GetInstanceMatrix(instance);
+    Vertex vertex = gpuMeshes[objectIndex].vertexBuffer.vertices[gl_VertexIndex];
     vec4 worldPos = instanceMatrix * vec4(vertex.position, 1.0);
 
     gl_Position = lightMatrix * worldPos;

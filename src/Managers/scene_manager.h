@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Backend/acceleration_structure.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
@@ -33,6 +34,11 @@ struct GpuMesh {
   uint32_t index_count;
 };
 
+struct Instance {
+  glm::mat4 matrix;
+  uint32_t object_index;
+};
+
 struct SceneManager {
   AllocatedBuffer object_buffer;
   AllocatedBuffer mesh_buffer;
@@ -42,6 +48,9 @@ struct SceneManager {
   AllocatedBuffer index_buffer;
 
   std::vector<Mesh> meshes;
+  std::vector<AccelerationStructure> bottom_level_as_vector;
+
+  AccelerationStructure top_level_as;
 
   std::queue<uint32_t> removed_objects;
   std::queue<uint32_t> removed_instances;
@@ -71,7 +80,7 @@ struct SceneManager {
   void RemoveObject(VulkanContext &context, ImmediateSubmit &immediate_submit,
                     uint32_t index);
 
-  uint32_t AddInstance(VulkanContext &context, Instance *instance);
+  uint32_t AddInstance(VulkanContext &context, Instance &instance);
 
   void EditInstance(VulkanContext &context, ImmediateSubmit &immediate_submit,
                     Instance *instance, uint32_t index);

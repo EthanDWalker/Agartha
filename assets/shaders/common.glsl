@@ -1,7 +1,7 @@
 #extension GL_EXT_buffer_reference : require
 
 struct TerrainVertex {
-  float height;
+    float height;
 };
 
 struct Frustum {
@@ -41,10 +41,31 @@ struct Vertex {
 };
 
 struct Instance {
-    mat4 matrix;
-    vec3 color;
-    uint objectIndex;
+    mat3x4 transform;
+    uint instanceCustomIndexMask;
+    uint bindingTableOffsetFlags;
+    uvec2 blasAddress;
 };
+
+mat4 Mat3x4toMat4(mat3x4 m) {
+    vec3 translation = vec3(m[0].w, m[1].w, m[2].w);
+
+    mat4 matrix = mat4(
+        m[0].xyz, 0.0,
+        m[1].xyz, 0.0,
+        m[2].xyz, 0.0,
+        translation, 1.0
+    );
+    return matrix; 
+}
+
+uint GetObjectIndex(Instance instance) {
+    return instance.instanceCustomIndexMask & 0xFFFFFF;
+}
+
+mat4 GetInstanceMatrix(Instance instance) {
+    return Mat3x4toMat4(instance.transform);
+}
 
 struct Material {
     int albedo;

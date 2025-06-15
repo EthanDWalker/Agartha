@@ -44,13 +44,14 @@ void main() {
     barrier();
 
     Instance instance = instances[id];
+    mat4 instanceMatrix = GetInstanceMatrix(instance);
 
-    if (instance.matrix == mat4(0.0)) return;
+    if (instanceMatrix == Mat3x4toMat4(mat3x4(0.0))) return;
 
-    uint objectId = instance.objectIndex;
+    uint objectId = GetObjectIndex(instance);
     SphereBounds bounds = sphereBounds[objectId];
 
-    if (isBoundingSphereVisible(vec3(instance.matrix * vec4(0.0)), bounds.radius)) {
+    if (isBoundingSphereVisible(vec3(instanceMatrix * vec4(0.0)), bounds.radius)) {
         uint index = atomicAdd(drawCount, 1);
 
         visibleInstances[index] = id;
@@ -70,7 +71,7 @@ bool isBoundingSphereVisible(vec3 center, float radius) {
     Frustum frustum = camera.frustum;
 
     return !(
-    dot(vec3(frustum.left), center) + frustum.left.w < -radius ||
+        dot(vec3(frustum.left), center) + frustum.left.w < -radius ||
         dot(vec3(frustum.right), center) + frustum.right.w < -radius ||
         dot(vec3(frustum.top), center) + frustum.top.w < -radius ||
         dot(vec3(frustum.bottom), center) + frustum.bottom.w < -radius ||

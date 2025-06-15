@@ -1,9 +1,13 @@
 #include "scene_manager.h"
+#include "Backend/acceleration_structure.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/immediate_submit.h"
 #include "Backend/util.h"
 #include <cassert>
+#include <fmt/base.h>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/string_cast.hpp>
 #include <mutex>
 
 void SceneManager::Init(VulkanContext &context,
@@ -25,10 +29,12 @@ void SceneManager::Init(VulkanContext &context,
                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                VMA_MEMORY_USAGE_GPU_ONLY, aabb_bounds_buffer);
 
-  CreateBuffer(context, sizeof(Instance) * SCENE_MAX_INSTANCES,
-               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                   VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-               VMA_MEMORY_USAGE_GPU_ONLY, instance_buffer);
+  CreateBuffer(
+      context, sizeof(VkAccelerationStructureInstanceKHR) * SCENE_MAX_INSTANCES,
+      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+          VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+          VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+      VMA_MEMORY_USAGE_GPU_ONLY, instance_buffer);
 
   CreateBuffer(
       context, sizeof(uint32_t) * SCENE_MAX_INDICES,
@@ -97,9 +103,14 @@ SceneManager::AddObjects(VulkanContext &context, std::vector<MeshData> data,
       Instance new_instance{};
       new_instance.matrix = instance;
       new_instance.object_index = object_index;
-      new_instance.color = glm::vec3(1.0);
-      AddInstance(context, &new_instance);
+      AddInstance(context, new_instance);
     }
+
+    AccelerationStructure as;
+    CreateBottomLevelAS(
+        context, new_meshes[i], GetDeviceAddress(context, index_buffer.buffer),
+        VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, as);
+    bottom_level_as_vector.push_back(as);
 
     last_index += data[i].indices.size();
     object_indices[i] = object_index++;
@@ -188,12 +199,17 @@ uint32_t SceneManager::AddObject(VulkanContext &context, MeshData &mesh_data,
   UpdateBufferAsync(context, &gpu_mesh, sizeof(GpuMesh),
                     index * sizeof(GpuMesh), mesh_buffer);
 
+  AccelerationStructure as;
+  CreateBottomLevelAS(
+      context, mesh, GetDeviceAddress(context, index_buffer.buffer),
+      VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, as);
+  bottom_level_as_vector.push_back(as);
+
   for (auto &instance : mesh_data.instances) {
     Instance new_instance{};
     new_instance.matrix = instance;
     new_instance.object_index = index;
-    new_instance.color = glm::vec3(1.0);
-    AddInstance(context, &new_instance);
+    AddInstance(context, new_instance);
   }
 
   last_index += mesh_data.indices.size();
@@ -207,6 +223,7 @@ uint32_t SceneManager::AddObject(VulkanContext &context, MeshData &mesh_data,
   }
 }
 
+// DOESNT WORK WITH ACCELERATION STRUCTURES
 void SceneManager::RemoveObject(VulkanContext &context,
                                 ImmediateSubmit &immediate_submit,
                                 uint32_t index) {
@@ -228,7 +245,7 @@ void SceneManager::RemoveObject(VulkanContext &context,
   removed_objects.push(index);
 }
 
-uint32_t SceneManager::AddInstance(VulkanContext &context, Instance *instance) {
+uint32_t SceneManager::AddInstance(VulkanContext &context, Instance &instance) {
   uint32_t index;
   {
     std::lock_guard<std::mutex> lock(instance_mutex);
@@ -238,10 +255,27 @@ uint32_t SceneManager::AddInstance(VulkanContext &context, Instance *instance) {
       index = removed_instances.front();
     }
   }
+
   assert(index <= SCENE_MAX_INSTANCES && "Reached max instances for the scene");
 
-  UpdateBufferAsync(context, instance, sizeof(Instance),
-                    index * sizeof(Instance), instance_buffer);
+  VkAccelerationStructureInstanceKHR gpu_instance{};
+  gpu_instance.transform = Mat4ToVkTransform(instance.matrix);
+  gpu_instance.instanceCustomIndex = instance.object_index;
+  gpu_instance.mask = 0xFF;
+  gpu_instance.instanceShaderBindingTableRecordOffset = 0;
+  gpu_instance.flags =
+      VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+  gpu_instance.accelerationStructureReference = GetDeviceAddress(
+      context, bottom_level_as_vector[instance.object_index].obj);
+
+  UpdateBufferAsync(
+      context, &gpu_instance, sizeof(VkAccelerationStructureInstanceKHR),
+      index * sizeof(VkAccelerationStructureInstanceKHR), instance_buffer);
+
+  DestroyAccelerationStructure(context, top_level_as);
+  CreateTopLevelAS(
+      context, GetDeviceAddress(context, instance_buffer.buffer), index,
+      VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, top_level_as);
 
   {
     std::lock_guard<std::mutex> lock(instance_mutex);
@@ -254,6 +288,7 @@ uint32_t SceneManager::AddInstance(VulkanContext &context, Instance *instance) {
   }
 }
 
+// DOESNT WORK WITH ACCELERATION STRUCTURES
 void SceneManager::EditInstance(VulkanContext &context,
                                 ImmediateSubmit &immediate_submit,
                                 Instance *instance, uint32_t index) {
@@ -264,6 +299,7 @@ void SceneManager::EditInstance(VulkanContext &context,
                index * sizeof(Instance), instance_buffer);
 }
 
+// DOESNT WORK WITH ACCELERATION STRUCTURES
 void SceneManager::RemoveInstance(VulkanContext &context,
                                   ImmediateSubmit &immediate_submit,
                                   uint32_t index) {
@@ -280,6 +316,12 @@ void SceneManager::Destroy(VulkanContext &context) {
   for (auto &mesh : meshes) {
     DestroyBuffer(context, mesh.vertex_buffer);
   }
+
+  for (auto &bottom_level_as : bottom_level_as_vector) {
+    DestroyAccelerationStructure(context, bottom_level_as);
+  }
+
+  DestroyAccelerationStructure(context, top_level_as);
 
   DestroyBuffer(context, sphere_bounds_buffer);
   DestroyBuffer(context, aabb_bounds_buffer);

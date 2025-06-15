@@ -152,7 +152,8 @@ void Engine::CreateRenderGraph() {
                                 ds.data(), 0, nullptr);
 
         vkCmdTraceRaysKHR(cmd, &raygen_entry, &miss_entry, &hit_entry,
-                          &callable_entry, 1, 1, 1);
+                          &callable_entry, ray_test_image.extent.width,
+                          ray_test_image.extent.height, 1);
       }
     });
   }
@@ -282,15 +283,13 @@ void Engine::Init() {
                            VK_IMAGE_USAGE_SAMPLED_BIT,
                        depth_image);
 
+  CreateAllocatedImage(context, draw_image_extent, VK_FORMAT_R8G8B8A8_UNORM,
+                       VK_IMAGE_USAGE_STORAGE_BIT, ray_test_image);
+
   CreateAllocatedImage(context, {1024 * 4, 1024 * 4, 1}, VK_FORMAT_D32_SFLOAT,
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                            VK_IMAGE_USAGE_SAMPLED_BIT,
                        shadow_image);
-
-  CreateAllocatedImage(context, {1024, 1024, 1}, VK_FORMAT_R8G8B8A8_UNORM,
-                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                           VK_IMAGE_USAGE_STORAGE_BIT,
-                       ray_test_image);
 
   VkSamplerCreateInfo shadow_sampler_ci{};
   shadow_sampler_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -443,22 +442,9 @@ void Engine::Init() {
     }
 
     {
-      ASBuilder as_builder{};
-      as_builder.SetMesh(
-          context, scene_manager.meshes.front(),
-          GetDeviceAddress(context, scene_manager.index_buffer.buffer));
-      blas = as_builder.CreateBottomLevelAS(
-          context, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
-      Instance instance{};
-      instance.matrix = glm::mat4(1.0);
-      instance.object_index = 0;
-      std::vector<Instance> instances = {instance};
-      as_builder.SetInstances(context, instances, blas);
-      tlas = as_builder.CreateTopLevelAS(
-          context, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
-
       descriptor_builder.Reset();
-      descriptor_builder.BindAccelerationStructure(0, tlas.obj);
+      descriptor_builder.BindAccelerationStructure(
+          0, scene_manager.top_level_as.obj);
       descriptor_builder.BindStorageImage(1, ray_test_image.image_view);
       descriptor_builder.Build(context, VK_SHADER_STAGE_RAYGEN_BIT_KHR,
                                ray_tracing_descriptor_set,
@@ -469,7 +455,8 @@ void Engine::Init() {
                                   "test.rchit.spv");
       pipeline_builder.AddDescriptorSetLayout(ray_tracing_descriptor_layout);
       pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
-      pipeline_builder.Build(context, 2, ray_tracing_pipeline);
+      const uint8_t max_recursion = 2;
+      pipeline_builder.Build(context, max_recursion, ray_tracing_pipeline);
 
       CreateShaderBindingTable(context, ray_tracing_pipeline,
                                pipeline_builder.shader_groups,
@@ -547,9 +534,6 @@ void Engine::Destroy() {
 
   DestroyImageSampler(context, sampler);
   DestroyImageSampler(context, shadow_sampler);
-
-  DestroyAccelerationStructure(context, blas);
-  DestroyAccelerationStructure(context, tlas);
 
   DestroyShaderBindingTable(context, shader_binding_table);
 

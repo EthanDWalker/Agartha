@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Backend/acceleration_structure.h"
 #include "Backend/allocated_image.h"
 #include "Backend/binding_table.h"
 #include "Backend/buffer.h"
@@ -42,9 +41,6 @@ struct Engine {
   RenderGraph render_graph;
 
   ShaderBindingTable shader_binding_table;
-
-  AccelerationStructure tlas;
-  AccelerationStructure blas;
 
   AllocatedImage main_image;
   AllocatedImage depth_image;

@@ -2,6 +2,7 @@
 #include "context.h"
 #include <assert.h>
 #include <fmt/core.h>
+#include <glm/mat4x4.hpp>
 #include <vulkan/vk_enum_string_helper.h>
 
 #define VK_CHECK(x)                                                            \
@@ -21,3 +22,5 @@ VkDeviceAddress GetDeviceAddress(VulkanContext &context,
 uint32_t AlignedSize(uint32_t value, uint32_t alignment);
 
 size_t AlignedSize(size_t value, size_t alignment);
+
+VkTransformMatrixKHR Mat4ToVkTransform(glm::mat4 &m);

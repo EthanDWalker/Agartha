@@ -34,9 +34,3 @@ struct Mesh {
   uint32_t first_index;
   uint32_t index_count;
 };
-
-struct Instance {
-  glm::mat4 matrix;
-  glm::vec3 color;
-  uint32_t object_index;
-};
