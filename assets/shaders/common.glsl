@@ -1,9 +1,5 @@
 #extension GL_EXT_buffer_reference : require
 
-struct TerrainVertex {
-    float height;
-};
-
 struct Frustum {
     vec4 top;
     vec4 bottom;
@@ -16,11 +12,11 @@ struct Frustum {
 struct Camera {
     mat4 view;
     mat4 projection;
+    mat4 invView;
+    mat4 invProj;
     vec3 viewPos;
     float padding;
     Frustum frustum;
-    mat4 invView;
-    mat4 invProj;
 };
 
 struct PointLight {

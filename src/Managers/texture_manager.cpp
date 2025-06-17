@@ -14,11 +14,15 @@
 void TextureManager::Init(VulkanContext &context,
                           DescriptorBuilder &descriptor_builder) {
   texture_data.resize(MAX_TEXTURES);
+
+  CreateImageSampler(context, sampler);
+
   uint32_t alloc_scaler = descriptor_builder.pool.alloc_scaler;
   descriptor_builder.pool.alloc_scaler = std::ceil(MAX_TEXTURES / 3.0f);
   descriptor_builder.Reset();
   descriptor_builder.BindImages(0, texture_data);
-  descriptor_builder.Build(context, VK_SHADER_STAGE_FRAGMENT_BIT,
+  descriptor_builder.BindSampler(1, sampler);
+  descriptor_builder.Build(context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
                            descriptor_set, descriptor_set_layout);
   descriptor_builder.pool.alloc_scaler = alloc_scaler;
 }
@@ -147,5 +151,8 @@ void TextureManager::Destroy(VulkanContext &context) {
       DestroyAllocatedImage(context, image);
     }
   }
+
+  DestroyImageSampler(context, sampler);
+
   vkDestroyDescriptorSetLayout(context.device, descriptor_set_layout, nullptr);
 }

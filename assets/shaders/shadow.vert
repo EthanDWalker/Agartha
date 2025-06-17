@@ -5,11 +5,7 @@
 #extension GL_EXT_buffer_reference2 : require
 #include "common.glsl"
 
-layout(set = 0, binding = 0) uniform LightMatrixUBO {
-    mat4 lightMatrix;
-};
-
-layout(set = 0, binding = 1) readonly buffer VisibleInstanceBuffer {
+layout(set = 0, binding = 0) readonly buffer VisibleInstanceBuffer {
     uint visibleInstances[];
 };
 
@@ -20,6 +16,11 @@ layout(set = 1, binding = 0) readonly buffer InstanceBuffer {
 layout(set = 2, binding = 1) readonly buffer MeshBuffer {
     GpuMesh gpuMeshes[];
 };
+
+layout(set = 3, binding = 2) uniform LightMatrixUBO {
+    mat4 lightMatrix;
+};
+
 
 void main() {
     Instance instance = instances[visibleInstances[gl_InstanceIndex]];

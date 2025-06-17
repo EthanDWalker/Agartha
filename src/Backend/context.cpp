@@ -68,6 +68,12 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
   raytracing_features.rayTracingPipeline = true;
 
+  VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR
+      raytracing_position_features{};
+  raytracing_position_features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR;
+  raytracing_position_features.rayTracingPositionFetch = true;
+
   vkb::PhysicalDeviceSelector physical_device_selector{vkb_instance};
   vkb::PhysicalDevice vkb_physical_device =
       physical_device_selector.set_minimum_version(1, 3)
@@ -81,6 +87,8 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
           .add_required_extension_features(as_features)
           .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
           .add_required_extension_features(raytracing_features)
+          .add_required_extension(VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME)
+          .add_required_extension_features(raytracing_position_features)
           .add_required_extension(
               VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
           .add_required_extension(VK_KHR_SPIRV_1_4_EXTENSION_NAME)

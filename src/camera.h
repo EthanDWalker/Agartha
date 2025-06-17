@@ -18,11 +18,11 @@ struct Frustum {
 struct CameraBuffer {
   glm::mat4 view_matrix;
   glm::mat4 projection_matrix;
+  glm::mat4 inv_view;
+  glm::mat4 inv_proj;
   glm::vec3 view_pos;
   float padding;
   Frustum frustum;
-  glm::mat4 inv_view;
-  glm::mat4 inv_proj;
 };
 
 struct Camera {

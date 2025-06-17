@@ -12,20 +12,13 @@ layout(location = 3) in vec4 iLightSpace;
 layout(location = 4) flat in uint iObjectIndex;
 
 layout(location = 0) out vec4 oColor;
+layout(location = 1) out vec4 oMrNormal;
 
-layout(std140, set = 0, binding = 0) uniform PointLightUBO {
-    PointLight pointLight;
-};
-
-layout(std140, set = 0, binding = 1) uniform DirectionalLightUBO {
-    DirectionalLight directionalLight;
-};
-
-layout(set = 0, binding = 2) uniform sampler textureSampler;
-
-layout(set = 0, binding = 4) uniform sampler2D shadowMap;
+layout(set = 0, binding = 1) uniform sampler2D shadowMap;
 
 layout(set = 1, binding = 0) uniform texture2D textures[];
+
+layout(set = 1, binding = 1) uniform sampler textureSampler;
 
 layout(set = 2, binding = 0) uniform CameraUBO {
     Camera camera;
@@ -35,9 +28,17 @@ layout(set = 3, binding = 0) readonly buffer ObjectBuffer {
     Object objects[];
 };
 
+layout(std140, set = 5, binding = 0) uniform PointLightUBO {
+    PointLight pointLight;
+};
+
+layout(std140, set = 5, binding = 1) uniform DirectionalLightUBO {
+    DirectionalLight directionalLight;
+};
+
 const float PI = 3.14159265359;
 
-vec3 getNormalFromMap();
+vec3 GetNormalFromMap();
 
 float DistributionGGX(vec3 N, vec3 H, float roughness);
 
@@ -60,7 +61,7 @@ void main() {
     vec3 emisive = texture(sampler2D(textures[mat.emissive], textureSampler), iUV).rgb;
     float ao = texture(sampler2D(textures[mat.ambient_occlusion], textureSampler), iUV).r;
 
-    vec3 N = getNormalFromMap();
+    vec3 N = GetNormalFromMap();
     vec3 V = normalize(camera.viewPos - iWorldPos);
     vec3 R = reflect(-V, N);
 
@@ -133,9 +134,11 @@ void main() {
     color = pow(color, vec3(1.0 / 2.2));
 
     oColor = vec4(color, 1.0);
+
+    oMrNormal = vec4(metallic, roughness, N.x, N.y);
 }
 
-vec3 getNormalFromMap() {
+vec3 GetNormalFromMap() {
     Material mat = objects[iObjectIndex].material;
     vec3 tangentNormal = texture(sampler2D(textures[mat.normal], textureSampler), iUV).xyz * 2.0 - 1.0;
 

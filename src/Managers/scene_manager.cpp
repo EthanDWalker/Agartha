@@ -40,13 +40,15 @@ void SceneManager::Init(VulkanContext &context,
       context, sizeof(uint32_t) * SCENE_MAX_INDICES,
       VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
           VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
-          VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+          VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+          VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
       VMA_MEMORY_USAGE_GPU_ONLY, index_buffer);
 
   descriptor_builder.Reset();
   descriptor_builder.BindStorageBuffer(0, object_buffer.buffer);
   descriptor_builder.BindStorageBuffer(1, mesh_buffer.buffer);
   descriptor_builder.BindStorageBuffer(2, sphere_bounds_buffer.buffer);
+  descriptor_builder.BindStorageBuffer(3, index_buffer.buffer);
   descriptor_builder.Build(context, VK_SHADER_STAGE_ALL, object_descriptor_set,
                            object_descriptor_layout);
 

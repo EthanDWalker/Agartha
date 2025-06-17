@@ -43,13 +43,12 @@ struct Engine {
   ShaderBindingTable shader_binding_table;
 
   AllocatedImage main_image;
+  AllocatedImage mr_normal_image;
   AllocatedImage depth_image;
   AllocatedImage shadow_image;
-  AllocatedImage ray_test_image;
 
   AllocatedBuffer point_light_buffer;
   AllocatedBuffer directional_light_buffer;
-
   AllocatedBuffer light_matrix_buffer;
 
   AllocatedBuffer culled_draw_count_buffer;
@@ -66,7 +65,6 @@ struct Engine {
   Pipeline shadow_cull_pipeline;
   Pipeline ray_tracing_pipeline;
 
-  VkSampler sampler;
   VkSampler shadow_sampler;
 
   VkDescriptorSet main_descriptor_set;
@@ -83,6 +81,9 @@ struct Engine {
 
   VkDescriptorSet shadow_cull_descriptor_set;
   VkDescriptorSetLayout shadow_cull_descriptor_layout;
+
+  VkDescriptorSet light_descriptor_set;
+  VkDescriptorSetLayout light_descriptor_layout;
 
   GLFWwindow *window;
 

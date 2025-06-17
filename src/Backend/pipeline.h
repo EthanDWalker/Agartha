@@ -52,16 +52,16 @@ struct ComputePipelineBuilder {
 struct GraphicsPipelineBuilder {
   std::vector<VkPushConstantRange> push_constant_ranges{};
   std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};
+  std::vector<VkPipelineColorBlendAttachmentState> color_attachments{};
+  std::vector<VkFormat> color_attachment_formats;
   VkPipelineInputAssemblyStateCreateInfo input_assembly{};
   VkPipelineTessellationStateCreateInfo tessellation{};
   VkPipelineViewportStateCreateInfo viewport{};
   VkPipelineRasterizationStateCreateInfo rasterization{};
   VkPipelineMultisampleStateCreateInfo multisample{};
   VkPipelineDepthStencilStateCreateInfo depth_stencil{};
-  VkPipelineColorBlendAttachmentState color_attachment{};
   VkPipelineDynamicStateCreateInfo dynamic_state{};
   VkPipelineRenderingCreateInfo render_info{};
-  VkFormat color_attachment_format;
   VkShaderModule vert_shader;
   VkShaderModule frag_shader;
   std::optional<VkShaderModule> geom_shader;
@@ -97,13 +97,13 @@ struct GraphicsPipelineBuilder {
 
   void SetMultisampling(VkSampleCountFlagBits sample_count);
 
-  void SetNoBlending();
+  void SetNoBlending(uint8_t index);
 
-  void SetBlendingAdditive();
+  void SetBlendingAdditive(uint8_t index);
 
-  void SetBlendingAlpha();
+  void SetBlendingAlpha(uint8_t index);
 
-  void SetColorAttachmentFormat(VkFormat format);
+  void AddColorAttachment(VkFormat format);
 
   void SetNoDepthTest();
 

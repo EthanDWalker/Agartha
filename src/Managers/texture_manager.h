@@ -22,6 +22,8 @@ struct TextureManager {
   std::unordered_map<std::string, uint32_t> texture_indices;
   std::mutex texture_mutex;
 
+  VkSampler sampler;
+
   uint32_t texture_index;
 
   void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);

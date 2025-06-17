@@ -228,7 +228,6 @@ void GraphicsPipelineBuilder::Default() {
   SetCullMode(VK_CULL_MODE_FRONT_BIT, VK_FRONT_FACE_CLOCKWISE);
   SetPolygonMode(VK_POLYGON_MODE_FILL);
   SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-  SetNoBlending();
   SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
   SetDepthFormat(VK_FORMAT_D32_SFLOAT);
   SetNoMultisampling();
@@ -266,43 +265,46 @@ void GraphicsPipelineBuilder::SetNoMultisampling() {
   multisample.alphaToOneEnable = VK_FALSE;
 }
 
-void GraphicsPipelineBuilder::SetBlendingAdditive() {
-  color_attachment.colorWriteMask =
+void GraphicsPipelineBuilder::SetBlendingAdditive(uint8_t index) {
+  color_attachments[index].colorWriteMask =
       VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
       VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-  color_attachment.blendEnable = VK_TRUE;
-  color_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-  color_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-  color_attachment.colorBlendOp = VK_BLEND_OP_ADD;
-  color_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-  color_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-  color_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+  color_attachments[index].blendEnable = VK_TRUE;
+  color_attachments[index].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+  color_attachments[index].dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+  color_attachments[index].colorBlendOp = VK_BLEND_OP_ADD;
+  color_attachments[index].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  color_attachments[index].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  color_attachments[index].alphaBlendOp = VK_BLEND_OP_ADD;
 }
 
-void GraphicsPipelineBuilder::SetBlendingAlpha() {
-  color_attachment.colorWriteMask =
+void GraphicsPipelineBuilder::SetBlendingAlpha(uint8_t index) {
+  color_attachments[index].colorWriteMask =
       VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
       VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-  color_attachment.blendEnable = VK_TRUE;
-  color_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-  color_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-  color_attachment.colorBlendOp = VK_BLEND_OP_ADD;
-  color_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-  color_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-  color_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+  color_attachments[index].blendEnable = VK_TRUE;
+  color_attachments[index].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+  color_attachments[index].dstColorBlendFactor =
+      VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  color_attachments[index].colorBlendOp = VK_BLEND_OP_ADD;
+  color_attachments[index].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  color_attachments[index].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  color_attachments[index].alphaBlendOp = VK_BLEND_OP_ADD;
 }
 
-void GraphicsPipelineBuilder::SetNoBlending() {
-  color_attachment.colorWriteMask =
+void GraphicsPipelineBuilder::SetNoBlending(uint8_t index) {
+  color_attachments[index].colorWriteMask =
       VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
       VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-  color_attachment.blendEnable = VK_FALSE;
+  color_attachments[index].blendEnable = VK_FALSE;
 }
 
-void GraphicsPipelineBuilder::SetColorAttachmentFormat(VkFormat format) {
-  color_attachment_format = format;
-  render_info.colorAttachmentCount = 1;
-  render_info.pColorAttachmentFormats = &color_attachment_format;
+void GraphicsPipelineBuilder::AddColorAttachment(VkFormat format) {
+  color_attachment_formats.push_back(format);
+  color_attachments.push_back({});
+  render_info.colorAttachmentCount++;
+  render_info.pColorAttachmentFormats = color_attachment_formats.data();
+  SetNoBlending(color_attachments.size() - 1);
 }
 
 void GraphicsPipelineBuilder::SetNoDepthTest() {
@@ -375,8 +377,8 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
   color_blending.sType =
       VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
   color_blending.logicOpEnable = VK_FALSE;
-  color_blending.attachmentCount = 1;
-  color_blending.pAttachments = &color_attachment;
+  color_blending.pAttachments = color_attachments.data();
+  color_blending.attachmentCount = color_attachments.size();
 
   VkPipelineVertexInputStateCreateInfo vertex_input_info{};
   vertex_input_info.sType =

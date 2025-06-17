@@ -1,5 +1,6 @@
 #pragma once
 #include <Volk/volk.h>
+#include <span>
 
 namespace vkinit {
 VkCommandBufferBeginInfo
@@ -22,9 +23,10 @@ VkRenderingAttachmentInfo AttachmentInfo(VkImageView view,
                                          VkImageLayout layout);
 VkRenderingAttachmentInfo DepthAttachmentInfo(VkImageView image_view,
                                               VkImageLayout layout);
-VkRenderingInfo RenderingInfo(VkExtent3D render_extent,
-                              VkRenderingAttachmentInfo *color_attachment,
-                              VkRenderingAttachmentInfo *depth_attachment);
+VkRenderingInfo
+RenderingInfo(VkExtent3D render_extent,
+              std::span<VkRenderingAttachmentInfo> color_attachments,
+              VkRenderingAttachmentInfo *depth_attachment);
 VkViewport Viewport(VkExtent3D extent);
 VkRect2D Scissor(VkExtent3D extent);
 } // namespace vkinit

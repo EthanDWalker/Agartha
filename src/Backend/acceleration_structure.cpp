@@ -29,7 +29,7 @@ void CreateBottomLevelAS(VulkanContext &context, Mesh &mesh,
   geometry.geometry.triangles = triangles;
 
   VkAccelerationStructureBuildRangeInfoKHR offset{};
-  offset.primitiveCount = mesh.index_count * sizeof(uint32_t);
+  offset.primitiveCount = mesh.index_count / 3;
   offset.primitiveOffset = mesh.first_index * sizeof(uint32_t);
 
   VkAccelerationStructureBuildGeometryInfoKHR build_info{};

@@ -1,4 +1,5 @@
 #include "init.h"
+#include <span>
 
 namespace vkinit {
 VkCommandBufferBeginInfo
@@ -115,16 +116,17 @@ VkRenderingAttachmentInfo DepthAttachmentInfo(VkImageView image_view,
   return info;
 }
 
-VkRenderingInfo RenderingInfo(VkExtent3D render_extent,
-                              VkRenderingAttachmentInfo *color_attachment,
-                              VkRenderingAttachmentInfo *depth_attachment) {
+VkRenderingInfo
+RenderingInfo(VkExtent3D render_extent,
+              std::span<VkRenderingAttachmentInfo> color_attachments,
+              VkRenderingAttachmentInfo *depth_attachment) {
   VkRenderingInfo info{};
   info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
   info.renderArea =
       VkRect2D{VkOffset2D{0, 0}, {render_extent.width, render_extent.height}};
   info.layerCount = 1;
-  info.pColorAttachments = color_attachment;
-  info.colorAttachmentCount = color_attachment ? 1 : 0;
+  info.pColorAttachments = color_attachments.data();
+  info.colorAttachmentCount = color_attachments.size();
   info.pDepthAttachment = depth_attachment;
   return info;
 }
