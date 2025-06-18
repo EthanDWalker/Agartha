@@ -11,6 +11,7 @@
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
 #include "Managers/ui_manager.h"
+#include "Managers/physics_manager.h"
 #include "camera.h"
 #include "render_graph.h"
 #include "types.h"
@@ -32,12 +33,16 @@ static DirectionalLight directional_light{
 
 struct Engine {
   VulkanContext context;
+
+  PhysicsManager physics_manager;
+  SceneManager scene_manager;
+  TextureManager texture_manager;
+  UiManager ui_manager;
+
+  DescriptorBuilder descriptor_builder;
+
   ImmediateSubmit immediate_submit;
   Camera camera;
-  TextureManager texture_manager;
-  SceneManager scene_manager;
-  UiManager ui_manager;
-  DescriptorBuilder descriptor_builder;
   RenderGraph render_graph;
 
   ShaderBindingTable shader_binding_table;

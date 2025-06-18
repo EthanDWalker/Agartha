@@ -9,8 +9,8 @@
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
-#include <glm/gtx/transform.hpp>
 #include <glm/gtx/string_cast.hpp>
+#include <glm/gtx/transform.hpp>
 
 void Camera::Create(VulkanContext &context,
                     DescriptorBuilder &descriptor_builder) {
@@ -90,8 +90,6 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
     const float z_far = 10000.0f;
     const float aspect_ratio = window_width / static_cast<float>(window_height);
     const float fov_y = glm::radians(70.0f);
-
-    CameraBuffer buffer_data{};
 
     glm::quat pitch_rotation = glm::angleAxis(pitch, glm::vec3{1.f, 0.f, 0.f});
     glm::quat yaw_rotation = glm::angleAxis(yaw, glm::vec3{0.f, -1.f, 0.f});

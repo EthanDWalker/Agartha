@@ -4,9 +4,9 @@
 #include <Volk/volk.h>
 
 struct AllocatedBuffer {
+  VmaAllocationInfo info;
   VkBuffer buffer;
   VmaAllocation allocation;
-  VmaAllocationInfo info;
 };
 
 void CreateBuffer(VulkanContext &context, size_t size, VkBufferUsageFlags usage,

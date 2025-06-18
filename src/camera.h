@@ -27,15 +27,16 @@ struct CameraBuffer {
 
 struct Camera {
 public:
+  CameraBuffer buffer_data;
+  AllocatedBuffer buffer;
+
+  VkDescriptorSet descriptor_set;
+  VkDescriptorSetLayout descriptor_layout;
   glm::vec3 velocity;
   glm::vec3 position;
 
   float pitch{0.0f};
   float yaw{0.0f};
-
-  AllocatedBuffer buffer;
-  VkDescriptorSet descriptor_set;
-  VkDescriptorSetLayout descriptor_layout;
 
   void Create(VulkanContext &context, DescriptorBuilder &descriptor_builder);
 

@@ -9,6 +9,7 @@
 #include "Backend/pipeline.h"
 #include "Backend/util.h"
 #include "Loaders/model.h"
+#include "Managers/physics_manager.h"
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
 #include "fmt/format.h"
@@ -295,12 +296,12 @@ void Engine::Init() {
 
   InitVulkanContext(window, DEBUG, context);
 
-  VkStridedDeviceAddressRegionKHR raygenShaderSbtEntry{};
   immediate_submit.Create(context);
   descriptor_builder.Init(context);
   camera.Create(context, descriptor_builder);
   texture_manager.Init(context, descriptor_builder);
   scene_manager.Init(context, descriptor_builder);
+  physics_manager.Init(context);
 
   VkExtent3D draw_image_extent = {
       1600,
@@ -494,9 +495,10 @@ void Engine::Init() {
       descriptor_builder.BindStorageImage(3, depth_image.image_view);
       descriptor_builder.BindCombinedImage(4, shadow_image.image_view,
                                            shadow_sampler);
-      descriptor_builder.Build(context, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
-                               ray_tracing_descriptor_set,
-                               ray_tracing_descriptor_layout);
+      descriptor_builder.Build(
+          context,
+          VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+          ray_tracing_descriptor_set, ray_tracing_descriptor_layout);
 
       RaytracingPipelineBuilder pipeline_builder{};
       pipeline_builder.SetShaders(context, "reflections.rgen.spv",
@@ -515,6 +517,8 @@ void Engine::Init() {
       CreateShaderBindingTable(context, ray_tracing_pipeline,
                                pipeline_builder.shader_groups,
                                shader_binding_table);
+
+      physics_manager.SetTopLevelAS(context, scene_manager.top_level_as);
     }
   }).detach();
 
@@ -530,7 +534,7 @@ void Engine::Run() {
   {
     glm::vec3 light_dir = normalize(glm::vec3(directional_light.direction));
     glm::vec3 light_pos = glm::zero<glm::vec3>() - light_dir * distance;
-    glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
+    glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 
     glm::mat4 light_view = glm::lookAt(light_pos, glm::zero<glm::vec3>(), up);
 
@@ -544,13 +548,30 @@ void Engine::Run() {
                  light_matrix_buffer);
   }
 
+  bool should_close = false;
+
   float delta_time;
   while (!glfwWindowShouldClose(window)) {
     Timer timer{};
     glfwPollEvents();
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-      vkDeviceWaitIdle(context.device);
       glfwSetWindowShouldClose(window, true);
+      should_close = true;
+    }
+
+    if (physics_manager.tlas_set) {
+      RayQuery ray_query{};
+      ray_query.origin = glm::vec3(0, 0, 0);
+      ray_query.direction = glm::vec3(0, -1, 0);
+      ray_query.t_min = 0.001f;
+      ray_query.t_max = 1000.0f;
+
+      physics_manager.AddRayQuery(context, &ray_query);
+      physics_manager.FlushRayQueries(context);
+    }
+
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+      // fmt::println("hi");
     }
 
     camera.Update(context, immediate_submit, window, delta_time);
@@ -573,6 +594,7 @@ void Engine::Destroy() {
   render_graph.Destroy(context);
   texture_manager.Destroy(context);
   descriptor_builder.Destroy(context);
+  physics_manager.Destroy(context);
   scene_manager.Destroy(context);
   immediate_submit.Destroy(context);
   camera.Destroy(context);

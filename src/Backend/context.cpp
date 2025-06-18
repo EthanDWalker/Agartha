@@ -108,6 +108,11 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   context.graphics_queue_index =
       vkb_device.get_queue_index(vkb::QueueType::graphics).value();
 
+  context.compute_queue =
+      vkb_device.get_queue(vkb::QueueType::compute).value();
+  context.compute_queue_index =
+      vkb_device.get_queue_index(vkb::QueueType::compute).value();
+
   VmaVulkanFunctions vulkan_functions{};
   vulkan_functions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
   vulkan_functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;

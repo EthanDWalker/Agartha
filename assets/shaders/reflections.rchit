@@ -1,15 +1,15 @@
 #version 460
 #extension GL_EXT_ray_tracing : enable
 #extension GL_EXT_nonuniform_qualifier : enable
-#extension GL_EXT_ray_tracing_position_fetch : enable 
+#extension GL_EXT_ray_tracing_position_fetch : enable
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_EXT_samplerless_texture_functions : require
 #include "common.glsl"
 
 struct Payload {
-  vec3 outColor;
-  vec3 inWorldPosition;
+    vec3 outColor;
+    vec3 inWorldPosition;
 };
 
 layout(location = 0) rayPayloadInEXT Payload payload;
@@ -64,114 +64,114 @@ vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
 float ShadowCalculation(vec3 L, vec3 N, vec4 lightSpace);
 
 void main() {
-  GpuMesh mesh = gpuMeshes[gl_InstanceCustomIndexEXT];
-  Object object = objects[gl_InstanceCustomIndexEXT];
-  
-  uint indexOffset = gl_PrimitiveID / 3;
+    GpuMesh mesh = gpuMeshes[gl_InstanceCustomIndexEXT];
+    Object object = objects[gl_InstanceCustomIndexEXT];
 
-  VertexBuffer vertexBuffer = mesh.vertexBuffer;
-  Vertex v0 = vertexBuffer.vertices[indices[mesh.firstIndex + indexOffset + 0]];
-  Vertex v1 = vertexBuffer.vertices[indices[mesh.firstIndex + indexOffset + 1]];
-  Vertex v2 = vertexBuffer.vertices[indices[mesh.firstIndex + indexOffset + 2]];
+    uint indexOffset = gl_PrimitiveID / 3;
 
-  vec2 uv0 = vec2(v0.uv_x, v0.uv_y);
-  vec2 uv1 = vec2(v1.uv_x, v1.uv_y);
-  vec2 uv2 = vec2(v2.uv_x, v2.uv_y);
+    VertexBuffer vertexBuffer = mesh.vertexBuffer;
+    Vertex v0 = vertexBuffer.vertices[indices[mesh.firstIndex + indexOffset + 0]];
+    Vertex v1 = vertexBuffer.vertices[indices[mesh.firstIndex + indexOffset + 1]];
+    Vertex v2 = vertexBuffer.vertices[indices[mesh.firstIndex + indexOffset + 2]];
 
-  vec3 barycentric = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
+    vec2 uv0 = vec2(v0.uv_x, v0.uv_y);
+    vec2 uv1 = vec2(v1.uv_x, v1.uv_y);
+    vec2 uv2 = vec2(v2.uv_x, v2.uv_y);
 
-  vec2 uv = uv0 * barycentric.x + uv1 * barycentric.y + uv2 * barycentric.z;
-  vec3 normal = v0.normal * barycentric.x + v1.normal * barycentric.y + v2.normal * barycentric.z;
-  vec3 position0 = gl_HitTriangleVertexPositionsEXT[0];
-  vec3 position1 = gl_HitTriangleVertexPositionsEXT[1];
-  vec3 position2 = gl_HitTriangleVertexPositionsEXT[2];
+    vec3 barycentric = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
 
-  vec3 position = position0 * barycentric.x + position1 * barycentric.y + position2 * barycentric.z;
+    vec2 uv = uv0 * barycentric.x + uv1 * barycentric.y + uv2 * barycentric.z;
+    vec3 normal = v0.normal * barycentric.x + v1.normal * barycentric.y + v2.normal * barycentric.z;
+    vec3 position0 = gl_HitTriangleVertexPositionsEXT[0];
+    vec3 position1 = gl_HitTriangleVertexPositionsEXT[1];
+    vec3 position2 = gl_HitTriangleVertexPositionsEXT[2];
 
-  vec3 worldPosition = gl_ObjectToWorldEXT * vec4(position, 1.0);
+    vec3 position = position0 * barycentric.x + position1 * barycentric.y + position2 * barycentric.z;
 
-  vec4 lightSpace = lightMatrix * vec4(worldPosition, 1.0);
+    vec3 worldPosition = gl_ObjectToWorldEXT * vec4(position, 1.0);
 
-  vec3 albedo = texture(sampler2D(textures[object.material.albedo], textureSampler), uv).rgb;
-  vec3 mr = texture(sampler2D(textures[object.material.metal_roughness], textureSampler), uv).rgb;
-  float metallic = mr.b;
-  float roughness = mr.g;
-  vec3 emisive = texture(sampler2D(textures[object.material.emissive], textureSampler), uv).rgb;
-  float ao = texture(sampler2D(textures[object.material.ambient_occlusion], textureSampler), uv).r;
+    vec4 lightSpace = lightMatrix * vec4(worldPosition, 1.0);
 
-  vec3 N = GetNormalFromMap(object.material.normal, normal, uv);
-  vec3 V = normalize(camera.viewPos - worldPosition);
-  vec3 R = reflect(-V, N);
+    vec3 albedo = texture(sampler2D(textures[object.material.albedo], textureSampler), uv).rgb;
+    vec3 mr = texture(sampler2D(textures[object.material.metal_roughness], textureSampler), uv).rgb;
+    float metallic = mr.b;
+    float roughness = mr.g;
+    vec3 emisive = texture(sampler2D(textures[object.material.emissive], textureSampler), uv).rgb;
+    float ao = texture(sampler2D(textures[object.material.ambient_occlusion], textureSampler), uv).r;
 
-  vec3 F0 = vec3(0.04);
-  F0 = mix(F0, albedo, metallic);
+    vec3 N = GetNormalFromMap(object.material.normal, normal, uv);
+    vec3 V = normalize(camera.viewPos - worldPosition);
+    vec3 R = reflect(-V, N);
 
-  vec3 Lo = vec3(0.0);
+    vec3 F0 = vec3(0.04);
+    F0 = mix(F0, albedo, metallic);
 
-  {
-    vec3 L = normalize(pointLight.position - worldPosition);
-    vec3 H = normalize(V + L);
+    vec3 Lo = vec3(0.0);
 
-    float distance = length(pointLight.position - worldPosition);
-    float attenuation = 1.0 / (distance * distance);
-    vec3 radiance = pointLight.color.xyz * attenuation * pointLight.color.w;
+    {
+        vec3 L = normalize(pointLight.position - worldPosition);
+        vec3 H = normalize(V + L);
 
-    float NDF = DistributionGGX(N, H, roughness);
-    float G = GeometrySmith(N, V, L, roughness);
+        float distance = length(pointLight.position - worldPosition);
+        float attenuation = 1.0 / (distance * distance);
+        vec3 radiance = pointLight.color.xyz * attenuation * pointLight.color.w;
+
+        float NDF = DistributionGGX(N, H, roughness);
+        float G = GeometrySmith(N, V, L, roughness);
+        vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+        vec3 specular = numerator / denominator;
+
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+
+        kD *= 1.0 - metallic;
+
+        float NdotL = max(dot(N, L), 0.0);
+
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+    }
+
+    {
+        vec3 L = normalize(-directionalLight.direction.xyz);
+        vec3 H = normalize(V + L);
+
+        vec3 radiance = vec3(1.0, 0.8, 0.5);
+
+        float NDF = DistributionGGX(N, H, roughness);
+        float G = GeometrySmith(N, V, L, roughness);
+        vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+        vec3 specular = numerator / denominator;
+
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+
+        kD *= 1.0 - metallic;
+
+        float NdotL = max(dot(N, L), 0.0);
+
+        float shadow = ShadowCalculation(L, N, lightSpace) + .05;
+
+        Lo += shadow * (kD * albedo / PI + specular) * radiance * NdotL;
+    }
+
     vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
-
-    vec3 numerator = NDF * G * F;
-    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-    vec3 specular = numerator / denominator;
 
     vec3 kS = F;
     vec3 kD = vec3(1.0) - kS;
-
     kD *= 1.0 - metallic;
 
-    float NdotL = max(dot(N, L), 0.0);
+    vec3 color = Lo + emisive + (F + albedo) * kD * ao;
 
-    Lo += (kD * albedo / PI + specular) * radiance * NdotL;
-  }
+    color = color / (color + vec3(1.0));
+    color = pow(color, vec3(1.0 / 2.2));
 
-  {
-    vec3 L = normalize(-directionalLight.direction.xyz);
-    vec3 H = normalize(V + L);
-
-    vec3 radiance = vec3(1.0, 0.8, 0.5);
-
-    float NDF = DistributionGGX(N, H, roughness);
-    float G = GeometrySmith(N, V, L, roughness);
-    vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
-
-    vec3 numerator = NDF * G * F;
-    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-    vec3 specular = numerator / denominator;
-
-    vec3 kS = F;
-    vec3 kD = vec3(1.0) - kS;
-
-    kD *= 1.0 - metallic;
-
-    float NdotL = max(dot(N, L), 0.0);
-
-    float shadow = ShadowCalculation(L, N, lightSpace) + .05;
-
-    Lo += shadow * (kD * albedo / PI + specular) * radiance * NdotL;
-  }
-
-  vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
-
-  vec3 kS = F;
-  vec3 kD = vec3(1.0) - kS;
-  kD *= 1.0 - metallic;
-
-  vec3 color = Lo + emisive + (F + albedo) * kD * ao;
-
-  color = color / (color + vec3(1.0));
-  color = pow(color, vec3(1.0 / 2.2));
-
-  payload.outColor = color;
+    payload.outColor = color;
 }
 
 vec3 GetNormalFromMap(uint materialIndex, vec3 normal, vec2 uv) {

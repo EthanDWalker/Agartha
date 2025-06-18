@@ -188,7 +188,6 @@ uint32_t SceneManager::AddObject(VulkanContext &context, MeshData &mesh_data,
   }
 
   GpuMesh gpu_mesh{};
-
   gpu_mesh.index_count = mesh_data.indices.size();
   gpu_mesh.first_index = last_index;
 
