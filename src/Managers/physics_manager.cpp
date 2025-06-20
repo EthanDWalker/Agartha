@@ -38,7 +38,7 @@ void PhysicsManager::SetTopLevelAS(VulkanContext &context,
   descriptor_builder.Build(context, VK_SHADER_STAGE_ALL, as_descriptor_set,
                            as_descriptor_layout);
 
-  RaytracingPipelineBuilder pipeline_builder{};
+  RaytracingPipelineBuilder pipeline_builder;
   pipeline_builder.SetShaders(context, "ray_query.rgen.spv",
                               "ray_query.rmiss.spv", "ray_query.rchit.spv");
   const uint32_t max_recursion = 1;
@@ -54,6 +54,8 @@ void PhysicsManager::SetTopLevelAS(VulkanContext &context,
 
 std::future<void> PhysicsManager::FlushRayQueries(VulkanContext &context) {
   std::future<void> future = std::async(std::launch::async, [&]() {
+    if (ray_query_index == 0)
+      return;
     auto properties = GetRaytracingPipelineProperties(context);
 
     const uint32_t handle_size_aligned =

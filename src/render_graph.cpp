@@ -43,6 +43,7 @@ void DependencyBuilder::AddDependency(AllocatedImage image,
   barrier.dstAccessMask = dst_access;
   barrier.srcStageMask = src_stage;
   barrier.dstStageMask = dst_stage;
+  barrier.subresourceRange = vkinit::ImageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
   dependency.image_deps.push_back(barrier);
 }
 

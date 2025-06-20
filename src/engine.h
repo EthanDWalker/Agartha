@@ -8,11 +8,12 @@
 #include "Backend/immediate_submit.h"
 #include "Backend/pipeline.h"
 #include "GLFW/glfw3.h"
+#include "Managers/physics_manager.h"
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
 #include "Managers/ui_manager.h"
-#include "Managers/physics_manager.h"
 #include "camera.h"
+#include "noise.h"
 #include "render_graph.h"
 #include "types.h"
 
@@ -51,6 +52,7 @@ struct Engine {
   AllocatedImage mr_normal_image;
   AllocatedImage depth_image;
   AllocatedImage shadow_image;
+  Noise ssao_noise;
 
   AllocatedBuffer point_light_buffer;
   AllocatedBuffer directional_light_buffer;
@@ -69,6 +71,8 @@ struct Engine {
   Pipeline cull_pipeline;
   Pipeline shadow_cull_pipeline;
   Pipeline ray_tracing_pipeline;
+  Pipeline outline_pipeline;
+  Pipeline ao_pipeline;
 
   VkSampler shadow_sampler;
 
@@ -89,6 +93,9 @@ struct Engine {
 
   VkDescriptorSet light_descriptor_set;
   VkDescriptorSetLayout light_descriptor_layout;
+
+  VkDescriptorSet ao_descriptor_set;
+  VkDescriptorSetLayout ao_descriptor_layout;
 
   GLFWwindow *window;
 

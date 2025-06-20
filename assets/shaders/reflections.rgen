@@ -20,7 +20,7 @@ struct Payload {
 layout(location = 0) rayPayloadEXT Payload payload;
 
 vec3 PositionFromDepth(float depth, vec2 uv) {
-    vec3 ndc = vec3(uv * 2.0 - 1.0, depth);
+    vec3 ndc = vec3(uv * 2.0 - 1.0, 1.0 - depth);
 
     vec4 clipSpacePosition = vec4(ndc, 1.0);
     vec4 viewSpacePosition = camera.invProj * clipSpacePosition;
@@ -46,7 +46,7 @@ void main() {
     float roughness = mrNormals.y;
     float metallic = mrNormals.x;
 
-    if (roughness > 0.5) return;
+    if (roughness > 0.5 || metallic > 0.1) return;
 
     vec4 pixelColor = imageLoad(mainImage, ivec2(gl_LaunchIDEXT.xy));
     float depth = imageLoad(depthImage, ivec2(gl_LaunchIDEXT.xy)).r;
@@ -55,7 +55,7 @@ void main() {
     const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
     const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
 
-    vec3 position = PositionFromDepth(1.0 - depth, inUV);
+    vec3 position = PositionFromDepth(depth, inUV);
 
     payload.outWorldPosition = position;
 

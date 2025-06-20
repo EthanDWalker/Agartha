@@ -24,13 +24,6 @@ layout(set = 1, binding = 1) writeonly buffer RayHits {
 layout(location = 0) rayPayloadEXT uint hitInstanceIndex;
 
 void main() {
-    /*
-                                            const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
-                                            const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
-                                            vec4 ndc = vec4(inUV * 2.0 - 1.0, 0, 1);
-                                            vec4 target = camera.invProj * vec4(ndc);
-                                            vec4 direction = camera.invView * vec4(target.xyz, 0);
-                                            */
     RayQuery rayQuery = rayQueries[gl_LaunchIDEXT.x];
 
     traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0,
