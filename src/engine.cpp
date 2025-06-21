@@ -9,14 +9,12 @@
 #include "Backend/pipeline.h"
 #include "Backend/util.h"
 #include "Loaders/model.h"
-#include "Managers/physics_manager.h"
+#include "Managers/light_manager.h"
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
 #include "fmt/format.h"
-#include "noise.h"
 #include "render_graph.h"
 #include "timer.h"
-#include "types.h"
 #include <GLFW/glfw3.h>
 #include <Volk/volk.h>
 #include <array>
@@ -36,9 +34,11 @@ void Engine::CreateRenderGraph() {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cull_pipeline.obj);
 
       std::array<VkDescriptorSet, 4> ds = {
-          cull_descriptor_set, camera.descriptor_set,
+          cull_descriptor_set,
+          camera.descriptor_set,
           scene_manager.instance_descriptor_set,
-          scene_manager.object_descriptor_set};
+          scene_manager.object_descriptor_set,
+      };
 
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                               cull_pipeline.layout, 0, ds.size(), ds.data(), 0,
@@ -68,55 +68,67 @@ void Engine::CreateRenderGraph() {
   {
     DependencyBuilder shadow_pass_dep{};
 
-    shadow_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
-                                       VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                                       shadow_image);
-
     builder.AddPass(1, shadow_pass_dep.dependency, [&](VkCommandBuffer cmd) {
-      VkViewport viewport = vkinit::Viewport(shadow_image.extent);
+      VkViewport viewport = vkinit::Viewport(SHADOW_IMAGE_EXTENT);
       vkCmdSetViewport(cmd, 0, 1, &viewport);
-      VkRect2D scissor = vkinit::Scissor(shadow_image.extent);
+      VkRect2D scissor = vkinit::Scissor(SHADOW_IMAGE_EXTENT);
       vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-      VkRenderingAttachmentInfo depth = vkinit::DepthAttachmentInfo(
-          shadow_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+      for (uint32_t i = 0; i < light_manager.matrix_index; i++) {
+        AllocatedImage shadow_image = light_manager.shadow_images[i];
 
-      VkRenderingInfo render_info =
-          vkinit::RenderingInfo(shadow_image.extent, {}, &depth);
+        TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                        shadow_image.image);
 
-      vkCmdBeginRendering(cmd, &render_info);
+        VkRenderingAttachmentInfo depth = vkinit::DepthAttachmentInfo(
+            shadow_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        shadow_pipeline.obj);
+        VkRenderingInfo render_info =
+            vkinit::RenderingInfo(SHADOW_IMAGE_EXTENT, {}, &depth);
 
-      uint32_t draw_count = 0;
-      memcpy(&draw_count, shadow_culled_draw_count_buffer.info.pMappedData,
-             sizeof(uint32_t));
+        vkCmdBeginRendering(cmd, &render_info);
 
-      if (draw_count > scene_manager.instance_index) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          shadow_pipeline.obj);
+
+        vkCmdPushConstants(cmd, shadow_pipeline.layout,
+                           VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(uint32_t), &i);
+
+        uint32_t draw_count = 0;
+
+        memcpy(&draw_count, shadow_culled_draw_count_buffer.info.pMappedData,
+               sizeof(uint32_t));
+
+        if (draw_count > scene_manager.instance_index) {
+          vkCmdEndRendering(cmd);
+          return;
+        }
+
+        std::array<VkDescriptorSet, 4> ds = {
+            shadow_descriptor_set,
+            scene_manager.instance_descriptor_set,
+            scene_manager.object_descriptor_set,
+            light_manager.shadow_descriptor_set,
+        };
+
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                shadow_pipeline.layout, 0, ds.size(), ds.data(),
+                                0, nullptr);
+
+        vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
+                             VK_INDEX_TYPE_UINT32);
+
+        vkCmdDrawIndexedIndirect(
+            cmd, shadow_draw_indirect_buffer.buffer, 0, draw_count,
+            static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
+
         vkCmdEndRendering(cmd);
-        return;
+
+        TransitionImage(cmd, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        shadow_image.image);
       }
-
-      std::array<VkDescriptorSet, 4> ds = {
-          shadow_descriptor_set,
-          scene_manager.instance_descriptor_set,
-          scene_manager.object_descriptor_set,
-          light_descriptor_set,
-      };
-
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              shadow_pipeline.layout, 0, ds.size(), ds.data(),
-                              0, nullptr);
-
-      vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
-                           VK_INDEX_TYPE_UINT32);
-
-      vkCmdDrawIndexedIndirect(
-          cmd, shadow_draw_indirect_buffer.buffer, 0, draw_count,
-          static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
-
-      vkCmdEndRendering(cmd);
     });
   }
 
@@ -125,6 +137,7 @@ void Engine::CreateRenderGraph() {
     main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                      main_image);
+
     main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                      mr_normal_image);
@@ -132,10 +145,6 @@ void Engine::CreateRenderGraph() {
     main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
                                      VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                                      depth_image);
-
-    main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                     shadow_image);
 
     builder.AddPass(2, main_pass_dep.dependency, [&](VkCommandBuffer cmd) {
       VkViewport viewport = vkinit::Viewport(main_image.extent);
@@ -183,13 +192,14 @@ void Engine::CreateRenderGraph() {
           return;
         }
 
-        std::array<VkDescriptorSet, 6> ds = {
+        std::array<VkDescriptorSet, 7> ds = {
             main_descriptor_set,
             texture_manager.descriptor_set,
             camera.descriptor_set,
             scene_manager.object_descriptor_set,
             scene_manager.instance_descriptor_set,
-            light_descriptor_set,
+            light_manager.light_descriptor_set,
+            light_manager.shadow_descriptor_set,
         };
 
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -214,13 +224,17 @@ void Engine::CreateRenderGraph() {
         main_image);
 
     reflection_pass_dep.AddImageTransition(
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+        mr_normal_image);
+
+    reflection_pass_dep.AddImageTransition(
         VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
         depth_image);
 
     builder.AddPass(
         3, reflection_pass_dep.dependency, [&](VkCommandBuffer cmd) {
           if (ray_tracing_pipeline.obj != VK_NULL_HANDLE &&
-              shader_binding_table.closest_hit_address != 0) {
+              shader_binding_table.closest_hit_address != 0 && false) {
             auto properties = GetRaytracingPipelineProperties(context);
 
             const uint32_t handle_size_aligned =
@@ -247,12 +261,13 @@ void Engine::CreateRenderGraph() {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
                               ray_tracing_pipeline.obj);
 
-            std::array<VkDescriptorSet, 5> ds = {
+            std::array<VkDescriptorSet, 6> ds = {
                 ray_tracing_descriptor_set,
                 camera.descriptor_set,
                 scene_manager.object_descriptor_set,
                 texture_manager.descriptor_set,
-                light_descriptor_set,
+                light_manager.light_descriptor_set,
+                light_manager.shadow_descriptor_set,
             };
 
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
@@ -264,28 +279,6 @@ void Engine::CreateRenderGraph() {
                               main_image.extent.height, 1);
           }
         });
-
-    DependencyBuilder ao_pass_dep{};
-    ao_pass_dep.AddDependency(main_image, VK_ACCESS_2_SHADER_WRITE_BIT,
-                              VK_ACCESS_2_SHADER_WRITE_BIT,
-                              VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
-                              VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-
-    builder.AddPass(3, ao_pass_dep.dependency, [&](VkCommandBuffer cmd) {
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, ao_pipeline.obj);
-
-      std::array<VkDescriptorSet, 2> ds = {
-          ao_descriptor_set,
-          camera.descriptor_set,
-      };
-
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                              ao_pipeline.layout, 0, ds.size(), ds.data(), 0,
-                              nullptr);
-
-      vkCmdDispatch(cmd, std::ceil(main_image.extent.width / 16.0),
-                    std::ceil(main_image.extent.height / 16.0), 1);
-    });
   }
 
   // draw image switched with main image
@@ -317,10 +310,14 @@ void Engine::Init() {
 
   immediate_submit.Create(context);
   descriptor_builder.Init(context);
-  camera.Create(context, descriptor_builder);
   texture_manager.Init(context, descriptor_builder);
   scene_manager.Init(context, descriptor_builder);
-  physics_manager.Init(context);
+  light_manager.Init(context, descriptor_builder);
+
+  camera.Create(context, descriptor_builder);
+
+  light_manager.AddDirectionalLight(context, glm::vec3(-1.0, -4.0, -1.0), 1.0,
+                                    immediate_submit);
 
   VkExtent3D draw_image_extent = {
       1600,
@@ -343,39 +340,6 @@ void Engine::Init() {
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                            VK_IMAGE_USAGE_STORAGE_BIT,
                        depth_image);
-
-  CreateAllocatedImage(context, {1024 * 4, 1024 * 4, 1}, VK_FORMAT_D32_SFLOAT,
-                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
-                           VK_IMAGE_USAGE_SAMPLED_BIT,
-                       shadow_image);
-
-  VkSamplerCreateInfo shadow_sampler_ci{};
-  shadow_sampler_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  shadow_sampler_ci.magFilter = VK_FILTER_LINEAR;
-  shadow_sampler_ci.minFilter = VK_FILTER_LINEAR;
-  shadow_sampler_ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-  shadow_sampler_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  shadow_sampler_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  shadow_sampler_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  shadow_sampler_ci.compareEnable = VK_TRUE;
-  shadow_sampler_ci.compareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
-  shadow_sampler_ci.anisotropyEnable = VK_FALSE;
-  shadow_sampler_ci.minLod = 0.0f;
-  shadow_sampler_ci.maxLod = 1.0f;
-
-  vkCreateSampler(context.device, &shadow_sampler_ci, nullptr, &shadow_sampler);
-
-  CreateBufferData(context, immediate_submit, &point_light, sizeof(PointLight),
-                   VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, point_light_buffer);
-
-  CreateBufferData(context, immediate_submit, &directional_light,
-                   sizeof(DirectionalLight), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                   directional_light_buffer);
-
-  CreateBuffer(context, sizeof(glm::mat4),
-               VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-                   VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-               VMA_MEMORY_USAGE_GPU_ONLY, light_matrix_buffer);
 
   CreateBuffer(context, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                VMA_MEMORY_USAGE_AUTO, culled_draw_count_buffer);
@@ -401,22 +365,9 @@ void Engine::Init() {
                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
                shadow_visible_instance_buffer);
 
-  CreateNoiseImage(context, descriptor_builder, ssao_noise);
-
-  {
-    descriptor_builder.Reset();
-    descriptor_builder.BindUniformBuffer(0, point_light_buffer.buffer);
-    descriptor_builder.BindUniformBuffer(1, directional_light_buffer.buffer);
-    descriptor_builder.BindUniformBuffer(2, light_matrix_buffer.buffer);
-    descriptor_builder.Build(context, VK_SHADER_STAGE_ALL, light_descriptor_set,
-                             light_descriptor_layout);
-  }
-
   {
     descriptor_builder.Reset();
     descriptor_builder.BindStorageBuffer(0, visible_instance_buffer.buffer);
-    descriptor_builder.BindCombinedImage(1, shadow_image.image_view,
-                                         shadow_sampler);
     descriptor_builder.Build(
         context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
         main_descriptor_set, main_descriptor_layout);
@@ -435,7 +386,10 @@ void Engine::Init() {
         scene_manager.object_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(light_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(
+        light_manager.light_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(
+        light_manager.shadow_descriptor_layout);
     pipeline_builder.Build(context, main_pipeline);
   }
 
@@ -450,46 +404,19 @@ void Engine::Init() {
     pipeline_builder.Default();
     pipeline_builder.SetCullMode(VK_CULL_MODE_BACK_BIT,
                                  VK_FRONT_FACE_CLOCKWISE);
+
     pipeline_builder.AddDescriptorSetLayout(shadow_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.object_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(light_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(
+        light_manager.shadow_descriptor_layout);
+
+    pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT,
+                                          sizeof(uint32_t));
+
     pipeline_builder.Build(context, shadow_pipeline);
-  }
-
-  {
-    GraphicsPipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShaders(context, "outline.vert.spv",
-                                "outline.frag.spv");
-    pipeline_builder.Default();
-    pipeline_builder.AddColorAttachment(main_image.format);
-    pipeline_builder.AddDescriptorSetLayout(
-        physics_manager.ray_query_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(
-        scene_manager.instance_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(
-        scene_manager.object_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
-    pipeline_builder.Build(context, outline_pipeline);
-  }
-
-  {
-    descriptor_builder.Reset();
-    descriptor_builder.BindStorageImage(0, main_image.image_view);
-    descriptor_builder.BindStorageImage(1, mr_normal_image.image_view);
-    descriptor_builder.BindStorageImage(2, depth_image.image_view);
-    descriptor_builder.BindCombinedImage(3, ssao_noise.obj.image_view,
-                                         ssao_noise.sampler);
-    descriptor_builder.BindStorageBuffer(4, ssao_noise.kernel.buffer);
-    descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
-                             ao_descriptor_set, ao_descriptor_layout);
-    ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(context, "ambient_occlusion.comp.spv");
-    pipeline_builder.AddDescriptorSetLayout(ao_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
-    pipeline_builder.Build(context, ao_pipeline);
   }
 
   {
@@ -537,7 +464,8 @@ void Engine::Init() {
     for (auto &mesh : gltf_data) {
       scene_manager.AddObject(
           context, mesh,
-          texture_manager.GetMaterial(context, mesh.material_data));
+          texture_manager.UploadMaterial(context, descriptor_builder,
+                                         mesh.material_data));
     }
 
     {
@@ -547,13 +475,12 @@ void Engine::Init() {
       descriptor_builder.BindStorageImage(1, main_image.image_view);
       descriptor_builder.BindStorageImage(2, mr_normal_image.image_view);
       descriptor_builder.BindStorageImage(3, depth_image.image_view);
-      descriptor_builder.BindCombinedImage(4, shadow_image.image_view,
-                                           shadow_sampler);
       descriptor_builder.Build(
           context,
           VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
           ray_tracing_descriptor_set, ray_tracing_descriptor_layout);
 
+      /*
       RaytracingPipelineBuilder pipeline_builder{};
       pipeline_builder.SetShaders(context, "reflections.rgen.spv",
                                   "reflections.rmiss.spv",
@@ -564,15 +491,17 @@ void Engine::Init() {
           scene_manager.object_descriptor_layout);
       pipeline_builder.AddDescriptorSetLayout(
           texture_manager.descriptor_set_layout);
-      pipeline_builder.AddDescriptorSetLayout(light_descriptor_layout);
+      pipeline_builder.AddDescriptorSetLayout(
+          light_manager.light_descriptor_layout);
+      pipeline_builder.AddDescriptorSetLayout(
+          light_manager.shadow_descriptor_layout);
       const uint8_t max_recursion = 1;
       pipeline_builder.Build(context, max_recursion, ray_tracing_pipeline);
 
       CreateShaderBindingTable(context, ray_tracing_pipeline,
                                pipeline_builder.shader_groups,
                                shader_binding_table);
-
-      physics_manager.SetTopLevelAS(context, scene_manager.top_level_as);
+      */
     }
   }).detach();
 
@@ -580,28 +509,6 @@ void Engine::Init() {
 }
 
 void Engine::Run() {
-  const float distance = 200.0f;
-  const float scene_extent = 85.0f;
-  const float far_plane = 240.0f;
-  const float near_plane = 0.1f;
-
-  {
-    glm::vec3 light_dir = normalize(glm::vec3(directional_light.direction));
-    glm::vec3 light_pos = glm::zero<glm::vec3>() - light_dir * distance;
-    glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-
-    glm::mat4 light_view = glm::lookAt(light_pos, glm::zero<glm::vec3>(), up);
-
-    glm::mat4 light_projection =
-        glm::ortho(-scene_extent, scene_extent, -scene_extent, scene_extent,
-                   near_plane, far_plane);
-
-    glm::mat4 light_matrix = light_projection * light_view;
-
-    UpdateBuffer(context, immediate_submit, &light_matrix, sizeof(glm::mat4), 0,
-                 light_matrix_buffer);
-  }
-
   bool should_close = false;
 
   float delta_time;
@@ -614,6 +521,8 @@ void Engine::Run() {
     }
 
     camera.Update(context, immediate_submit, window, delta_time);
+
+    light_manager.UpdateMatrices(context, immediate_submit, camera.position);
 
     render_graph.Render(context);
     if (render_graph.resize_requested == true) {
@@ -630,9 +539,9 @@ void Engine::Destroy() {
   vkDeviceWaitIdle(context.device);
 
   render_graph.Destroy(context);
+  light_manager.Destroy(context);
   texture_manager.Destroy(context);
   descriptor_builder.Destroy(context);
-  physics_manager.Destroy(context);
   scene_manager.Destroy(context);
   immediate_submit.Destroy(context);
   camera.Destroy(context);
@@ -645,17 +554,8 @@ void Engine::Destroy() {
                                nullptr);
   vkDestroyDescriptorSetLayout(context.device, ray_tracing_descriptor_layout,
                                nullptr);
-  vkDestroyDescriptorSetLayout(context.device, light_descriptor_layout,
-                               nullptr);
-  vkDestroyDescriptorSetLayout(context.device, ao_descriptor_layout, nullptr);
-
-  DestroyImageSampler(context, shadow_sampler);
 
   DestroyShaderBindingTable(context, shader_binding_table);
-
-  DestroyBuffer(context, point_light_buffer);
-  DestroyBuffer(context, directional_light_buffer);
-  DestroyBuffer(context, light_matrix_buffer);
   DestroyBuffer(context, draw_indirect_buffer);
   DestroyBuffer(context, culled_draw_count_buffer);
   DestroyBuffer(context, visible_instance_buffer);
@@ -665,19 +565,14 @@ void Engine::Destroy() {
   DestroyBuffer(context, shadow_visible_instance_buffer);
 
   DestroyAllocatedImage(context, depth_image);
-  DestroyAllocatedImage(context, shadow_image);
   DestroyAllocatedImage(context, main_image);
   DestroyAllocatedImage(context, mr_normal_image);
-
-  DestroyNoiseImage(context, ssao_noise);
 
   DestroyPipeline(context, main_pipeline);
   DestroyPipeline(context, shadow_pipeline);
   DestroyPipeline(context, cull_pipeline);
   DestroyPipeline(context, shadow_cull_pipeline);
   DestroyPipeline(context, ray_tracing_pipeline);
-  DestroyPipeline(context, outline_pipeline);
-  DestroyPipeline(context, ao_pipeline);
 
   DestroyVulkanContext(context);
 

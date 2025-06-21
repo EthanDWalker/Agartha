@@ -27,7 +27,12 @@ struct TextureManager {
   uint32_t texture_index;
 
   void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
-  uint32_t GetTexture(VulkanContext &context, std::string filename);
-  Material GetMaterial(VulkanContext &context, MaterialData data);
+  uint32_t UploadTexture(VulkanContext &context, std::string filename);
+  uint32_t AddAllocatedImage(VulkanContext &context, AllocatedImage &image);
+  Material UploadMaterial(VulkanContext &context,
+                          DescriptorBuilder &descriptor_builder,
+                          MaterialData data);
+  void LoadTexture(VulkanContext &context, std::string filename,
+                   AllocatedImage &image);
   void Destroy(VulkanContext &context);
 };

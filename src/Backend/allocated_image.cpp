@@ -2,7 +2,11 @@
 #include "Backend/context.h"
 #include "Backend/init.h"
 #include "Backend/util.h"
+#include "buffer.h"
+#include "image_format.h"
+#include "immediate_submit.h"
 #include <cstdint>
+#include <cstring>
 
 uint32_t CalculateMipLevels(VkExtent3D image_extent) {
   return uint32_t(std::floor(
@@ -140,6 +144,50 @@ void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
 
   VK_CHECK(vkCreateImageView(context.device, &image_view_ci, nullptr,
                              &image.image_view));
+}
+
+void CreateImageDataAsync(VulkanContext &context, void *data,
+                          uint8_t channel_count, VkExtent3D size,
+                          VkFormat format, VkImageUsageFlags usage_flags,
+                          AllocatedImage &image, bool mipmapped,
+                          VkSampleCountFlagBits sample_count) {
+  CreateAllocatedImage(context, size, format, usage_flags, image, mipmapped,
+                       false, sample_count);
+  size_t data_size = size.depth * size.height * size.width * channel_count *
+                     GetFormatComponentSize(format);
+
+  AllocatedBuffer upload_buffer;
+  CreateBuffer(context, data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+               VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
+
+  memcpy(upload_buffer.info.pMappedData, data, data_size);
+
+  ImmediateSubmit::SubmitAsync(context, [&](VkCommandBuffer cmd) {
+    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image.image);
+
+    VkBufferImageCopy copy_region{};
+    copy_region.bufferOffset = 0;
+    copy_region.bufferRowLength = 0;
+    copy_region.bufferImageHeight = 0;
+    copy_region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy_region.imageSubresource.mipLevel = 0;
+    copy_region.imageSubresource.baseArrayLayer = 0;
+    copy_region.imageSubresource.layerCount = 1;
+    copy_region.imageExtent = size;
+
+    vkCmdCopyBufferToImage(cmd, upload_buffer.buffer, image.image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                           &copy_region);
+
+    TransitionImage(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, image.image);
+    if (mipmapped) {
+      GenerateMipmaps(cmd, image);
+    }
+  });
+
+  DestroyBuffer(context, upload_buffer);
 }
 
 void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,

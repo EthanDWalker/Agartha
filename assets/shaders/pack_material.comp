@@ -1,0 +1,28 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0, rgba8) readonly uniform image2D albedoTexture;
+layout(set = 0, binding = 1, rgba8) readonly uniform image2D mrTexture;
+layout(set = 0, binding = 2, rgba8) readonly uniform image2D normalTexture;
+layout(set = 0, binding = 3, rgba8) readonly uniform image2D aoTexture;
+
+layout(set = 1, binding = 0) writeonly uniform image2D albedoAoTexture;
+layout(set = 1, binding = 1) writeonly uniform image2D mrNormalTexture;
+
+void main() {
+    uvec2 imageExtent = imageSize(albedoTexture);
+
+    if (gl_GlobalInvocationID.x >= imageExtent.x || gl_GlobalInvocationID.y >= imageExtent.y) {
+        return;
+    }
+    
+    vec3 albedo = imageLoad(albedoTexture, ivec2(gl_GlobalInvocationID.xy)).rgb;
+    vec3 mr = imageLoad(mrTexture, ivec2(gl_GlobalInvocationID.xy)).rgb;
+    float m = mr.b;
+    float r = mr.g;
+    vec3 normal = imageLoad(normalTexture, ivec2(gl_GlobalInvocationID.xy)).xyz;
+    float ao = imageLoad(aoTexture, ivec2(gl_GlobalInvocationID.xy)).r;
+      
+    imageStore(albedoAoTexture, ivec2(gl_GlobalInvocationID.xy), vec4(albedo, ao));
+    imageStore(mrNormalTexture, ivec2(gl_GlobalInvocationID.xy), vec4(m, r, normal.xy));
+}

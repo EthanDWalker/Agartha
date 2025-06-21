@@ -17,10 +17,13 @@ layout(set = 2, binding = 1) readonly buffer MeshBuffer {
     GpuMesh gpuMeshes[];
 };
 
-layout(set = 3, binding = 2) uniform LightMatrixUBO {
-    mat4 lightMatrix;
+layout(set = 3, binding = 1) readonly buffer LightMatrixBuffer {
+    mat4 lightMatrices[];
 };
 
+layout(push_constant) uniform constants {
+  uint shadowMapIndex;
+};
 
 void main() {
     Instance instance = instances[visibleInstances[gl_InstanceIndex]];
@@ -29,5 +32,5 @@ void main() {
     Vertex vertex = gpuMeshes[objectIndex].vertexBuffer.vertices[gl_VertexIndex];
     vec4 worldPos = instanceMatrix * vec4(vertex.position, 1.0);
 
-    gl_Position = lightMatrix * worldPos;
+    gl_Position = lightMatrices[shadowMapIndex] * worldPos;
 }

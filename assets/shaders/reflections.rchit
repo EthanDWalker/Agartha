@@ -14,8 +14,6 @@ struct Payload {
 
 layout(location = 0) rayPayloadInEXT Payload payload;
 
-layout(set = 0, binding = 4) uniform sampler2D shadowMap;
-
 layout(set = 1, binding = 0) uniform CameraUBO {
     Camera camera;
 };
@@ -40,19 +38,24 @@ layout(set = 4, binding = 0) uniform PointLightBuffer {
     PointLight pointLight;
 };
 
-layout(std140, set = 4, binding = 1) uniform DirectionalLightBuffer {
+layout(set = 4, binding = 1) uniform DirectionalLightBuffer {
     DirectionalLight directionalLight;
 };
 
-layout(std140, set = 4, binding = 2) uniform LightMatrixBuffer {
+layout(set = 5, binding = 1) uniform LightMatrixBuffer {
     mat4 lightMatrix;
 };
+
+
+layout(set = 6, binding = 0) uniform texture2D shadowMaps[];
+
+layout(set = 6, binding = 2) uniform sampler shadowSampler;
 
 hitAttributeEXT vec2 attribs;
 
 const float PI = 3.14159265359;
 
-vec3 GetNormalFromMap(uint materialIndex, vec3 normal, vec2 uv);
+vec3 GetNormalFromMap(vec3 sampledNormal, vec3 normal, vec2 uv);
 
 float DistributionGGX(vec3 N, vec3 H, float roughness);
 
@@ -92,14 +95,17 @@ void main() {
 
     vec4 lightSpace = lightMatrix * vec4(worldPosition, 1.0);
 
-    vec3 albedo = texture(sampler2D(textures[object.material.albedo], textureSampler), uv).rgb;
-    vec3 mr = texture(sampler2D(textures[object.material.metal_roughness], textureSampler), uv).rgb;
-    float metallic = mr.b;
-    float roughness = mr.g;
-    vec3 emisive = texture(sampler2D(textures[object.material.emissive], textureSampler), uv).rgb;
-    float ao = texture(sampler2D(textures[object.material.ambient_occlusion], textureSampler), uv).r;
+    vec4 albedoAo = texture(sampler2D(textures[object.material.albedoAo], textureSampler), uv);
+    vec4 mrNormal = texture(sampler2D(textures[object.material.mrNormal], textureSampler), uv);
+    vec3 albedo = albedoAo.rgb;
+    float ao = albedoAo.a;
+    float metallic = mrNormal.r;
+    float roughness = mrNormal.g;
 
-    vec3 N = GetNormalFromMap(object.material.normal, normal, uv);
+    vec3 sampledNormal = vec3(mrNormal.zw, 0.0);
+    sampledNormal.z = sqrt(1.0 - clamp(dot(sampledNormal.xy, sampledNormal.xy), 0.0, 1.0));
+
+    vec3 N = GetNormalFromMap(sampledNormal, normal, uv);
     vec3 V = normalize(camera.viewPos - worldPosition);
     vec3 R = reflect(-V, N);
 
@@ -114,7 +120,7 @@ void main() {
 
         float distance = length(pointLight.position - worldPosition);
         float attenuation = 1.0 / (distance * distance);
-        vec3 radiance = pointLight.color.xyz * attenuation * pointLight.color.w;
+        vec3 radiance = pointLight.color.xyz * attenuation * pointLight.intensity;
 
         float NDF = DistributionGGX(N, H, roughness);
         float G = GeometrySmith(N, V, L, roughness);
@@ -135,10 +141,10 @@ void main() {
     }
 
     {
-        vec3 L = normalize(-directionalLight.direction.xyz);
+        vec3 L = normalize(-directionalLight.direction);
         vec3 H = normalize(V + L);
 
-        vec3 radiance = vec3(1.0, 0.8, 0.5);
+        vec3 radiance = vec3(1.0, 0.8, 0.5) * directionalLight.intensity;
 
         float NDF = DistributionGGX(N, H, roughness);
         float G = GeometrySmith(N, V, L, roughness);
@@ -166,7 +172,7 @@ void main() {
     vec3 kD = vec3(1.0) - kS;
     kD *= 1.0 - metallic;
 
-    vec3 color = Lo + emisive + (F + albedo) * kD * ao;
+    vec3 color = Lo + (F + albedo) * kD * ao;
 
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
@@ -174,8 +180,8 @@ void main() {
     payload.outColor = color;
 }
 
-vec3 GetNormalFromMap(uint materialIndex, vec3 normal, vec2 uv) {
-    vec3 tangentNormal = texture(sampler2D(textures[materialIndex], textureSampler), uv).xyz * 2.0 - 1.0;
+vec3 GetNormalFromMap(vec3 sampledNormal, vec3 normal, vec2 uv) {
+    vec3 tangentNormal = sampledNormal * 2.0 - 1.0;
 
     vec3 Q1 = payload.inWorldPosition;
     vec3 Q2 = payload.inWorldPosition;
@@ -239,7 +245,7 @@ float ShadowCalculation(vec3 L, vec3 N, vec4 lightSpace) {
     if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
         return 1.0;
 
-    float closestDepth = texture(shadowMap, projCoords.xy).r;
+    float closestDepth = texture(sampler2D(shadowMaps[0], shadowSampler), projCoords.xy).r;
 
     float currentDepth = projCoords.z;
 
@@ -248,13 +254,13 @@ float ShadowCalculation(vec3 L, vec3 N, vec4 lightSpace) {
     float bias = max(0.05 * (1.0 - dot(N, L)), 0.005);
 
     float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    vec2 texelSize = 1.0 / textureSize(shadowMaps[0], 0);
 
     for (int x = -1; x <= 1; ++x)
     {
         for (int y = -1; y <= 1; ++y)
         {
-            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            float pcfDepth = texture(sampler2D(shadowMaps[0], shadowSampler), projCoords.xy + vec2(x, y) * texelSize).r;
             shadow += currentDepth + bias < pcfDepth ? 0.0 : 1.0;
         }
     }

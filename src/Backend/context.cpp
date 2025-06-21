@@ -85,10 +85,8 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
           .add_required_extension_features(robustness2)
           .add_required_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
           .add_required_extension_features(as_features)
-          .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
-          .add_required_extension_features(raytracing_features)
-          .add_required_extension(VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME)
-          .add_required_extension_features(raytracing_position_features)
+          // .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
+          // .add_required_extension_features(raytracing_features)
           .add_required_extension(
               VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
           .add_required_extension(VK_KHR_SPIRV_1_4_EXTENSION_NAME)

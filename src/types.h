@@ -11,22 +11,9 @@ struct Vertex {
   float uv_y;
 };
 
-struct PointLight {
-  glm::vec4 color; // w = intensity
-  glm::vec3 position;
-  float padding;
-};
-
-struct DirectionalLight {
-  glm::vec4 direction;
-};
-
 struct Material {
-  int32_t albedo{-1};
-  int32_t metal_roughness{-1};
-  int32_t emissive{-1};
-  int32_t normal{-1};
-  int32_t ambient_occlusion{-1};
+  int32_t albedo_ao{-1};
+  int32_t mr_normal{-1};
 };
 
 struct Mesh {

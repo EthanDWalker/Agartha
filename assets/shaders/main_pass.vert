@@ -21,14 +21,9 @@ layout(set = 4, binding = 0) readonly buffer InstanceBuffer {
     Instance instances[];
 };
 
-layout(set = 5, binding = 2) uniform LightMatrixUBO {
-    mat4 lightMatrix;
-};
-
 layout(location = 0) out vec3 vertNormal;
 layout(location = 1) out vec3 fragPos;
 layout(location = 2) out vec2 uv;
-layout(location = 3) out vec4 lightSpace;
 layout(location = 4) flat out uint objectIndex;
 
 void main() {
@@ -43,8 +38,6 @@ void main() {
     gl_Position = pos;
 
     mat3 normalMatrix = transpose(inverse(mat3(instanceMatrix)));
-
-    lightSpace = lightMatrix * worldPos;
 
     vertNormal = normalMatrix * vertex.normal;
 

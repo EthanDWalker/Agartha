@@ -1,7 +1,7 @@
 #pragma once
 #include "Backend/context.h"
-#include <vma/vk_mem_alloc.h>
 #include <Volk/volk.h>
+#include <vma/vk_mem_alloc.h>
 
 struct AllocatedImage {
   VkExtent3D extent;
@@ -23,6 +23,12 @@ void CreateAllocatedImage(
     VulkanContext &context, VkExtent3D size, VkFormat format,
     VkImageUsageFlags usage_flags, AllocatedImage &image,
     bool mipmapped = false, bool cube_map = false,
+    VkSampleCountFlagBits sample_count = VK_SAMPLE_COUNT_1_BIT);
+
+void CreateImageDataAsync(
+    VulkanContext &context, void *data, uint8_t channel_count, VkExtent3D size,
+    VkFormat format, VkImageUsageFlags usage_flags, AllocatedImage &image,
+    bool mipmapped = false,
     VkSampleCountFlagBits sample_count = VK_SAMPLE_COUNT_1_BIT);
 
 void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,
