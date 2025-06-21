@@ -54,9 +54,13 @@ struct Engine {
   Pipeline cull_pipeline;
   Pipeline shadow_cull_pipeline;
   Pipeline ray_tracing_pipeline;
+  Pipeline tone_map_pipeline;
 
   VkDescriptorSet main_descriptor_set;
   VkDescriptorSetLayout main_descriptor_layout;
+
+  VkDescriptorSet tone_map_descriptor_set;
+  VkDescriptorSetLayout tone_map_descriptor_layout;
 
   VkDescriptorSet ray_tracing_descriptor_set;
   VkDescriptorSetLayout ray_tracing_descriptor_layout;
@@ -71,6 +75,8 @@ struct Engine {
   VkDescriptorSetLayout shadow_cull_descriptor_layout;
 
   GLFWwindow *window;
+
+  bool tone_mapping_on{true};
 
   void Init();
 

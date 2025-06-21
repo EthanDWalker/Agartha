@@ -137,8 +137,10 @@ void main() {
 
     vec3 color = Lo + (F + albedo) * kD * ao;
 
+  /*
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
+  */
 
     oColor = vec4(color, 1.0);
 

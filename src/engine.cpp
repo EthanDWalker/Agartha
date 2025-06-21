@@ -281,6 +281,27 @@ void Engine::CreateRenderGraph() {
         });
   }
 
+  {
+    builder.AddPass(
+        4, {},
+        [&](VkCommandBuffer cmd) {
+          vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            tone_map_pipeline.obj);
+
+          std::array<VkDescriptorSet, 1> ds = {
+              tone_map_descriptor_set,
+          };
+
+          vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                  tone_map_pipeline.layout, 0, ds.size(),
+                                  ds.data(), 0, nullptr);
+
+          vkCmdDispatch(cmd, std::ceil(main_image.extent.width / 16.0f),
+                        std::ceil(main_image.extent.height / 16.0f), 1);
+        },
+        &tone_mapping_on);
+  }
+
   // draw image switched with main image
   render_graph.Init(context, window);
   render_graph.render_graph = builder.render_graph;
@@ -316,7 +337,7 @@ void Engine::Init() {
 
   camera.Create(context, descriptor_builder);
 
-  light_manager.AddDirectionalLight(context, glm::vec3(-1.0, -4.0, -1.0), 1.0,
+  light_manager.AddDirectionalLight(context, glm::vec3(-1.0, -4.0, -1.0), 10.0,
                                     immediate_submit);
 
   VkExtent3D draw_image_extent = {
@@ -439,6 +460,18 @@ void Engine::Init() {
 
   {
     descriptor_builder.Reset();
+    descriptor_builder.BindStorageImage(0, main_image.image_view);
+    descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
+                             tone_map_descriptor_set,
+                             tone_map_descriptor_layout);
+    ComputePipelineBuilder pipeline_builder{};
+    pipeline_builder.SetShader(context, "tone_map.comp.spv");
+    pipeline_builder.AddDescriptorSetLayout(tone_map_descriptor_layout);
+    pipeline_builder.Build(context, tone_map_pipeline);
+  }
+
+  {
+    descriptor_builder.Reset();
     descriptor_builder.BindStorageBuffer(0, shadow_draw_indirect_buffer.buffer);
     descriptor_builder.BindStorageBuffer(
         1, shadow_culled_draw_count_buffer.buffer);
@@ -520,6 +553,8 @@ void Engine::Run() {
       should_close = true;
     }
 
+    tone_mapping_on = glfwGetKey(window, GLFW_KEY_T);
+
     camera.Update(context, immediate_submit, window, delta_time);
 
     light_manager.UpdateMatrices(context, immediate_submit, camera.position);
@@ -554,6 +589,8 @@ void Engine::Destroy() {
                                nullptr);
   vkDestroyDescriptorSetLayout(context.device, ray_tracing_descriptor_layout,
                                nullptr);
+  vkDestroyDescriptorSetLayout(context.device, tone_map_descriptor_layout,
+                               nullptr);
 
   DestroyShaderBindingTable(context, shader_binding_table);
   DestroyBuffer(context, draw_indirect_buffer);
@@ -573,6 +610,7 @@ void Engine::Destroy() {
   DestroyPipeline(context, cull_pipeline);
   DestroyPipeline(context, shadow_cull_pipeline);
   DestroyPipeline(context, ray_tracing_pipeline);
+  DestroyPipeline(context, tone_map_pipeline);
 
   DestroyVulkanContext(context);
 

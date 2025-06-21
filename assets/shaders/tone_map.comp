@@ -1,0 +1,26 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0, rgba16) uniform image2D hdrImage;
+
+vec3 AcesApproximation(vec3 v) {
+    v *= 0.6f;
+    float a = 2.51f;
+    float b = 0.03f;
+    float c = 2.43f;
+    float d = 0.59f;
+    float e = 0.14f;
+    return clamp((v * (a * v + b)) / (v * (c * v + d) + e), 0.0f, 1.0f);
+}
+
+void main() {
+    vec2 imageExtent = imageSize(hdrImage);
+
+    if (gl_GlobalInvocationID.x >= imageExtent.x || gl_GlobalInvocationID.y >= imageExtent.y) {
+        return;
+    }
+
+    vec3 color = imageLoad(hdrImage, ivec2(gl_GlobalInvocationID.xy)).rgb;
+
+    imageStore(hdrImage, ivec2(gl_GlobalInvocationID.xy), vec4(AcesApproximation(color), 1.0));
+}
