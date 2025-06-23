@@ -1,0 +1,113 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
+
+layout(set = 0, binding = 0, rgba16) uniform image2D hdrImage;
+layout(set = 0, binding = 1, rgba16) readonly uniform image2D mrNormalImage;
+layout(set = 0, binding = 2, r32f) readonly uniform image2D depthImage;
+
+layout(set = 1, binding = 0) uniform CameraUBO {
+    Camera camera;
+};
+
+const float PI = 3.14159265359;
+
+const uint DIRECTIONS = 8;
+const uint DIRECTION_SAMPLES = 4;
+const float SAMPLE_STEP = 0.004;
+const float SAMPLE_RADIUS = 1.0;
+const float BIAS = radians(30.0);
+
+float LinearizeDepth(float depth) {
+  return (camera.near * camera.far) / (camera.far - depth * (camera.far - camera.near));
+}
+
+vec3 ViewSpacePositionFromDepth(float depth, vec2 uv) {
+    vec3 ndc = vec3(uv * 2.0 - 1.0, 1.0 - depth);
+
+    vec4 clipSpacePosition = vec4(ndc, 1.0);
+    vec4 viewSpacePosition = camera.invProj * clipSpacePosition;
+    viewSpacePosition /= viewSpacePosition.w;
+
+    return viewSpacePosition.xyz;
+}
+
+vec3 OctDecodeNormal(vec2 e) {
+    e = e * 2.0 - 1.0;
+    vec3 n = vec3(e.xy, 1.0 - abs(e.x) - abs(e.y));
+    if (n.z < 0.0) {
+        n.xy = (1.0 - abs(n.yx)) * sign(n.xy);
+    }
+    return normalize(n);
+}
+
+void main() {
+    vec2 imageExtent = imageSize(hdrImage);
+
+    if (gl_GlobalInvocationID.x >= imageExtent.x || gl_GlobalInvocationID.y >= imageExtent.y) {
+        return;
+    }
+
+    vec2 uv = (vec2(gl_GlobalInvocationID.xy) + vec2(0.5)) / imageExtent;
+
+    vec3 color = imageLoad(hdrImage, ivec2(gl_GlobalInvocationID.xy)).rgb;
+
+    float depth = imageLoad(depthImage, ivec2(gl_GlobalInvocationID.xy)).r;
+    vec3 viewPosition = ViewSpacePositionFromDepth(depth, uv);
+
+    vec4 mrNormal = imageLoad(mrNormalImage, ivec2(gl_GlobalInvocationID.xy));
+    vec2 storedNormal = mrNormal.zw;
+    vec3 normal = normalize(mat3(camera.view) * OctDecodeNormal(storedNormal));
+
+    float samplingAngleStep = (2.0 * PI) / float(DIRECTIONS);
+
+    vec3 viewDirection = normalize(viewPosition);
+
+    float ao = 0.0;
+
+    for (int i = 0; i < DIRECTIONS; i++) {
+        float samplingAngle = samplingAngleStep * float(i);
+        vec2 samplingDirection = vec2(cos(samplingAngle), sin(samplingAngle));
+
+        vec3 leftDirection = cross(viewDirection, vec3(samplingDirection.x, -samplingDirection.y, 0));
+        vec3 tangent = cross(normal, leftDirection);
+
+        float tangentAngle = atan(tangent.z, length(tangent.xy));
+        float sinTangentAngle = sin(tangentAngle) + BIAS;
+
+        float highestZ = -1e6;
+        vec3 foundPos = vec3(0, 0, highestZ);
+
+        for (int j = 0; j < DIRECTION_SAMPLES; j++) {
+            vec2 sampleOffset = float(j + 1) * SAMPLE_STEP * samplingDirection;
+
+            vec2 sampleUV = uv + sampleOffset;
+
+            float sampleDepth = imageLoad(depthImage, ivec2(sampleUV * imageExtent)).r;
+            vec3 sampleViewPosition = ViewSpacePositionFromDepth(sampleDepth, sampleUV);
+
+            vec3 diff = normalize(sampleViewPosition - viewPosition);
+
+            if (diff.z > highestZ && length(sampleViewPosition - viewPosition) < SAMPLE_RADIUS) {
+                highestZ = diff.z;
+                foundPos = sampleViewPosition;
+            }
+        }
+
+        vec3 horizonVector = (foundPos - viewPosition);
+        float horizonAngle = atan(horizonVector.z, length(horizonVector.xy));
+
+        float sinHorizonAngle = sin(horizonAngle);
+
+        ao += clamp((sinHorizonAngle - sinTangentAngle), 0.0, 1.0);
+    }
+
+    ao /= DIRECTIONS;
+
+    ao = clamp(1.0 - ao, 0.0, 1.0);
+    ao = pow(ao, 1.5);
+
+    imageStore(hdrImage, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(color * ao), 1.0));
+}

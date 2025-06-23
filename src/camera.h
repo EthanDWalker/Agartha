@@ -23,6 +23,8 @@ struct CameraBuffer {
   glm::vec3 view_pos;
   float padding;
   Frustum frustum;
+  float near;
+  float far;
 };
 
 struct Camera {

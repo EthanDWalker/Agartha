@@ -108,7 +108,7 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
 
     buffer_data.projection_matrix = projection;
 
-    position += glm::vec3(rotation_matrix * glm::vec4(velocity * 0.5f, 0.0f));
+    position += glm::vec3(rotation_matrix * glm::vec4(velocity, 0.0f));
 
     buffer_data.view_pos = position;
 
@@ -126,6 +126,9 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
 
     buffer_data.inv_view = glm::inverse(view_matrix);
     buffer_data.inv_proj = glm::inverse(projection);
+
+    buffer_data.near = z_near;
+    buffer_data.far = z_far;
 
     UpdateBuffer(context, immediate_submit, &buffer_data, sizeof(CameraBuffer),
                  0, buffer);

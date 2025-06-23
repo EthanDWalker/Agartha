@@ -54,13 +54,15 @@ vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
 
 float ShadowCalculation(vec3 L, vec3 N);
 
+vec2 OctEncodeNormal(vec3 n);
+
 void main() {
     Material mat = objects[iObjectIndex].material;
 
     vec4 albedoAo = texture(sampler2D(textures[mat.albedoAo], textureSampler), iUV);
     vec4 mrNormal = texture(sampler2D(textures[mat.mrNormal], textureSampler), iUV);
-    float metallic = mrNormal.x;
-    float roughness = mrNormal.y;
+    float metallic = clamp(mrNormal.x, 0.0, 1.0);
+    float roughness = clamp(mrNormal.y, 0.0, 1.0);
 
     vec3 normal = vec3(mrNormal.zw, 0.0);
     normal.z = sqrt(1.0 - clamp(dot(normal.xy, normal.xy), 0.0, 1.0));
@@ -107,7 +109,7 @@ void main() {
         vec3 L = normalize(-directionalLight.direction);
         vec3 H = normalize(V + L);
 
-        vec3 radiance = vec3(1.0, 0.8, 0.5) * directionalLight.intensity;
+        vec3 radiance = vec3(1.0, 0.9, 0.8) * directionalLight.intensity;
 
         float NDF = DistributionGGX(N, H, roughness);
         float G = GeometrySmith(N, V, L, roughness);
@@ -137,14 +139,20 @@ void main() {
 
     vec3 color = Lo + (F + albedo) * kD * ao;
 
-  /*
-    color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0 / 2.2));
-  */
-
     oColor = vec4(color, 1.0);
 
-    oMrNormal = vec4(metallic, roughness, N.x, N.y);
+    vec2 packedNormal = OctEncodeNormal(N);
+
+    oMrNormal = vec4(metallic, roughness, packedNormal.x, packedNormal.y);
+}
+
+vec2 OctEncodeNormal(vec3 n) {
+    n /= (abs(n.x) + abs(n.y) + abs(n.z)); // project onto octahedron
+    vec2 e = n.xy;
+    if (n.z < 0.0) {
+        e = (1.0 - abs(e.yx)) * sign(e);
+    }
+    return e * 0.5 + 0.5; // map from [-1,1] to [0,1]
 }
 
 vec3 GetNormalFromMap(vec3 sampledNormal) {
@@ -211,7 +219,7 @@ float ShadowCalculation(vec3 L, vec3 N) {
         vec3 proj;
         proj = lightSpace.xyz / lightSpace.w;
         proj = proj * 0.5 + 0.5;
-        
+
         if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0) {
             continue;
         } else {

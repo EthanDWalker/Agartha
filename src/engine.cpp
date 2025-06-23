@@ -282,24 +282,45 @@ void Engine::CreateRenderGraph() {
   }
 
   {
-    builder.AddPass(
-        4, {},
-        [&](VkCommandBuffer cmd) {
-          vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                            tone_map_pipeline.obj);
 
-          std::array<VkDescriptorSet, 1> ds = {
-              tone_map_descriptor_set,
-          };
+    builder.AddPass(4, {}, [&](VkCommandBuffer cmd) {
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                        ambient_occlusion_pipeline.obj);
 
-          vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                  tone_map_pipeline.layout, 0, ds.size(),
-                                  ds.data(), 0, nullptr);
+      std::array<VkDescriptorSet, 2> ds = {
+          ambient_occlusion_descriptor_set,
+          camera.descriptor_set,
+      };
 
-          vkCmdDispatch(cmd, std::ceil(main_image.extent.width / 16.0f),
-                        std::ceil(main_image.extent.height / 16.0f), 1);
-        },
-        &tone_mapping_on);
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              ambient_occlusion_pipeline.layout, 0, ds.size(),
+                              ds.data(), 0, nullptr);
+
+      vkCmdDispatch(cmd, std::ceil(main_image.extent.width / 16.0f),
+                    std::ceil(main_image.extent.height / 16.0f), 1);
+    });
+  }
+
+  {
+    builder.AddPass(5, {}, [&](VkCommandBuffer cmd) {
+      if (!tone_mapping_on) {
+        return;
+      }
+
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                        tone_map_pipeline.obj);
+
+      std::array<VkDescriptorSet, 1> ds = {
+          tone_map_descriptor_set,
+      };
+
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              tone_map_pipeline.layout, 0, ds.size(), ds.data(),
+                              0, nullptr);
+
+      vkCmdDispatch(cmd, std::ceil(main_image.extent.width / 16.0f),
+                    std::ceil(main_image.extent.height / 16.0f), 1);
+    });
   }
 
   // draw image switched with main image
@@ -337,7 +358,7 @@ void Engine::Init() {
 
   camera.Create(context, descriptor_builder);
 
-  light_manager.AddDirectionalLight(context, glm::vec3(-1.0, -4.0, -1.0), 10.0,
+  light_manager.AddDirectionalLight(context, glm::vec3(-1.0, -4.0, -1.0), 6.0,
                                     immediate_submit);
 
   VkExtent3D draw_image_extent = {
@@ -353,7 +374,7 @@ void Engine::Init() {
       main_image);
 
   CreateAllocatedImage(
-      context, draw_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+      context, draw_image_extent, VK_FORMAT_R8G8B8A8_UNORM,
       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
       mr_normal_image);
 
@@ -472,6 +493,22 @@ void Engine::Init() {
 
   {
     descriptor_builder.Reset();
+    descriptor_builder.BindStorageImage(0, main_image.image_view);
+    descriptor_builder.BindStorageImage(1, mr_normal_image.image_view);
+    descriptor_builder.BindStorageImage(2, depth_image.image_view);
+    descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
+                             ambient_occlusion_descriptor_set,
+                             ambient_occlusion_descriptor_layout);
+    ComputePipelineBuilder pipeline_builder{};
+    pipeline_builder.SetShader(context, "ambient_occlusion.comp.spv");
+    pipeline_builder.AddDescriptorSetLayout(
+        ambient_occlusion_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
+    pipeline_builder.Build(context, ambient_occlusion_pipeline);
+  }
+
+  {
+    descriptor_builder.Reset();
     descriptor_builder.BindStorageBuffer(0, shadow_draw_indirect_buffer.buffer);
     descriptor_builder.BindStorageBuffer(
         1, shadow_culled_draw_count_buffer.buffer);
@@ -553,7 +590,11 @@ void Engine::Run() {
       should_close = true;
     }
 
-    tone_mapping_on = glfwGetKey(window, GLFW_KEY_T);
+    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
+      tone_mapping_on = false;
+    } else {
+      tone_mapping_on = true;
+    }
 
     camera.Update(context, immediate_submit, window, delta_time);
 
@@ -585,12 +626,16 @@ void Engine::Destroy() {
   vkDestroyDescriptorSetLayout(context.device, shadow_descriptor_layout,
                                nullptr);
   vkDestroyDescriptorSetLayout(context.device, cull_descriptor_layout, nullptr);
+
   vkDestroyDescriptorSetLayout(context.device, shadow_cull_descriptor_layout,
                                nullptr);
   vkDestroyDescriptorSetLayout(context.device, ray_tracing_descriptor_layout,
                                nullptr);
   vkDestroyDescriptorSetLayout(context.device, tone_map_descriptor_layout,
                                nullptr);
+
+  vkDestroyDescriptorSetLayout(context.device,
+                               ambient_occlusion_descriptor_layout, nullptr);
 
   DestroyShaderBindingTable(context, shader_binding_table);
   DestroyBuffer(context, draw_indirect_buffer);
@@ -611,6 +656,7 @@ void Engine::Destroy() {
   DestroyPipeline(context, shadow_cull_pipeline);
   DestroyPipeline(context, ray_tracing_pipeline);
   DestroyPipeline(context, tone_map_pipeline);
+  DestroyPipeline(context, ambient_occlusion_pipeline);
 
   DestroyVulkanContext(context);
 

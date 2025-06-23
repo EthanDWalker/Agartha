@@ -17,6 +17,8 @@ struct Camera {
     vec3 viewPos;
     float padding;
     Frustum frustum;
+    float near;
+    float far;
 };
 
 struct PointLight {
