@@ -25,12 +25,15 @@ struct PointLight {
     vec3 color;
     float intensity;
     vec3 position;
-    float padding;
+    uint shadow_map_index;
 };
 
+
 struct DirectionalLight {
-    vec3 direction;
+    vec3 color;
     float intensity;
+    vec3 direction;
+    uint cascade_index;
 };
 
 struct Vertex {

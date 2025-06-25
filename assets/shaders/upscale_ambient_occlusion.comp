@@ -1,0 +1,32 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) uniform sampler2D inputImage;
+layout(set = 0, binding = 1, rgba16) uniform image2D outputImage;
+
+const uint SCALE = 2;
+const float INV_SCALE = 1.0 / SCALE;
+
+void main() {
+    vec2 outputImageExtent = imageSize(outputImage);
+    vec2 inputImageExtent = outputImageExtent * INV_SCALE;
+
+    if (gl_GlobalInvocationID.x >= inputImageExtent.x || gl_GlobalInvocationID.y >= inputImageExtent.y) {
+        return;
+    }
+
+    vec2 invInputImageExtent = 1.0 / inputImageExtent;
+
+    vec2 inputUV = vec2(gl_GlobalInvocationID.xy) * invInputImageExtent;
+    vec4 inputValue = texture(inputImage, inputUV);
+
+    vec2 uvStep = vec2(2.0) * invInputImageExtent;
+
+    for (int i = 0; i < SCALE; ++i) {
+        for (int j = 0; j < SCALE; ++j) {
+            float ao = texture(inputImage, inputUV + (uvStep * vec2(i, j))).r;
+            vec4 color = imageLoad(outputImage, ivec2(gl_GlobalInvocationID.xy * 2) + ivec2(i, j));
+            imageStore(outputImage, ivec2(gl_GlobalInvocationID.xy * 2) + ivec2(i, j), color * ao);
+        }
+    }
+}

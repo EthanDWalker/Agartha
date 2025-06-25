@@ -9,9 +9,16 @@
 void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   volkInitialize();
   vkb::InstanceBuilder instance_builder;
-  auto instance_return = instance_builder.set_app_name("Engine")
+
+#if !defined(NDEBUG)
+  fmt::println("DEBUG ACTIVE");
+#endif
+  auto instance_return = instance_builder
+                             .set_app_name("Engine")
+#if !defined(NDEBUG)
                              .request_validation_layers()
                              .use_default_debug_messenger()
+#endif
                              .require_api_version(1, 3)
                              .build();
 
@@ -85,8 +92,8 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
           .add_required_extension_features(robustness2)
           .add_required_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
           .add_required_extension_features(as_features)
-          // .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
-          // .add_required_extension_features(raytracing_features)
+          .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
+          .add_required_extension_features(raytracing_features)
           .add_required_extension(
               VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
           .add_required_extension(VK_KHR_SPIRV_1_4_EXTENSION_NAME)
@@ -106,8 +113,7 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   context.graphics_queue_index =
       vkb_device.get_queue_index(vkb::QueueType::graphics).value();
 
-  context.compute_queue =
-      vkb_device.get_queue(vkb::QueueType::compute).value();
+  context.compute_queue = vkb_device.get_queue(vkb::QueueType::compute).value();
   context.compute_queue_index =
       vkb_device.get_queue_index(vkb::QueueType::compute).value();
 

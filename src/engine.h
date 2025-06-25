@@ -11,7 +11,6 @@
 #include "Managers/light_manager.h"
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
-#include "Managers/ui_manager.h"
 #include "camera.h"
 #include "render_graph.h"
 
@@ -27,7 +26,6 @@ struct Engine {
   LightManager light_manager;
   SceneManager scene_manager;
   TextureManager texture_manager;
-  UiManager ui_manager;
 
   DescriptorBuilder descriptor_builder;
 
@@ -39,6 +37,7 @@ struct Engine {
 
   AllocatedImage main_image;
   AllocatedImage mr_normal_image;
+  AllocatedImage ao_image;
   AllocatedImage depth_image;
 
   AllocatedBuffer culled_draw_count_buffer;
@@ -56,6 +55,7 @@ struct Engine {
   Pipeline ray_tracing_pipeline;
   Pipeline tone_map_pipeline;
   Pipeline ambient_occlusion_pipeline;
+  Pipeline upscale_ao_pipeline;
 
   VkDescriptorSet main_descriptor_set;
   VkDescriptorSetLayout main_descriptor_layout;
@@ -78,9 +78,12 @@ struct Engine {
   VkDescriptorSet shadow_cull_descriptor_set;
   VkDescriptorSetLayout shadow_cull_descriptor_layout;
 
-  GLFWwindow *window;
+  VkDescriptorSet upscale_ao_descriptor_set;
+  VkDescriptorSetLayout upscale_ao_descriptor_layout;
 
-  bool tone_mapping_on{true};
+  VkSampler sampler;
+
+  GLFWwindow *window;
 
   void Init();
 

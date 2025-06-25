@@ -51,19 +51,22 @@ void LightManager::Init(VulkanContext &context,
 }
 
 uint32_t LightManager::AddDirectionalLight(VulkanContext &context,
-                                           glm::vec3 direction, float intensity,
+                                           glm::vec3 color, glm::vec3 direction,
+                                           float intensity,
                                            ImmediateSubmit &immediate_submit) {
   DirectionalLight dir_light{};
-  dir_light.direction = direction;
+  dir_light.color = color;
+  dir_light.direction = glm::normalize(direction);
   dir_light.intensity = intensity;
+  dir_light.cascade_index = matrix_index;
 
-  directional_lights.push_back(normalize(direction));
+  directional_lights.push_back(glm::normalize(direction));
 
   UpdateBuffer(context, immediate_submit, &dir_light, sizeof(DirectionalLight),
                sizeof(DirectionalLight) * directional_light_index,
                directional_light_buffer);
 
-  glm::vec3 light_dir = normalize(dir_light.direction);
+  glm::vec3 light_dir = glm::normalize(direction);
   glm::vec3 light_pos =
       glm::zero<glm::vec3>() - light_dir * DIRECTIONAL_LIGHT_DISTANCE;
   glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);

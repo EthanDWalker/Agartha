@@ -4,7 +4,8 @@ layout(local_size_x = 16, local_size_y = 16) in;
 #extension GL_GOOGLE_include_directive : require
 #include "common.glsl"
 
-layout(set = 0, binding = 0, rgba16) uniform image2D hdrImage;
+layout(set = 0, binding = 0, r16f) writeonly uniform image2D aoImage;
+
 layout(set = 0, binding = 1, rgba16) readonly uniform image2D mrNormalImage;
 layout(set = 0, binding = 2, r32f) readonly uniform image2D depthImage;
 
@@ -44,20 +45,18 @@ vec3 OctDecodeNormal(vec2 e) {
 }
 
 void main() {
-    vec2 imageExtent = imageSize(hdrImage);
+    vec2 imageExtent = imageSize(depthImage);
 
     if (gl_GlobalInvocationID.x >= imageExtent.x || gl_GlobalInvocationID.y >= imageExtent.y) {
         return;
     }
 
-    vec2 uv = (vec2(gl_GlobalInvocationID.xy) + vec2(0.5)) / imageExtent;
+    vec2 uv = (vec2(gl_GlobalInvocationID.xy * 2.0) + vec2(0.5)) / imageExtent;
 
-    vec3 color = imageLoad(hdrImage, ivec2(gl_GlobalInvocationID.xy)).rgb;
-
-    float depth = imageLoad(depthImage, ivec2(gl_GlobalInvocationID.xy)).r;
+    float depth = imageLoad(depthImage, ivec2(gl_GlobalInvocationID.xy * 2.0)).r;
     vec3 viewPosition = ViewSpacePositionFromDepth(depth, uv);
 
-    vec4 mrNormal = imageLoad(mrNormalImage, ivec2(gl_GlobalInvocationID.xy));
+    vec4 mrNormal = imageLoad(mrNormalImage, ivec2(gl_GlobalInvocationID.xy * 2.0));
     vec2 storedNormal = mrNormal.zw;
     vec3 normal = normalize(mat3(camera.view) * OctDecodeNormal(storedNormal));
 
@@ -109,5 +108,5 @@ void main() {
     ao = clamp(1.0 - ao, 0.0, 1.0);
     ao = pow(ao, 1.5);
 
-    imageStore(hdrImage, ivec2(gl_GlobalInvocationID.xy), vec4(vec3(color * ao), 1.0));
+    imageStore(aoImage, ivec2(gl_GlobalInvocationID.xy), vec4(ao, 0, 0, 0));
 }

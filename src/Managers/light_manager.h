@@ -19,15 +19,17 @@ const float DIRECTIONAL_LIGHT_NEAR_PLANE = 300.1f;
 const VkExtent3D SHADOW_IMAGE_EXTENT = {1024, 1024, 1};
 
 struct DirectionalLight {
-  glm::vec3 direction;
+  glm::vec3 color;
   float intensity;
+  glm::vec3 direction;
+  uint32_t cascade_index;
 };
 
 struct PointLight {
   glm::vec3 color;
   float intensity;
   glm::vec3 position;
-  float _padding;
+  uint32_t shadow_map_index;
 };
 
 struct LightManager {
@@ -52,8 +54,8 @@ struct LightManager {
 
   void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
 
-  uint32_t AddDirectionalLight(VulkanContext &context, glm::vec3 direction,
-                               float intensity,
+  uint32_t AddDirectionalLight(VulkanContext &context, glm::vec3 color,
+                               glm::vec3 direction, float intensity,
                                ImmediateSubmit &immediate_submit);
 
   uint32_t AddPointLight(VulkanContext &context, glm::vec3 color,

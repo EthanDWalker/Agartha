@@ -52,7 +52,7 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness);
 
 vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
 
-float ShadowCalculation(vec3 L, vec3 N);
+float ShadowCalculation(vec3 L, vec3 N, DirectionalLight directionalLight);
 
 vec2 OctEncodeNormal(vec3 n);
 
@@ -109,7 +109,7 @@ void main() {
         vec3 L = normalize(-directionalLight.direction);
         vec3 H = normalize(V + L);
 
-        vec3 radiance = vec3(1.0, 0.9, 0.8) * directionalLight.intensity;
+        vec3 radiance = directionalLight.color * directionalLight.intensity;
 
         float NDF = DistributionGGX(N, H, roughness);
         float G = GeometrySmith(N, V, L, roughness);
@@ -126,7 +126,7 @@ void main() {
 
         float NdotL = max(dot(N, L), 0.0);
 
-        float shadow = ShadowCalculation(L, N) + .05;
+        float shadow = ShadowCalculation(L, N, directionalLight);
 
         Lo += shadow * (kD * albedo / PI + specular) * radiance * NdotL;
     }
@@ -147,12 +147,12 @@ void main() {
 }
 
 vec2 OctEncodeNormal(vec3 n) {
-    n /= (abs(n.x) + abs(n.y) + abs(n.z)); // project onto octahedron
+    n /= (abs(n.x) + abs(n.y) + abs(n.z));
     vec2 e = n.xy;
     if (n.z < 0.0) {
         e = (1.0 - abs(e.yx)) * sign(e);
     }
-    return e * 0.5 + 0.5; // map from [-1,1] to [0,1]
+    return e * 0.5 + 0.5;
 }
 
 vec3 GetNormalFromMap(vec3 sampledNormal) {
@@ -210,11 +210,11 @@ vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
-float ShadowCalculation(vec3 L, vec3 N) {
+float ShadowCalculation(vec3 L, vec3 N, DirectionalLight directionalLight) {
     vec3 projCoords;
     uint shadowMapIndex = 0;
 
-    for (uint i = 0; i < 3; i++) {
+    for (uint i = directionalLight.cascade_index; i < directionalLight.cascade_index + 3; i++) {
         vec4 lightSpace = lightMatrices[i] * vec4(iWorldPos, 1.0);
         vec3 proj;
         proj = lightSpace.xyz / lightSpace.w;
@@ -229,6 +229,9 @@ float ShadowCalculation(vec3 L, vec3 N) {
         }
     }
 
+    if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 1.0;
+
     float closestDepth = texture(sampler2D(shadowMaps[shadowMapIndex], shadowSampler), projCoords.xy).r;
 
     float currentDepth = projCoords.z;
@@ -240,10 +243,8 @@ float ShadowCalculation(vec3 L, vec3 N) {
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(shadowMaps[shadowMapIndex], 0);
 
-    for (int x = -1; x <= 1; ++x)
-    {
-        for (int y = -1; y <= 1; ++y)
-        {
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
             float pcfDepth = texture(sampler2D(shadowMaps[shadowMapIndex], shadowSampler), projCoords.xy + vec2(x, y) * texelSize).r;
             shadow += currentDepth + bias < pcfDepth ? 0.0 : 1.0;
         }
