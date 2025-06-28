@@ -1,5 +1,4 @@
 #include "engine.h"
-#include "Backend/acceleration_structure.h"
 #include "Backend/allocated_image.h"
 #include "Backend/binding_table.h"
 #include "Backend/buffer.h"
@@ -62,6 +61,10 @@ void Engine::CreateRenderGraph() {
                               ds.data(), 0, nullptr);
 
       vkCmdDispatch(cmd, std::ceil(scene_manager.instance_index / 64.0f), 1, 1);
+    });
+
+    builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
+      scene_svo.BuildDrawCommands(cmd, scene_manager);
     });
   }
 
@@ -215,6 +218,12 @@ void Engine::CreateRenderGraph() {
       }
       vkCmdEndRendering(cmd);
     });
+
+    builder.AddPass(2, {}, [&](VkCommandBuffer cmd) {
+      if (voxel_gi_debug)
+        return;
+      scene_svo.Build(cmd, scene_manager, texture_manager, light_manager);
+    });
   }
 
   {
@@ -343,6 +352,13 @@ void Engine::CreateRenderGraph() {
       vkCmdDispatch(cmd, std::ceil(main_image.extent.width / 16.0f),
                     std::ceil(main_image.extent.height / 16.0f), 1);
     });
+
+    builder.AddPass(6, {}, [&](VkCommandBuffer cmd) {
+      if (!voxel_gi_debug)
+        return;
+      scene_svo.DrawDebugView(cmd, scene_manager, camera, main_image,
+                              depth_image, VK_IMAGE_LAYOUT_GENERAL);
+    });
   }
 
   // draw image switched with main image
@@ -380,6 +396,9 @@ void Engine::Init() {
   light_manager.Init(context, descriptor_builder);
 
   camera.Create(context, descriptor_builder);
+
+  scene_svo.Create(context, scene_manager, light_manager, texture_manager,
+                   camera, descriptor_builder);
 
   light_manager.AddDirectionalLight(context, glm::vec3(1.0),
                                     glm::vec3(-1.0, -4.0, -1.0), 6.0,
@@ -641,6 +660,16 @@ void Engine::Run() {
 
     camera.Update(context, immediate_submit, window, delta_time);
 
+    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
+      fmt::println("{}", glm::to_string(camera.position));
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
+      voxel_gi_debug = true;
+    } else {
+      voxel_gi_debug = false;
+    }
+
     light_manager.UpdateMatrices(context, immediate_submit, camera.position);
 
     render_graph.Render(context);
@@ -664,6 +693,7 @@ void Engine::Destroy() {
   scene_manager.Destroy(context);
   immediate_submit.Destroy(context);
   camera.Destroy(context);
+  scene_svo.Destroy(context);
 
   vkDestroyDescriptorSetLayout(context.device, main_descriptor_layout, nullptr);
   vkDestroyDescriptorSetLayout(context.device, cull_descriptor_layout, nullptr);

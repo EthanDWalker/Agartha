@@ -13,6 +13,7 @@
 #include "Managers/texture_manager.h"
 #include "camera.h"
 #include "render_graph.h"
+#include "scene_svo.h"
 
 #if defined(DEBUG)
 constexpr bool DEBUG = true;
@@ -26,6 +27,8 @@ struct Engine {
   LightManager light_manager;
   SceneManager scene_manager;
   TextureManager texture_manager;
+
+  SceneSvo scene_svo;
 
   DescriptorBuilder descriptor_builder;
 
@@ -84,6 +87,8 @@ struct Engine {
   VkSampler sampler;
 
   GLFWwindow *window;
+
+  bool voxel_gi_debug;
 
   void Init();
 

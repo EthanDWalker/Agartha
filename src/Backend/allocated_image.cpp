@@ -141,6 +141,9 @@ void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
     image_view_ci.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
     image_view_ci.subresourceRange.layerCount = 6;
   }
+  if (size.depth != 1) {
+    image_view_ci.viewType = VK_IMAGE_VIEW_TYPE_3D;
+  }
 
   VK_CHECK(vkCreateImageView(context.device, &image_view_ci, nullptr,
                              &image.image_view));

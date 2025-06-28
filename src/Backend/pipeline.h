@@ -62,6 +62,7 @@ struct GraphicsPipelineBuilder {
   VkPipelineDepthStencilStateCreateInfo depth_stencil{};
   VkPipelineDynamicStateCreateInfo dynamic_state{};
   VkPipelineRenderingCreateInfo render_info{};
+  VkPipelineViewportStateCreateInfo viewport_state{};
   VkShaderModule vert_shader;
   VkShaderModule frag_shader;
   std::optional<VkShaderModule> geom_shader;
@@ -90,6 +91,8 @@ struct GraphicsPipelineBuilder {
   void SetInputTopology(VkPrimitiveTopology topology);
 
   void SetPolygonMode(VkPolygonMode mode);
+
+  void SetViewportCount(uint32_t count);
 
   void SetCullMode(VkCullModeFlags cull_mode, VkFrontFace front_face);
 

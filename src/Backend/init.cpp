@@ -57,7 +57,7 @@ VkImageCreateInfo ImageCI(VkFormat format, VkImageUsageFlags usage_flags,
   info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   info.extent = extent;
   info.format = format;
-  info.imageType = VK_IMAGE_TYPE_2D;
+  info.imageType = extent.depth == 1 ? VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_3D;
   info.mipLevels = mip_levels;
   info.arrayLayers = 1;
   info.samples = VK_SAMPLE_COUNT_1_BIT;

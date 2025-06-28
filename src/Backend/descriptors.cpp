@@ -2,6 +2,7 @@
 #include "Backend/allocated_image.h"
 #include "Backend/context.h"
 #include "Backend/util.h"
+#include "buffer.h"
 #include "fmt/base.h"
 #include <array>
 #include <cassert>
@@ -77,6 +78,29 @@ void DescriptorBuilder::BindStorageBuffer(uint32_t binding, VkBuffer buffer) {
 
   writes.push_back(buffer_write);
 }
+
+void DescriptorBuilder::BindStorageBuffers(uint32_t binding,
+                                           std::span<AllocatedBuffer> buffers) {
+  VkDescriptorSetLayoutBinding new_binding{};
+  new_binding.binding = binding;
+  new_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  new_binding.descriptorCount = buffers.size();
+
+  bindings.push_back(new_binding);
+
+  VkDescriptorBufferInfo *buffer_write_array = (VkDescriptorBufferInfo *)malloc(
+      sizeof(VkDescriptorBufferInfo) * buffers.size());
+
+  for (uint32_t i = 0; i < buffers.size(); i++) {
+    VkDescriptorBufferInfo buffer_write{};
+    buffer_write.buffer = buffers[i].buffer;
+    buffer_write.offset = 0;
+    buffer_write.range = VK_WHOLE_SIZE;
+    buffer_write_array[i] = buffer_write;
+  }
+
+  writes.push_back(buffer_write_array);
+};
 
 void DescriptorBuilder::BindCombinedImage(uint32_t binding,
                                           VkImageView image_view,
@@ -271,6 +295,7 @@ void DescriptorBuilder::Build(VulkanContext &context,
   }
   vkUpdateDescriptorSets(context.device, binding_writes.size(),
                          binding_writes.data(), 0, nullptr);
+  Reset();
 }
 
 void DescriptorPool::Init(VulkanContext &context) { NewPool(context); }

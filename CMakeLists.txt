@@ -75,7 +75,7 @@ target_include_directories(engine PUBLIC
 
 target_link_libraries(engine PRIVATE imgui ${Vulkan_LIBRARY} fastgltf::fastgltf glfw fmt::fmt vk-bootstrap::vk-bootstrap)
 
-file(GLOB SHADER_SRC
+file(GLOB_RECURSE SHADER_SRC
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.frag 
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.vert 
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.comp
@@ -89,7 +89,8 @@ set(SHADER_DEPENDS ${CMAKE_SOURCE_DIR}/assets/shaders/*.glsl)
 
 foreach(SHADER ${SHADER_SRC})
   get_filename_component(FILE_NAME ${SHADER} NAME)
-  set(COMPILED_FILE ${CMAKE_SOURCE_DIR}/assets/shaders/${FILE_NAME}.spv)
+  get_filename_component(DIR_NAME ${SHADER} DIRECTORY)
+  set(COMPILED_FILE ${DIR_NAME}/${FILE_NAME}.spv)
 
   add_custom_command(
       OUTPUT ${COMPILED_FILE}

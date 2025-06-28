@@ -231,6 +231,7 @@ void GraphicsPipelineBuilder::Default() {
   SetDepthTest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
   SetDepthFormat(VK_FORMAT_D32_SFLOAT);
   SetNoMultisampling();
+  SetViewportCount(1);
 }
 
 void GraphicsPipelineBuilder::SetInputTopology(VkPrimitiveTopology topology) {
@@ -354,6 +355,14 @@ void GraphicsPipelineBuilder::AddDescriptorSetLayout(
   descriptor_set_layouts.push_back(layout);
 }
 
+void GraphicsPipelineBuilder::SetViewportCount(uint32_t count) {
+  viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewport_state.pNext = nullptr;
+
+  viewport_state.viewportCount = count;
+  viewport_state.scissorCount = count;
+}
+
 void GraphicsPipelineBuilder::Build(VulkanContext &context,
                                     Pipeline &pipeline) {
   VkPipelineLayoutCreateInfo pipeline_layout_ci{};
@@ -365,13 +374,6 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
 
   VK_CHECK(vkCreatePipelineLayout(context.device, &pipeline_layout_ci, nullptr,
                                   &pipeline.layout));
-
-  VkPipelineViewportStateCreateInfo viewport_state = {};
-  viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  viewport_state.pNext = nullptr;
-
-  viewport_state.viewportCount = 1;
-  viewport_state.scissorCount = 1;
 
   VkPipelineColorBlendStateCreateInfo color_blending = {};
   color_blending.sType =

@@ -1,5 +1,6 @@
 #pragma once
 #include "Backend/allocated_image.h"
+#include "Backend/buffer.h"
 #include "Backend/context.h"
 #include <array>
 #include <cstdint>
@@ -44,6 +45,7 @@ struct DescriptorBuilder {
 
   void BindUniformBuffer(uint32_t binding, VkBuffer buffer);
   void BindStorageBuffer(uint32_t binding, VkBuffer buffer);
+  void BindStorageBuffers(uint32_t binding, std::span<AllocatedBuffer> buffers);
 
   void BindCombinedImage(uint32_t binding, VkImageView image_view,
                          VkSampler sampler);
