@@ -4,7 +4,7 @@
 #extension GL_EXT_buffer_reference2 : require
 #include "../common.glsl"
 
-layout(set = 0, binding = 5) uniform SvoUbo {
+layout(set = 0, binding = 1) uniform SvoDataUbo {
     SvoData svoData;
 };
 
@@ -16,12 +16,10 @@ layout(set = 2, binding = 1) readonly buffer MeshBuffer {
     GpuMesh gpuMeshes[];
 };
 
-layout(location = 0) out OUT {
-    vec3 worldPos;
-    vec3 normal;
-    uint objectIndex;
-    vec2 uv;
-} VS_OUT;
+layout(location = 0) out vec3 iWorldPos;
+layout(location = 1) out vec3 iNormal;
+layout(location = 2) out vec2 iUv;
+layout(location = 3) flat out uint iObjectIndex;
 
 void main() {
     Instance instance = instances[gl_InstanceIndex];
@@ -31,12 +29,11 @@ void main() {
     vec4 worldPos = instanceMatrix * vec4(vertex.position, 1.0);
 
     mat3 normalMatrix = transpose(inverse(mat3(instanceMatrix)));
-    vec3 extent = svoData.leftBound + svoData.leftBound;
 
-    VS_OUT.normal = normalMatrix * vertex.normal;
-    VS_OUT.uv = vec2(vertex.uv_x, vertex.uv_y);
-    VS_OUT.objectIndex = objectIndex;
-    VS_OUT.worldPos = worldPos.xyz;
+    iNormal = normalMatrix * vertex.normal;
+    iUv = vec2(vertex.uv_x, vertex.uv_y);
+    iObjectIndex = objectIndex;
+    iWorldPos = worldPos.xyz;
 
     gl_Position = vec4((worldPos.xyz) * svoData.worldToSvo, 1.0);
 }

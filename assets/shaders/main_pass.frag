@@ -8,7 +8,7 @@
 layout(location = 0) in vec3 iNormal;
 layout(location = 1) in vec3 iWorldPos;
 layout(location = 2) in vec2 iUV;
-layout(location = 4) flat in uint iObjectIndex;
+layout(location = 3) flat in uint iObjectIndex;
 
 layout(location = 0) out vec4 oColor;
 layout(location = 1) out vec4 oMrNormal;
@@ -144,15 +144,6 @@ void main() {
     vec2 packedNormal = OctEncodeNormal(N);
 
     oMrNormal = vec4(metallic, roughness, packedNormal.x, packedNormal.y);
-}
-
-vec2 OctEncodeNormal(vec3 n) {
-    n /= (abs(n.x) + abs(n.y) + abs(n.z));
-    vec2 e = n.xy;
-    if (n.z < 0.0) {
-        e = (1.0 - abs(e.yx)) * sign(e);
-    }
-    return e * 0.5 + 0.5;
 }
 
 vec3 GetNormalFromMap(vec3 sampledNormal) {

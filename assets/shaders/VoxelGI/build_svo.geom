@@ -3,27 +3,19 @@
 layout(triangles) in;
 layout(triangle_strip, max_vertices = 3) out;
 
-layout(location = 0) in IN {
-    vec3 worldPos;
-    vec3 normal;
-    uint objectIndex;
-    vec2 uv;
-} GS_IN[];
+layout(location = 0) in vec3 iWorldPos[];
+layout(location = 1) in vec3 iNormal[];
+layout(location = 2) in vec2 iUv[];
+layout(location = 3) flat in uint iObjectIndex[];
 
-layout(location = 0) out OUT {
-    vec3 position;
-    vec3 worldPos;
-    uint objectIndex;
-    vec3 normal;
-    vec2 uv;
-} GS_OUT;
+layout(location = 0) out vec3 oPos;
+layout(location = 1) out vec3 oWorldPos;
+layout(location = 2) out vec3 oNormal;
+layout(location = 3) out vec2 oUv;
+layout(location = 4) flat out uint oObjectIndex;
 
 vec2 Project(vec3 vertex, uint axis) {
     return axis == 0 ? vertex.yz : (axis == 1 ? vertex.xz : vertex.xy);
-}
-
-vec3 BiasAndScale(vec3 vertex) {
-    return (vertex + 1.0) * 0.5;
 }
 
 int GetDominantAxis(vec3 pos0, vec3 pos1, vec3 pos2) {
@@ -38,13 +30,12 @@ void main() {
             gl_in[2].gl_Position.xyz);
 
     for (int i = 0; i < 3; ++i) {
-        gl_ViewportIndex = axis;
         gl_Position = vec4(Project(gl_in[i].gl_Position.xyz, axis), 1.0, 1.0);
-        GS_OUT.position = BiasAndScale(gl_in[i].gl_Position.xyz);
-        GS_OUT.normal = GS_IN[i].normal;
-        GS_OUT.objectIndex = GS_IN[i].objectIndex;
-        GS_OUT.uv = GS_IN[i].uv;
-        GS_OUT.worldPos = GS_IN[i].worldPos;
+        oPos = (1.0 + gl_in[i].gl_Position.xyz) * 0.5;
+        oNormal = iNormal[i];
+        oObjectIndex = iObjectIndex[i];
+        oUv = iUv[i];
+        oWorldPos = iWorldPos[i];
         EmitVertex();
     }
     EndPrimitive();

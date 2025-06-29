@@ -1,13 +1,19 @@
 #extension GL_EXT_buffer_reference : require
 
 struct SvoNode {
-    vec3 color;
-    uint visible;
+    uint color;
+    uint normal;
+};
+
+layout(buffer_reference) buffer SvoNodeBuffer {
+    SvoNode nodes[];
 };
 
 struct SvoData {
     vec3 leftBound;
     float worldToSvo;
+    vec3 rightBound;
+    uint depth;
 };
 
 struct Frustum {
@@ -87,6 +93,24 @@ vec3 CalculateNormal(vec2 N) {
     return normalize(n);
 }
 
+vec2 OctEncodeNormal(vec3 n) {
+    n /= (abs(n.x) + abs(n.y) + abs(n.z));
+    vec2 e = n.xy;
+    if (n.z < 0.0) {
+        e = (1.0 - abs(e.yx)) * sign(e);
+    }
+    return e * 0.5 + 0.5;
+}
+
+vec3 OctDecodeNormal(vec2 e) {
+    e = e * 2.0 - 1.0;
+    vec3 n = vec3(e.xy, 1.0 - abs(e.x) - abs(e.y));
+    if (n.z < 0.0) {
+        n.xy = (1.0 - abs(n.yx)) * sign(n.xy);
+    }
+    return normalize(n);
+}
+
 struct Material {
     int albedoAo;
     int mrNormal;
@@ -108,7 +132,7 @@ struct DrawIndexedIndirectCommand {
     uint firstInstance;
 };
 
-layout(buffer_reference, std430) readonly buffer VertexBuffer {
+layout(buffer_reference) readonly buffer VertexBuffer {
     Vertex vertices[];
 };
 

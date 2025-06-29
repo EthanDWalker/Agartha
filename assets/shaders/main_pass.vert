@@ -24,7 +24,7 @@ layout(set = 4, binding = 0) readonly buffer InstanceBuffer {
 layout(location = 0) out vec3 vertNormal;
 layout(location = 1) out vec3 fragPos;
 layout(location = 2) out vec2 uv;
-layout(location = 4) flat out uint objectIndex;
+layout(location = 3) flat out uint objectIndex;
 
 void main() {
     Instance instance = instances[visibleInstances[gl_InstanceIndex]];

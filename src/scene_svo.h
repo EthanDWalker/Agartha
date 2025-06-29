@@ -9,25 +9,27 @@
 #include "Managers/texture_manager.h"
 #include "camera.h"
 
-const uint32_t SVO_DEPTH = 5;
+const uint32_t SVO_DEPTH = 6;
 const VkExtent3D SVO_EXTENT = {100, 100, 100};
 
 struct SvoNode {
-  glm::vec3 color;
-  uint32_t visible;
+  uint32_t color;
+  uint32_t normal;
 };
 
 struct SceneSvo {
   AllocatedBuffer levels[SVO_DEPTH];
 
+  AllocatedBuffer svo_buffer;
+  AllocatedBuffer data_buffer;
+
   AllocatedBuffer draw_buffer;
   AllocatedBuffer draw_count_buffer;
-
-  AllocatedBuffer data_buffer;
 
   Pipeline build_pipeline;
   Pipeline build_draw_buffer_pipeline;
   Pipeline debug_pipeline;
+  Pipeline color_debug_pipeline;
 
   VkDescriptorSet draw_buffer_descriptor_set;
   VkDescriptorSetLayout draw_buffer_descriptor_layout;
@@ -42,11 +44,17 @@ struct SceneSvo {
   void BuildDrawCommands(VkCommandBuffer cmd, SceneManager &scene_manager);
 
   void Build(VkCommandBuffer cmd, SceneManager &scene_manager,
-             TextureManager &texture_manager, LightManager &light_manager);
+             TextureManager &texture_manager, LightManager &light_manager,
+             Camera &camera);
 
-  void DrawDebugView(VkCommandBuffer cmd, SceneManager &scene_manager,
-                     Camera &camera, AllocatedImage &draw_image,
-                     AllocatedImage &depth_image, VkImageLayout new_layout);
+  void DrawDebugView(VkCommandBuffer cmd, Camera &camera,
+                     AllocatedImage &draw_image, AllocatedImage &depth_image,
+                     VkImageLayout new_layout);
+
+  void DrawColorDebugView(VkCommandBuffer cmd, SceneManager &scene_manager,
+                          Camera &camera, AllocatedImage &draw_image,
+                          AllocatedImage &depth_image,
+                          VkImageLayout new_layout);
 
   void Destroy(VulkanContext &context);
 };

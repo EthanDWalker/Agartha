@@ -1,29 +1,16 @@
 #version 450
 #extension GL_EXT_buffer_reference : require
 #extension GL_GOOGLE_include_directive : require
-#extension GL_EXT_buffer_reference2 : require
 #extension GL_EXT_nonuniform_qualifier : require
-#extension GL_EXT_samplerless_texture_functions : require
+#extension GL_EXT_shader_atomic_float2 : require
 #include "../common.glsl"
 
-layout(set = 0, binding = 0) buffer SVOLevel1Buffer {
-    SvoNode l1Buffer[];
+layout(set = 0, binding = 0) buffer SvoBuffer {
+    SvoNodeBuffer svo[];
 };
 
-layout(set = 0, binding = 1) buffer SVOLevel2Buffer {
-    SvoNode l2Buffer[];
-};
-
-layout(set = 0, binding = 2) buffer SVOLevel3Buffer {
-    SvoNode l3Buffer[];
-};
-
-layout(set = 0, binding = 3) buffer SVOLevel4Buffer {
-    SvoNode l4Buffer[];
-};
-
-layout(set = 0, binding = 4) buffer SVOLevel5Buffer {
-    SvoNode l5Buffer[];
+layout(set = 0, binding = 1) uniform SvoDataUbo {
+    SvoData svoData;
 };
 
 layout(set = 2, binding = 0) readonly buffer ObjectBuffer {
@@ -50,20 +37,22 @@ layout(set = 5, binding = 1) readonly buffer LightMatrixBuffer {
 
 layout(set = 5, binding = 2) uniform sampler shadowSampler;
 
-layout(location = 0) in GS_OUT {
-    vec3 position;
-    vec3 worldPos;
-    uint objectIndex;
-    vec3 normal;
-    vec2 uv;
+layout(set = 6, binding = 0) uniform CameraUBO {
+    Camera camera;
 };
+
+layout(location = 0) in vec3 iPos;
+layout(location = 1) in vec3 iWorldPos;
+layout(location = 2) in vec3 iNormal;
+layout(location = 3) in vec2 iUv;
+layout(location = 4) flat in uint iObjectIndex;
 
 float ShadowCalculation(vec3 L, vec3 N, DirectionalLight directionalLight) {
     vec3 projCoords;
     uint shadowMapIndex = 0;
 
     for (uint i = directionalLight.cascade_index; i < directionalLight.cascade_index + 3; i++) {
-        vec4 lightSpace = lightMatrices[i] * vec4(worldPos, 1.0);
+        vec4 lightSpace = lightMatrices[i] * vec4(iWorldPos, 1.0);
         vec3 proj;
         proj = lightSpace.xyz / lightSpace.w;
         proj = proj * 0.5 + 0.5;
@@ -94,51 +83,79 @@ float ShadowCalculation(vec3 L, vec3 N, DirectionalLight directionalLight) {
     return shadow;
 }
 
-SvoNode PackData(SvoNode currentData, vec3 normal, vec3 color) {
-    SvoNode node;
-    node.visible = 1;
-    if ((currentData.visible & 0x1) == 0) {
-        node.color = color;
-        return node;
-    }
-    node.color = mix(color, currentData.color, 0.5);
-    return node;
+vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+const float PI = 3.14159265359;
+
 void main() {
-    Material material = objects[objectIndex].material;
+    Material mat = objects[iObjectIndex].material;
 
-    vec3 color = texture(sampler2D(textures[material.albedoAo], textureSampler), uv).rgb;
+    float lod = 5.0;
+    vec4 albedoAo = textureLod(sampler2D(textures[mat.albedoAo], textureSampler), iUv, lod);
+    vec4 mrNormal = textureLod(sampler2D(textures[mat.mrNormal], textureSampler), iUv, lod);
+    float metallic = clamp(mrNormal.x, 0.0, 1.0);
+    float roughness = clamp(mrNormal.y, 0.0, 1.0);
 
-    vec3 L = normalize(-directionalLight.direction);
-    color *= ShadowCalculation(L, normalize(normal), directionalLight);
+    vec3 albedo = albedoAo.rgb;
+    float ao = albedoAo.a;
 
-    vec3 l1Position = position;
-    vec3 l1RoundedPosition = floor(l1Position * 2.0);
-    uint l1Index = uint(l1RoundedPosition.x * 1) + uint(l1RoundedPosition.y * 2) + uint(l1RoundedPosition.z * 4);
-    l1Buffer[l1Index] = PackData(l1Buffer[l1Index], normal, color);
+    vec3 N = normalize(iNormal);
+    vec3 V = normalize(camera.viewPos - iWorldPos);
 
-    vec3 l2Position = (l1Position - (vec3(0.5) * l1RoundedPosition)) * 2.0;
-    vec3 l2RoundedPosition = floor(l2Position * 2.0);
-    uint l2Index = uint(l2RoundedPosition.x * 1) + uint(l2RoundedPosition.y * 2) + uint(l2RoundedPosition.z * 4);
-    l2Index += l1Index * 8;
-    l2Buffer[l2Index] = PackData(l2Buffer[l2Index], normal, color);
+    vec3 F0 = vec3(0.04);
+    F0 = mix(F0, albedo, metallic);
 
-    vec3 l3Position = (l2Position - (vec3(0.5) * l2RoundedPosition)) * 2.0;
-    vec3 l3RoundedPosition = floor(l3Position * 2.0);
-    uint l3Index = uint(l3RoundedPosition.x * 1) + uint(l3RoundedPosition.y * 2) + uint(l3RoundedPosition.z * 4);
-    l3Index += l2Index * 8;
-    l3Buffer[l3Index] = PackData(l3Buffer[l3Index], normal, color);
+    vec3 Lo = vec3(0.0);
 
-    vec3 l4Position = (l3Position - (vec3(0.5) * l3RoundedPosition)) * 2.0;
-    vec3 l4RoundedPosition = floor(l4Position * 2.0);
-    uint l4Index = uint(l4RoundedPosition.x * 1) + uint(l4RoundedPosition.y * 2) + uint(l4RoundedPosition.z * 4);
-    l4Index += l3Index * 8;
-    l4Buffer[l4Index] = PackData(l4Buffer[l4Index], normal, color);
+    {
+        vec3 L = normalize(-directionalLight.direction);
+        vec3 H = normalize(V + L);
 
-    vec3 l5Position = (l4Position - (vec3(0.5) * l4RoundedPosition)) * 2.0;
-    vec3 l5RoundedPosition = floor(l5Position * 2.0);
-    uint l5Index = uint(l5RoundedPosition.x * 1) + uint(l5RoundedPosition.y * 2) + uint(l5RoundedPosition.z * 4);
-    l5Index += l4Index * 8;
-    l5Buffer[l5Index] = PackData(l5Buffer[l5Index], normal, color);
+        vec3 radiance = directionalLight.color * directionalLight.intensity;
+
+        vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+
+        kD *= 1.0 - metallic;
+
+        float NdotL = max(dot(N, L), 0.0);
+
+        float shadow = ShadowCalculation(L, N, directionalLight);
+
+        Lo += shadow * (kD * albedo / PI) * radiance * NdotL;
+    }
+
+    vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+
+    vec3 kS = F;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= 1.0 - metallic;
+
+    vec3 color = Lo + (F + albedo) * kD * ao;
+
+    color = color / (color + vec3(1.0));
+    color = pow(color, vec3(1.0 / 2.2));
+
+    vec3 levelPosition = iPos;
+
+    if (levelPosition.x <= 0.0 || levelPosition.x >= 1.0 || levelPosition.y <= 0.0 || levelPosition.y >= 1.0 || levelPosition.z <= 0.0 || levelPosition.z >= 1.0) return;
+
+    uint levelIndex = 0;
+    for (uint i = 0; i < svoData.depth; ++i) {
+        vec3 levelRoundedPosition = round(levelPosition);
+
+        levelIndex *= 8;
+        levelIndex += uint(levelRoundedPosition.x * 1) + uint(levelRoundedPosition.y * 2) + uint(levelRoundedPosition.z * 4);
+
+        uint packedColor = packUnorm4x8(vec4(color, 0.0));
+        packedColor |= 1;
+        atomicMax(svo[i].nodes[levelIndex].color, packedColor);
+        atomicMax(svo[i].nodes[levelIndex].normal, packUnorm2x16(OctEncodeNormal(N)));
+
+        levelPosition = (levelPosition - (vec3(0.5) * levelRoundedPosition)) * 2.0;
+    }
 }

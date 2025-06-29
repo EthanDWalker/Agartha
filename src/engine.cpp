@@ -220,9 +220,8 @@ void Engine::CreateRenderGraph() {
     });
 
     builder.AddPass(2, {}, [&](VkCommandBuffer cmd) {
-      if (voxel_gi_debug)
-        return;
-      scene_svo.Build(cmd, scene_manager, texture_manager, light_manager);
+      scene_svo.Build(cmd, scene_manager, texture_manager, light_manager,
+                      camera);
     });
   }
 
@@ -356,8 +355,8 @@ void Engine::CreateRenderGraph() {
     builder.AddPass(6, {}, [&](VkCommandBuffer cmd) {
       if (!voxel_gi_debug)
         return;
-      scene_svo.DrawDebugView(cmd, scene_manager, camera, main_image,
-                              depth_image, VK_IMAGE_LAYOUT_GENERAL);
+      scene_svo.DrawDebugView(cmd, camera, main_image, depth_image,
+                              VK_IMAGE_LAYOUT_GENERAL);
     });
   }
 
@@ -659,6 +658,7 @@ void Engine::Run() {
     }
 
     camera.Update(context, immediate_submit, window, delta_time);
+    light_manager.UpdateMatrices(context, immediate_submit, camera.position);
 
     if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
       fmt::println("{}", glm::to_string(camera.position));
@@ -669,8 +669,6 @@ void Engine::Run() {
     } else {
       voxel_gi_debug = false;
     }
-
-    light_manager.UpdateMatrices(context, immediate_submit, camera.position);
 
     render_graph.Render(context);
     if (render_graph.resize_requested == true) {
