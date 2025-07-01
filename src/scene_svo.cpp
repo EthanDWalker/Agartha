@@ -14,8 +14,10 @@
 
 struct SvoData {
   glm::vec3 left_bound;
+  float _p0;
   float world_to_svo;
-  glm::vec3 right_bound;
+  float voxel_size;
+  float voxel_size_diag;
   uint32_t depth;
 };
 
@@ -53,10 +55,14 @@ void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
   SvoData svo_data{};
   svo_data.left_bound = glm::vec3(
       SVO_EXTENT.width / 2.0, SVO_EXTENT.height / 2.0, SVO_EXTENT.depth / 2.0);
-  svo_data.world_to_svo =
-      2.0 /
+  const uint32_t max_length =
       std::max(std::max(SVO_EXTENT.width, SVO_EXTENT.height), SVO_EXTENT.depth);
-  svo_data.right_bound = -svo_data.left_bound;
+  svo_data.world_to_svo = 2.0 / float(max_length);
+
+  svo_data.voxel_size = max_length / std::pow(2.0, float(SVO_DEPTH));
+  svo_data.voxel_size_diag =
+      std::sqrt(2.0 * (svo_data.voxel_size * svo_data.voxel_size));
+
   svo_data.depth = SVO_DEPTH;
   CreateBufferDataAsync(context, &svo_data, sizeof(SvoData),
                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, data_buffer);
@@ -80,11 +86,11 @@ void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
   {
     descriptor_builder.BindStorageBuffer(0, svo_buffer.buffer);
     descriptor_builder.BindUniformBuffer(1, data_buffer.buffer);
-    descriptor_builder.Build(context,
-                             VK_SHADER_STAGE_FRAGMENT_BIT |
-                                 VK_SHADER_STAGE_VERTEX_BIT |
-                                 VK_SHADER_STAGE_GEOMETRY_BIT,
-                             svo_descriptor_set, svo_descriptor_layout);
+    descriptor_builder.Build(
+        context,
+        VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT |
+            VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_COMPUTE_BIT,
+        svo_descriptor_set, svo_descriptor_layout);
   }
 
   {

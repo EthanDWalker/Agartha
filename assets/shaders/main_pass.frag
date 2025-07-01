@@ -41,6 +41,14 @@ layout(set = 6, binding = 1) readonly buffer LightMatrixBuffer {
 
 layout(set = 6, binding = 2) uniform sampler shadowSampler;
 
+layout(set = 7, binding = 0) buffer SvoBuffer {
+    SvoNodeBuffer svo[];
+};
+
+layout(set = 7, binding = 1) uniform SvoDataUbo {
+    SvoData svoData;
+};
+
 const float PI = 3.14159265359;
 
 vec3 GetNormalFromMap(vec3 sampledNormal);
@@ -55,6 +63,8 @@ vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
 float ShadowCalculation(vec3 L, vec3 N, DirectionalLight directionalLight);
 
 vec2 OctEncodeNormal(vec3 n);
+
+vec3 CalculateIndirectLight(vec3 N);
 
 void main() {
     Material mat = objects[iObjectIndex].material;
@@ -131,13 +141,20 @@ void main() {
         Lo += shadow * (kD * albedo / PI + specular) * radiance * NdotL;
     }
 
-    vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+    {
+        vec3 radiance = CalculateIndirectLight(N);
 
-    vec3 kS = F;
-    vec3 kD = vec3(1.0) - kS;
-    kD *= 1.0 - metallic;
+        vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
 
-    vec3 color = Lo + (F + albedo) * kD * ao;
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+
+        kD *= 1.0 - metallic;
+
+        Lo += (kD * albedo) * radiance;
+    }
+
+    vec3 color = Lo;
 
     oColor = vec4(color, 1.0);
 
@@ -243,4 +260,82 @@ float ShadowCalculation(vec3 L, vec3 N, DirectionalLight directionalLight) {
     shadow /= 9.0;
 
     return shadow;
+}
+
+vec3 CalculateIndirectLight(vec3 N) {
+    vec3 t0 = cross(vec3(0.0, 1.0, 0.0), iNormal);
+    vec3 t1 = cross(vec3(0.0, 0.0, 1.0), iNormal);
+    vec3 tangent = normalize((length(t0) < length(t1)) ? t1 : t0);
+    vec3 bittangent = normalize(cross(tangent, iNormal));
+
+    mat3 TBN = mat3(tangent, bittangent, iNormal);
+
+    const vec3 coneDirections[5] = vec3[5](
+            vec3(0.0, 0.0, 1.0),
+            vec3(0.0, 0.707106781, 0.707106781),
+            vec3(0.0, -0.707106781, 0.707106781),
+            vec3(0.707106781, 0.0, 0.707106781),
+            vec3(-0.707106781, 0.0, 0.707106781)
+        );
+
+    const float coneWeights[5] = float[5](
+            0.28, 0.18, 0.18, 0.18, 0.18
+        );
+
+    vec3 min = -svoData.leftBound;
+    vec3 max = svoData.leftBound;
+
+    vec3 indirectDiffuse = vec3(0.0);
+    for (uint i = 0; i < 5; ++i) {
+        vec3 coneDirection = TBN * coneDirections[i];
+
+        vec3 indirectColor = vec3(0.0);
+        bool hit = false;
+        float marchedDistance = svoData.voxelSizeDiag;
+        vec3 marchedPosition = iWorldPos + (coneDirection * marchedDistance);
+
+        const float coneHalfAngle = radians(30.0f);
+
+        while (!hit) {
+            if (marchedPosition.x <= min.x || marchedPosition.x >= max.x ||
+                    marchedPosition.y <= min.y || marchedPosition.y >= max.y ||
+                    marchedPosition.z <= min.z || marchedPosition.z >= max.z) {
+                hit = false;
+                break;
+            }
+
+            float coneDiameter = 2.0 * tan(coneHalfAngle) * marchedDistance;
+            float maxDepthFloat = svoData.depth - log2(coneDiameter / svoData.voxelSize) - 1.0;
+            uint maxDepth = uint(floor(maxDepthFloat));
+
+            maxDepth = svoData.depth;
+
+            uint nodeIndex = 0;
+            uint svoLevel = 3;
+            SvoNode node;
+            for (; svoLevel < maxDepth; svoLevel++) {
+                nodeIndex = GetSvoNodeIndex(marchedPosition, svoLevel, svoData);
+
+                node = svo[svoLevel].nodes[nodeIndex];
+                if ((node.color & 0x1) == 0x0) {
+                    hit = false;
+                    break;
+                } else {
+                    hit = true;
+                }
+            }
+
+            if (hit) {
+                indirectColor = unpackUnorm4x8(node.color).rgb;
+                break;
+            }
+
+            marchedDistance += svoData.voxelSize * pow(2.0, svoData.depth - svoLevel);
+            marchedPosition = iWorldPos + (coneDirection * marchedDistance);
+        }
+
+        indirectDiffuse += coneWeights[i] * indirectColor;
+    }
+
+    return indirectDiffuse;
 }

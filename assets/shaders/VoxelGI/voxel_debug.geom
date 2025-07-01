@@ -26,20 +26,6 @@ layout(location = 0) in vec3 iWorldPos[];
 
 layout(location = 0) out vec3 oColor;
 
-uint GetNodeIndex(vec3 worldPosition, uint level) {
-    vec3 svo = worldPosition * svoData.worldToSvo;
-    svo = (svo + 1.0) * 0.5;
-    uint index = 0;
-    vec3 levelPosition = svo;
-    for (uint i = 0; i < level; ++i) {
-        vec3 roundedPosition = floor(levelPosition * 2.0);
-        index *= 8;
-        index += uint(roundedPosition.x * 1) + uint(roundedPosition.y * 2) + uint(roundedPosition.z * 4);
-        levelPosition = (levelPosition - (vec3(0.5) * roundedPosition)) * 2.0;
-    }
-    return index;
-}
-
 void EmitFace(vec3 center, vec3 halfSize, int axis, float sign, vec3 color) {
     vec3 normal = vec3(0.0);
     normal[axis] = sign;
@@ -71,7 +57,7 @@ void EmitFace(vec3 center, vec3 halfSize, int axis, float sign, vec3 color) {
 
 void main() {
     vec3 center = iWorldPos[0];
-    SvoNode node = svo[level - 1].nodes[GetNodeIndex(center, level)];
+    SvoNode node = svo[level - 1].nodes[GetSvoNodeIndex(center, level - 1, svoData)];
     if ((node.color & 0x1) == 0x0) {
         return;
     }

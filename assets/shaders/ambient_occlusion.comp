@@ -4,10 +4,9 @@ layout(local_size_x = 16, local_size_y = 16) in;
 #extension GL_GOOGLE_include_directive : require
 #include "common.glsl"
 
-layout(set = 0, binding = 0, r16f) writeonly uniform image2D aoImage;
-
 layout(set = 0, binding = 1, rgba16) readonly uniform image2D mrNormalImage;
 layout(set = 0, binding = 2, r32f) readonly uniform image2D depthImage;
+layout(set = 0, binding = 3, r16f) writeonly uniform image2D aoImage;
 
 layout(set = 1, binding = 0) uniform CameraUBO {
     Camera camera;
@@ -20,10 +19,6 @@ const uint DIRECTION_SAMPLES = 4;
 const float SAMPLE_STEP = 0.004;
 const float SAMPLE_RADIUS = 1.0;
 const float BIAS = radians(30.0);
-
-float LinearizeDepth(float depth) {
-  return (camera.near * camera.far) / (camera.far - depth * (camera.far - camera.near));
-}
 
 vec3 ViewSpacePositionFromDepth(float depth, vec2 uv) {
     vec3 ndc = vec3(uv * 2.0 - 1.0, 1.0 - depth);

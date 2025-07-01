@@ -1,0 +1,160 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+#extension GL_GOOGLE_include_directive : require
+#include "../common.glsl"
+
+layout(set = 0, binding = 0, r16f) uniform image2D mainImage;
+layout(set = 0, binding = 1, rgba16) readonly uniform image2D mrNormalImage;
+layout(set = 0, binding = 2, r32f) readonly uniform image2D depthImage;
+
+layout(set = 1, binding = 0) uniform CameraUBO {
+    Camera camera;
+};
+
+layout(set = 2, binding = 0) buffer SvoBuffer {
+    SvoNodeBuffer svo[];
+};
+
+layout(set = 2, binding = 1) uniform SvoDataUbo {
+    SvoData svoData;
+};
+
+vec3 PositionFromDepth(float depth, vec2 uv) {
+    vec3 ndc = vec3(uv * 2.0 - 1.0, 1.0 - depth);
+
+    vec4 clipSpacePosition = vec4(ndc, 1.0);
+    vec4 viewSpacePosition = camera.invProj * clipSpacePosition;
+    viewSpacePosition /= viewSpacePosition.w;
+    vec4 worldSpacePosition = camera.invView * viewSpacePosition;
+
+    return worldSpacePosition.xyz;
+}
+
+vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+void main() {
+    vec2 imageExtent = imageSize(mainImage);
+
+    if (gl_GlobalInvocationID.x >= imageExtent.x || gl_GlobalInvocationID.y >= imageExtent.y) {
+        return;
+    }
+
+    vec2 uv = (vec2(gl_GlobalInvocationID.xy) + vec2(0.5)) / imageExtent;
+
+    float depth = imageLoad(depthImage, ivec2(gl_GlobalInvocationID.xy)).r;
+    vec3 position = PositionFromDepth(depth, uv);
+    vec4 mrNormal = imageLoad(mrNormalImage, ivec2(gl_GlobalInvocationID.xy));
+    float metallic = mrNormal.r;
+    float roughness = mrNormal.g;
+    vec2 storedNormal = mrNormal.zw;
+    vec3 normal = OctDecodeNormal(storedNormal);
+    vec3 color = imageLoad(mainImage, ivec2(gl_GlobalInvocationID.xy)).rgb;
+
+    vec3 t0 = cross(vec3(0.0, 1.0, 0.0), normal);
+    vec3 t1 = cross(vec3(0.0, 0.0, 1.0), normal);
+    vec3 tangent = normalize((length(t0) < length(t1)) ? t1 : t0);
+    vec3 bittangent = normalize(cross(tangent, normal));
+
+    mat3 TBN = mat3(tangent, bittangent, normal);
+
+    const vec3 coneDirections[5] = vec3[5](
+            vec3(0.0, 0.0, 1.0),
+            vec3(0.0, 0.707106781, 0.707106781),
+            vec3(0.0, -0.707106781, 0.707106781),
+            vec3(0.707106781, 0.0, 0.707106781),
+            vec3(-0.707106781, 0.0, 0.707106781)
+        );
+
+    const float coneWeights[5] = float[5](
+            0.28, 0.18, 0.18, 0.18, 0.18
+        );
+
+    vec3 indirectDiffuse = vec3(0.0);
+    for (uint i = 0; i < 5; ++i) {
+        vec3 coneDirection = TBN * coneDirections[i];
+
+        vec3 indirectColor = vec3(0.0);
+        bool hit = false;
+        float marchedDistance = svoData.voxelSizeDiag;
+        vec3 marchedPosition = position + (coneDirection * marchedDistance);
+
+        const float coneHalfAngle = radians(30.0f);
+
+        while (!hit) {
+            vec3 svoSpace = (1.0 + (marchedPosition * svoData.worldToSvo)) * 0.5;
+
+            if (svoSpace.x <= 0.0 || svoSpace.x >= 1.0 ||
+                    svoSpace.y <= 0.0 || svoSpace.y >= 1.0 ||
+                    svoSpace.z <= 0.0 || svoSpace.z >= 1.0) {
+                hit = false;
+                break;
+            }
+
+            float coneDiameter = 2.0 * tan(coneHalfAngle) * marchedDistance;
+            float maxDepthFloat = svoData.depth - log2(coneDiameter / svoData.voxelSize) - 1.0;
+            uint maxDepth = uint(floor(maxDepthFloat));
+
+            maxDepth = svoData.depth;
+
+            uint nodeIndex = 0;
+
+            vec3 levelPosition = svoSpace;
+            uint svoLevel = 0;
+            SvoNode node;
+            for (; svoLevel < maxDepth; svoLevel++) {
+                vec3 scaledPosition = levelPosition * 2.0;
+                vec3 levelRoundedPosition = floor(scaledPosition);
+
+                nodeIndex = (nodeIndex << 3) |
+                        (uint(levelRoundedPosition.x)) |
+                        (uint(levelRoundedPosition.y) << 1) |
+                        (uint(levelRoundedPosition.z) << 2);
+
+                node = svo[svoLevel].nodes[nodeIndex];
+                if ((node.color & 0x1) == 0x0) {
+                    hit = false;
+                    break;
+                } else {
+                    hit = true;
+                }
+
+                levelPosition = scaledPosition - levelRoundedPosition;
+            }
+
+            if (hit) {
+                indirectColor = unpackUnorm4x8(node.color).rgb;
+                break;
+            }
+
+            marchedDistance += svoData.voxelSize * pow(2.0, svoData.depth - svoLevel);
+            marchedPosition = position + (coneDirection * marchedDistance);
+        }
+
+        indirectDiffuse += coneWeights[i] * indirectColor;
+    }
+
+    vec3 N = normal;
+    vec3 V = normalize(camera.viewPos - position);
+
+    vec3 F0 = vec3(0.04);
+    // F0 = mix(F0, color, metallic);
+
+    vec3 Lo = vec3(0.0);
+
+    {
+        vec3 radiance = indirectDiffuse;
+
+        vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+
+        kD *= 1.0 - metallic;
+
+        Lo += (kD) * radiance;
+    }
+
+    imageStore(mainImage, ivec2(gl_GlobalInvocationID.xy), vec4(color + Lo, 1.0));
+}

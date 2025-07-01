@@ -37,7 +37,7 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   features.geometryShader = true;
   features.multiDrawIndirect = true;
   features.fragmentStoresAndAtomics = true;
-  features.multiViewport = true;
+  features.shaderFloat64 = true;
 
   VkPhysicalDeviceVulkan13Features features_13{};
   features_13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -91,10 +91,10 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
           .add_required_extension_features(robustness2)
           .add_required_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
           .add_required_extension_features(as_features)
-    /*
-          .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
-          .add_required_extension_features(raytracing_features)
-    */
+          /*
+                .add_required_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
+                .add_required_extension_features(raytracing_features)
+          */
           .add_required_extension(
               VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
           .add_required_extension(VK_KHR_SPIRV_1_4_EXTENSION_NAME)

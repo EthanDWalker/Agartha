@@ -24,7 +24,7 @@ void main() {
     uint n = uint(pointCount);
     uint x = index % n;
     uint y = (index / n) % n;
-    uint z = (index / (n * n)) % n;
+    uint z = (index / (n * n));
 
     vec3 fraction = vec3(x, y, z) / float(n - 1);
     vec3 localPos = (fraction * 2.0 - 1.0);

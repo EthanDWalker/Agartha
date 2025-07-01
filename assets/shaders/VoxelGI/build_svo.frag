@@ -41,11 +41,10 @@ layout(set = 6, binding = 0) uniform CameraUBO {
     Camera camera;
 };
 
-layout(location = 0) in vec3 iPos;
-layout(location = 1) in vec3 iWorldPos;
-layout(location = 2) in vec3 iNormal;
-layout(location = 3) in vec2 iUv;
-layout(location = 4) flat in uint iObjectIndex;
+layout(location = 0) in vec3 iWorldPos;
+layout(location = 1) in vec3 iNormal;
+layout(location = 2) in vec2 iUv;
+layout(location = 3) flat in uint iObjectIndex;
 
 float ShadowCalculation(vec3 L, vec3 N, DirectionalLight directionalLight) {
     vec3 projCoords;
@@ -126,36 +125,37 @@ void main() {
 
         float shadow = ShadowCalculation(L, N, directionalLight);
 
-        Lo += shadow * (kD * albedo / PI) * radiance * NdotL;
+        Lo += shadow * (kD * albedo) * radiance * NdotL;
     }
 
-    vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
-
-    vec3 kS = F;
-    vec3 kD = vec3(1.0) - kS;
-    kD *= 1.0 - metallic;
-
-    vec3 color = Lo + (F + albedo) * kD * ao;
+    vec3 color = Lo;
 
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
 
-    vec3 levelPosition = iPos;
+    vec3 min = -svoData.leftBound;
+    vec3 max = svoData.leftBound;
+    vec3 extent = svoData.leftBound * 2.0;
 
-    if (levelPosition.x <= 0.0 || levelPosition.x >= 1.0 || levelPosition.y <= 0.0 || levelPosition.y >= 1.0 || levelPosition.z <= 0.0 || levelPosition.z >= 1.0) return;
+    if (iWorldPos.x <= min.x || iWorldPos.x >= max.x ||
+            iWorldPos.y <= min.y || iWorldPos.y >= max.y ||
+            iWorldPos.z <= min.z || iWorldPos.z >= max.z) discard;
 
-    uint levelIndex = 0;
+    vec3 svoPos = iWorldPos + max;
+
     for (uint i = 0; i < svoData.depth; ++i) {
-        vec3 levelRoundedPosition = round(levelPosition);
+        uint voxelsPerDimension = 1u << (i + 1);
 
-        levelIndex *= 8;
-        levelIndex += uint(levelRoundedPosition.x * 1) + uint(levelRoundedPosition.y * 2) + uint(levelRoundedPosition.z * 4);
+        vec3 normalizedPos = svoPos / extent.x;
+        vec3 levelPosition = floor(normalizedPos * float(voxelsPerDimension));
+
+        uint levelIndex = uint(levelPosition.x +
+                    levelPosition.y * voxelsPerDimension +
+                    levelPosition.z * voxelsPerDimension * voxelsPerDimension);
 
         uint packedColor = packUnorm4x8(vec4(color, 0.0));
         packedColor |= 1;
         atomicMax(svo[i].nodes[levelIndex].color, packedColor);
         atomicMax(svo[i].nodes[levelIndex].normal, packUnorm2x16(OctEncodeNormal(N)));
-
-        levelPosition = (levelPosition - (vec3(0.5) * levelRoundedPosition)) * 2.0;
     }
 }

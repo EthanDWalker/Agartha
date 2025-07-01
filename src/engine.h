@@ -66,8 +66,8 @@ struct Engine {
   VkDescriptorSet tone_map_descriptor_set;
   VkDescriptorSetLayout tone_map_descriptor_layout;
 
-  VkDescriptorSet ambient_occlusion_descriptor_set;
-  VkDescriptorSetLayout ambient_occlusion_descriptor_layout;
+  VkDescriptorSet gbuffer_descriptor_set;
+  VkDescriptorSetLayout gbuffer_descriptor_layout;
 
   VkDescriptorSet ray_tracing_descriptor_set;
   VkDescriptorSetLayout ray_tracing_descriptor_layout;

@@ -11,10 +11,25 @@ layout(buffer_reference) buffer SvoNodeBuffer {
 
 struct SvoData {
     vec3 leftBound;
+    float _p0;
     float worldToSvo;
-    vec3 rightBound;
+    float voxelSize;
+    float voxelSizeDiag;
     uint depth;
 };
+
+uint GetSvoNodeIndex(vec3 worldPosition, uint level, SvoData svoData) {
+    uint voxelsPerDimension = 1u << (level + 1);
+
+    vec3 normalizedPos = (worldPosition + svoData.leftBound) / (svoData.leftBound * 2.0);
+    vec3 levelPosition = floor(normalizedPos * float(voxelsPerDimension));
+
+    uint levelIndex = uint(levelPosition.x +
+                levelPosition.y * voxelsPerDimension +
+                levelPosition.z * voxelsPerDimension * voxelsPerDimension);
+
+    return levelIndex;
+}
 
 struct Frustum {
     vec4 top;

@@ -25,20 +25,6 @@ layout(set = 3, binding = 0) uniform CameraUBO {
 
 layout(location = 0) out vec3 color;
 
-uint GetNodeIndex(vec3 worldPosition, uint level) {
-    vec3 svo = worldPosition * svoData.worldToSvo;
-    svo = (svo + 1.0) * 0.5;
-    uint levelIndex = 0;
-    vec3 levelPosition = svo;
-    for (uint i = 0; i < level; ++i) {
-        vec3 roundedPosition = floor(levelPosition * 2.0);
-        levelIndex *= 8;
-        levelIndex += uint(roundedPosition.x * 1) + uint(roundedPosition.y * 2) + uint(roundedPosition.z * 4);
-        levelPosition = (levelPosition - (vec3(0.5) * roundedPosition)) * 2.0;
-    }
-    return levelIndex;
-}
-
 void main() {
     Instance instance = instances[gl_InstanceIndex];
     uint objectIndex = GetObjectIndex(instance);
@@ -47,7 +33,7 @@ void main() {
     vec4 worldPos = instanceMatrix * vec4(vertex.position, 1.0);
 
     uint svoLevel = svoData.depth;
-    SvoNode node = svo[svoLevel - 1].nodes[GetNodeIndex(worldPos.xyz, svoLevel)];
+    SvoNode node = svo[svoLevel - 1].nodes[GetSvoNodeIndex(worldPos.xyz, svoLevel, svoData)];
     vec3 nodeColor = unpackUnorm4x8(node.color).rgb;
     if ((node.color & 0x1) == 0x0) {
         nodeColor = vec3(1.0, 0.0, 1.0);
