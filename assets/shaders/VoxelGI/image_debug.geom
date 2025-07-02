@@ -1,14 +1,13 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_buffer_reference2 : require
+#extension GL_EXT_nonuniform_qualifier : require
 #include "../common.glsl"
 
 layout(points) in;
 layout(triangle_strip, max_vertices = 24) out;
 
-layout(set = 0, binding = 0) readonly buffer SvoBuffer {
-    SvoNodeBuffer svo[];
-};
+layout(set = 0, binding = 0, rgba16) readonly uniform image3D radianceImageMips[];
 
 layout(set = 0, binding = 1) uniform SvoDataUbo {
     SvoData svoData;
@@ -19,7 +18,7 @@ layout(set = 1, binding = 0) uniform CameraUBO {
 };
 
 layout(push_constant) uniform PushConstants {
-    uint level;
+    uint mipLevel;
 };
 
 layout(location = 0) in vec3 iWorldPos[];
@@ -57,20 +56,17 @@ void EmitFace(vec3 center, vec3 halfSize, int axis, float sign, vec3 color) {
 
 void main() {
     vec3 center = iWorldPos[0];
-    SvoNode node = svo[level - 1].nodes[GetSvoNodeIndex(center, level - 1, svoData)];
-    if ((node.color & 0x1) == 0x0) {
+    vec4 color = imageLoad(radianceImageMips[mipLevel],
+            ivec3(((center + svoData.leftBound) * svoData.invVoxelSize) / float(mipLevel + 1.0)));
+    if (color.a == 0.0) {
         return;
     }
 
-    float cubesPerAxis = pow(2, level) + 1;
+    float cubesPerAxis = imageSize(radianceImageMips[mipLevel]).x / float(svoData.voxelSize * pow(2, mipLevel));
     vec3 halfSize = svoData.leftBound / cubesPerAxis;
 
-    vec3 nodeColor = unpackUnorm4x8(node.color).rgb;
-    vec2 storedNodeNormal = unpackUnorm2x16(node.normal);
-    vec3 nodeNormal = OctDecodeNormal(storedNodeNormal);
-
     for (int axis = 0; axis < 3; ++axis) {
-        EmitFace(center, halfSize, axis, 1.0, nodeColor);
-        EmitFace(center, halfSize, axis, -1.0, nodeColor);
+        EmitFace(center, halfSize, axis, 1.0, color.rgb);
+        EmitFace(center, halfSize, axis, -1.0, color.rgb);
     }
 }

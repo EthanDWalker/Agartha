@@ -111,6 +111,11 @@ void CreateAllocatedImage(VulkanContext &context, VkExtent3D size,
   image.format = format;
   image.extent = size;
 
+  if (mipmapped) {
+    usage_flags |=
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  }
+
   uint32_t mip_levels = mipmapped ? CalculateMipLevels(size) : 1;
 
   VkImageCreateInfo image_ci =

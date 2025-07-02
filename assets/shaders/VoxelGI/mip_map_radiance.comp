@@ -1,0 +1,41 @@
+#version 450
+#extension GL_EXT_nonuniform_qualifier : require
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+layout(set = 0, binding = 0, rgba8) uniform image3D radianceImageMips[]; // size decreasing
+
+layout(push_constant) uniform PushConstants {
+    uint mipLevel; // starts at 1
+};
+
+void main() {
+    uvec3 coord = gl_GlobalInvocationID.xyz;
+    uvec3 mipSize = uvec3(imageSize(radianceImageMips[mipLevel]));
+
+    if (coord.x >= mipSize.x || coord.y >= mipSize.y || coord.z >= mipSize.z) return;
+
+    const uint pixelsPerTexel = 8;
+    const float invPixelsPerTexel = 1 / 8.0;
+
+    vec4 texelColors[pixelsPerTexel];
+    for (uint i = 0; i < 2; ++i) {
+        for (uint j = 0; j < 2; ++j) {
+            for (uint k = 0; k < 2; ++k) {
+                uvec3 localCoord = 2 * coord + uvec3(i, j, k);
+                texelColors[(i) + (j << 1) + (k << 2)] = imageLoad(radianceImageMips[mipLevel - 1], ivec3(localCoord));
+            }
+        }
+    }
+
+    vec3 color = vec3(0.0);
+    bool visible = false;
+
+    for (uint i = 0; i < pixelsPerTexel; ++i) {
+        color = max(color, texelColors[i].rgb);
+        visible = texelColors[i].a != 0.0 ? true : visible;
+    }
+
+    if (visible) {
+        imageStore(radianceImageMips[mipLevel], ivec3(coord), vec4(color, 1.0));
+    }
+}

@@ -1,9 +1,9 @@
 #include "scene_svo.h"
+#include "Backend/allocated_image.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/init.h"
 #include "Backend/pipeline.h"
-#include "Backend/util.h"
 #include "Managers/light_manager.h"
 #include "Managers/texture_manager.h"
 #include "camera.h"
@@ -18,31 +18,22 @@ struct SvoData {
   float world_to_svo;
   float voxel_size;
   float voxel_size_diag;
-  uint32_t depth;
+  float inv_voxel_size;
 };
 
 void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
                       LightManager &light_manager,
                       TextureManager &texture_manager, Camera &camera,
                       DescriptorBuilder &descriptor_builder) {
-  size_t size = 8;
-  for (uint32_t i = 0; i < SVO_DEPTH; i++) {
-    CreateBuffer(context, sizeof(SvoNode) * size,
-                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                     VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
-                     VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                 VMA_MEMORY_USAGE_GPU_ONLY, levels[i]);
-    size *= 8;
-  }
+  VkExtent3D radiance_image_extent = {
+      static_cast<uint32_t>(SVO_EXTENT.width / VOXEL_SIZE),
+      static_cast<uint32_t>(SVO_EXTENT.height / VOXEL_SIZE),
+      static_cast<uint32_t>(SVO_EXTENT.depth / VOXEL_SIZE),
+  };
 
-  VkDeviceAddress level_addresses[SVO_DEPTH];
-  for (uint32_t i = 0; i < SVO_DEPTH; i++) {
-    level_addresses[i] = GetDeviceAddress(context, levels[i].buffer);
-  }
-
-  CreateBufferDataAsync(context, level_addresses,
-                        sizeof(VkDeviceAddress) * SVO_DEPTH,
-                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, svo_buffer);
+  CreateAllocatedImage(context, radiance_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+                       VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                       radiance_image, true);
 
   CreateBuffer(context, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                VMA_MEMORY_USAGE_AUTO, draw_count_buffer);
@@ -59,13 +50,50 @@ void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
       std::max(std::max(SVO_EXTENT.width, SVO_EXTENT.height), SVO_EXTENT.depth);
   svo_data.world_to_svo = 2.0 / float(max_length);
 
-  svo_data.voxel_size = max_length / std::pow(2.0, float(SVO_DEPTH));
+  svo_data.voxel_size = VOXEL_SIZE;
   svo_data.voxel_size_diag =
       std::sqrt(2.0 * (svo_data.voxel_size * svo_data.voxel_size));
+  svo_data.inv_voxel_size = 1 / VOXEL_SIZE;
 
-  svo_data.depth = SVO_DEPTH;
   CreateBufferDataAsync(context, &svo_data, sizeof(SvoData),
                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, data_buffer);
+
+  radiance_image_views.resize(CalculateMipLevels(radiance_image.extent));
+
+  for (uint32_t i = 0; i < radiance_image_views.size(); i++) {
+    VkImageViewCreateInfo image_view_ci =
+        vkinit::ImageViewCI(radiance_image.format, VK_IMAGE_ASPECT_COLOR_BIT,
+                            radiance_image.image, 1);
+    image_view_ci.subresourceRange.baseMipLevel = i;
+    image_view_ci.viewType = VK_IMAGE_VIEW_TYPE_3D;
+    vkCreateImageView(context.device, &image_view_ci, nullptr,
+                      &radiance_image_views[i]);
+  }
+
+  VkSamplerCreateInfo sampler_ci{};
+  sampler_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  sampler_ci.magFilter = VK_FILTER_LINEAR;
+  sampler_ci.minFilter = VK_FILTER_LINEAR;
+  sampler_ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  sampler_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_ci.maxLod = static_cast<float>(radiance_image_views.size());
+  
+
+  vkCreateSampler(context.device, &sampler_ci, nullptr, &radiance_sampler);
+
+  {
+    descriptor_builder.BindStorageImages(0, radiance_image_views);
+    descriptor_builder.BindUniformBuffer(1, data_buffer.buffer);
+    descriptor_builder.BindCombinedImage(2, radiance_image.image_view,
+                                         radiance_sampler);
+    descriptor_builder.Build(
+        context,
+        VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT |
+            VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_COMPUTE_BIT,
+        svo_descriptor_set, svo_descriptor_layout);
+  }
 
   {
     descriptor_builder.BindStorageBuffer(0, draw_buffer.buffer);
@@ -74,7 +102,7 @@ void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
                              draw_buffer_descriptor_set,
                              draw_buffer_descriptor_layout);
     ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(context, "VoxelGI/build_svo.comp.spv");
+    pipeline_builder.SetShader(context, "VoxelGI/voxelize.comp.spv");
     pipeline_builder.AddDescriptorSetLayout(draw_buffer_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);
@@ -84,20 +112,10 @@ void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
   }
 
   {
-    descriptor_builder.BindStorageBuffer(0, svo_buffer.buffer);
-    descriptor_builder.BindUniformBuffer(1, data_buffer.buffer);
-    descriptor_builder.Build(
-        context,
-        VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT |
-            VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_COMPUTE_BIT,
-        svo_descriptor_set, svo_descriptor_layout);
-  }
-
-  {
     GraphicsPipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShaders(context, "VoxelGI/build_svo.vert.spv",
-                                "VoxelGI/build_svo.frag.spv",
-                                "VoxelGI/build_svo.geom.spv");
+    pipeline_builder.SetShaders(context, "VoxelGI/voxelize.vert.spv",
+                                "VoxelGI/voxelize.frag.spv",
+                                "VoxelGI/voxelize.geom.spv");
     pipeline_builder.Default();
     pipeline_builder.SetNoDepthTest();
     pipeline_builder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
@@ -119,9 +137,9 @@ void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
 
   {
     GraphicsPipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShaders(context, "VoxelGI/voxel_debug.vert.spv",
-                                "VoxelGI/voxel_debug.frag.spv",
-                                "VoxelGI/voxel_debug.geom.spv");
+    pipeline_builder.SetShaders(context, "VoxelGI/image_debug.vert.spv",
+                                "VoxelGI/image_debug.frag.spv",
+                                "VoxelGI/image_debug.geom.spv");
     pipeline_builder.Default();
     pipeline_builder.AddColorAttachment(VK_FORMAT_R16G16B16A16_SFLOAT);
     pipeline_builder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST);
@@ -135,18 +153,11 @@ void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
   }
 
   {
-    GraphicsPipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShaders(context, "VoxelGI/voxel_color_debug.vert.spv",
-                                "VoxelGI/voxel_color_debug.frag.spv");
-    pipeline_builder.Default();
-    pipeline_builder.AddColorAttachment(VK_FORMAT_R16G16B16A16_SFLOAT);
+    ComputePipelineBuilder pipeline_builder{};
+    pipeline_builder.SetShader(context, "VoxelGI/mip_map_radiance.comp.spv");
     pipeline_builder.AddDescriptorSetLayout(svo_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(
-        scene_manager.instance_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(
-        scene_manager.object_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
-    pipeline_builder.Build(context, color_debug_pipeline);
+    pipeline_builder.AddPushConstantRange(sizeof(uint32_t));
+    pipeline_builder.Build(context, mip_pipeline);
   }
 }
 
@@ -181,18 +192,28 @@ void SceneSvo::Build(VkCommandBuffer cmd, SceneManager &scene_manager,
     return;
   }
 
-  for (uint32_t i = 0; i < SVO_DEPTH; i++) {
-    vkCmdFillBuffer(cmd, levels[i].buffer, 0, levels[i].info.size, 0);
-  }
+  TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+                  radiance_image.image);
 
-  VkViewport viewport = vkinit::Viewport(SVO_EXTENT);
+  VkClearColorValue clear_color_value{};
+  clear_color_value = {0.0f, 0.0f, 0.0f, 0.0f};
+
+  VkImageSubresourceRange range{};
+  range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  range.layerCount = VK_REMAINING_ARRAY_LAYERS;
+  range.levelCount = VK_REMAINING_MIP_LEVELS;
+
+  vkCmdClearColorImage(cmd, radiance_image.image, VK_IMAGE_LAYOUT_GENERAL,
+                       &clear_color_value, 1, &range);
+
+  VkViewport viewport = vkinit::Viewport(radiance_image.extent);
   vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-  VkRect2D scissor = vkinit::Scissor(SVO_EXTENT);
+  VkRect2D scissor = vkinit::Scissor(radiance_image.extent);
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
   VkRenderingInfo rendering_info =
-      vkinit::RenderingInfo(SVO_EXTENT, {}, nullptr);
+      vkinit::RenderingInfo(radiance_image.extent, {}, nullptr);
   vkCmdBeginRendering(cmd, &rendering_info);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, build_pipeline.obj);
@@ -219,13 +240,56 @@ void SceneSvo::Build(VkCommandBuffer cmd, SceneManager &scene_manager,
       static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
 
   vkCmdEndRendering(cmd);
+
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, mip_pipeline.obj);
+
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                          mip_pipeline.layout, 0, 1, &svo_descriptor_set, 0,
+                          nullptr);
+
+  VkImageMemoryBarrier barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.image = radiance_image.image;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  barrier.subresourceRange.layerCount = 1;
+  barrier.subresourceRange.levelCount = 1;
+
+  float imageSize = radiance_image.extent.depth;
+  const float invLocalSize = 1.0 / 8.0;
+
+  for (uint32_t i = 1; i < radiance_image_views.size(); i++) {
+    barrier.subresourceRange.baseMipLevel = i - 1;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &barrier);
+
+    vkCmdPushConstants(cmd, mip_pipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                       sizeof(uint32_t), &i);
+
+    uint32_t dispatchSize = std::ceil(imageSize * invLocalSize);
+
+    vkCmdDispatch(cmd, dispatchSize, dispatchSize, dispatchSize);
+    imageSize *= 0.5;
+  }
 }
 
 void SceneSvo::DrawDebugView(VkCommandBuffer cmd, Camera &camera,
                              AllocatedImage &draw_image,
                              AllocatedImage &depth_image,
                              VkImageLayout new_layout) {
-  const uint32_t level = SVO_DEPTH;
+  const Pipeline pipeline = debug_pipeline;
+  const uint32_t mip_level = 0;
+  const uint32_t point_count = std::pow(
+      radiance_image.extent.depth / float(VOXEL_SIZE * std::pow(2, mip_level)),
+      3);
+
   TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, draw_image.image);
 
@@ -256,88 +320,21 @@ void SceneSvo::DrawDebugView(VkCommandBuffer cmd, Camera &camera,
 
   vkCmdBeginRendering(cmd, &rendering_info);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, debug_pipeline.obj);
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.obj);
 
   std::array<VkDescriptorSet, 2> ds = {
       svo_descriptor_set,
       camera.descriptor_set,
   };
 
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          debug_pipeline.layout, 0, ds.size(), ds.data(), 0,
-                          nullptr);
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout,
+                          0, ds.size(), ds.data(), 0, nullptr);
 
-  vkCmdPushConstants(cmd, debug_pipeline.layout,
-                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT,
-                     0, sizeof(uint32_t), &level);
+  vkCmdPushConstants(cmd, pipeline.layout,
+                     VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_VERTEX_BIT,
+                     0, sizeof(uint32_t), &mip_level);
 
-  vkCmdDraw(cmd, std::pow(std::pow(2, level) + 1, 3), 1, 0, 0);
-
-  vkCmdEndRendering(cmd);
-
-  TransitionImage(cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, new_layout,
-                  draw_image.image);
-}
-
-void SceneSvo::DrawColorDebugView(VkCommandBuffer cmd,
-                                  SceneManager &scene_manager, Camera &camera,
-                                  AllocatedImage &draw_image,
-                                  AllocatedImage &depth_image,
-                                  VkImageLayout new_layout) {
-  uint32_t draw_count;
-  memcpy(&draw_count, draw_count_buffer.info.pMappedData, sizeof(uint32_t));
-  if (draw_count == 0) {
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED, new_layout,
-                    draw_image.image);
-    return;
-  }
-  TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
-                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, draw_image.image);
-
-  VkViewport viewport = vkinit::Viewport(draw_image.extent);
-  vkCmdSetViewport(cmd, 0, 1, &viewport);
-  VkRect2D scissor = vkinit::Scissor(draw_image.extent);
-  vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-  VkClearColorValue clear_color_value{};
-  clear_color_value = {0.0f, 0.0f, 0.0f, 0.0f};
-
-  VkClearValue clear_value{};
-  clear_value.color = clear_color_value;
-
-  VkRenderingAttachmentInfo color_att =
-      vkinit::AttachmentInfo(draw_image.image_view, nullptr, &clear_value,
-                             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
-  std::array<VkRenderingAttachmentInfo, 1> attachments = {
-      color_att,
-  };
-
-  VkRenderingAttachmentInfo depth_att = vkinit::DepthAttachmentInfo(
-      depth_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-
-  VkRenderingInfo rendering_info =
-      vkinit::RenderingInfo(draw_image.extent, attachments, &depth_att);
-
-  vkCmdBeginRendering(cmd, &rendering_info);
-
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    color_debug_pipeline.obj);
-
-  std::array<VkDescriptorSet, 4> ds = {
-      svo_descriptor_set,
-      scene_manager.instance_descriptor_set,
-      scene_manager.object_descriptor_set,
-      camera.descriptor_set,
-  };
-
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          color_debug_pipeline.layout, 0, ds.size(), ds.data(),
-                          0, nullptr);
-
-  vkCmdDrawIndexedIndirect(
-      cmd, draw_buffer.buffer, 0, draw_count,
-      static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
+  vkCmdDraw(cmd, point_count, 1, 0, 0);
 
   vkCmdEndRendering(cmd);
 
@@ -346,21 +343,23 @@ void SceneSvo::DrawColorDebugView(VkCommandBuffer cmd,
 }
 
 void SceneSvo::Destroy(VulkanContext &context) {
-  for (uint32_t i = 0; i < SVO_DEPTH; i++) {
-    DestroyBuffer(context, levels[i]);
+  for (auto &image_view : radiance_image_views) {
+    vkDestroyImageView(context.device, image_view, nullptr);
   }
+  DestroyAllocatedImage(context, radiance_image);
 
   DestroyBuffer(context, draw_buffer);
   DestroyBuffer(context, draw_count_buffer);
   DestroyBuffer(context, data_buffer);
-  DestroyBuffer(context, svo_buffer);
 
   vkDestroyDescriptorSetLayout(context.device, draw_buffer_descriptor_layout,
                                nullptr);
   vkDestroyDescriptorSetLayout(context.device, svo_descriptor_layout, nullptr);
 
+  DestroyImageSampler(context, radiance_sampler);
+
   DestroyPipeline(context, build_draw_buffer_pipeline);
   DestroyPipeline(context, build_pipeline);
   DestroyPipeline(context, debug_pipeline);
-  DestroyPipeline(context, color_debug_pipeline);
+  DestroyPipeline(context, mip_pipeline);
 }

@@ -150,6 +150,10 @@ void Engine::CreateRenderGraph() {
                                      VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                                      depth_image);
 
+    main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
+                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                     scene_svo.radiance_image);
+
     builder.AddPass(2, main_pass_dep.dependency, [&](VkCommandBuffer cmd) {
       VkViewport viewport = vkinit::Viewport(main_image.extent);
       vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -300,7 +304,7 @@ void Engine::Init() {
                    camera, descriptor_builder);
 
   light_manager.AddDirectionalLight(context, glm::vec3(1.0),
-                                    glm::vec3(-1.0, -4.0, -1.0), 6.0,
+                                    glm::vec3(-1.0, -4.0, -2.0), 4.0,
                                     immediate_submit);
 
   VkExtent3D draw_image_extent = {

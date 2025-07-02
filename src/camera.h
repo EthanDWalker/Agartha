@@ -28,7 +28,6 @@ struct CameraBuffer {
 };
 
 struct Camera {
-public:
   CameraBuffer buffer_data;
   AllocatedBuffer buffer;
 

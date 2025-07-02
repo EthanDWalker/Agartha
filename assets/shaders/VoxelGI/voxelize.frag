@@ -5,9 +5,7 @@
 #extension GL_EXT_shader_atomic_float2 : require
 #include "../common.glsl"
 
-layout(set = 0, binding = 0) buffer SvoBuffer {
-    SvoNodeBuffer svo[];
-};
+layout(set = 0, binding = 0, rgba16) uniform image3D radianceImageMips[];
 
 layout(set = 0, binding = 1) uniform SvoDataUbo {
     SvoData svoData;
@@ -130,32 +128,16 @@ void main() {
 
     vec3 color = Lo;
 
-    color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0 / 2.2));
-
-    vec3 min = -svoData.leftBound;
-    vec3 max = svoData.leftBound;
+    vec3 mini = -svoData.leftBound;
+    vec3 maxi = svoData.leftBound;
     vec3 extent = svoData.leftBound * 2.0;
 
-    if (iWorldPos.x <= min.x || iWorldPos.x >= max.x ||
-            iWorldPos.y <= min.y || iWorldPos.y >= max.y ||
-            iWorldPos.z <= min.z || iWorldPos.z >= max.z) discard;
+    if (iWorldPos.x <= mini.x || iWorldPos.x >= maxi.x ||
+            iWorldPos.y <= mini.y || iWorldPos.y >= maxi.y ||
+            iWorldPos.z <= mini.z || iWorldPos.z >= maxi.z) discard;
 
-    vec3 svoPos = iWorldPos + max;
+    vec3 svoPos = iWorldPos + maxi;
 
-    for (uint i = 0; i < svoData.depth; ++i) {
-        uint voxelsPerDimension = 1u << (i + 1);
-
-        vec3 normalizedPos = svoPos / extent.x;
-        vec3 levelPosition = floor(normalizedPos * float(voxelsPerDimension));
-
-        uint levelIndex = uint(levelPosition.x +
-                    levelPosition.y * voxelsPerDimension +
-                    levelPosition.z * voxelsPerDimension * voxelsPerDimension);
-
-        uint packedColor = packUnorm4x8(vec4(color, 0.0));
-        packedColor |= 1;
-        atomicMax(svo[i].nodes[levelIndex].color, packedColor);
-        atomicMax(svo[i].nodes[levelIndex].normal, packUnorm2x16(OctEncodeNormal(N)));
-    }
+    vec3 currentColor = imageLoad(radianceImageMips[0], ivec3(svoPos * svoData.invVoxelSize)).rgb;
+    imageStore(radianceImageMips[0], ivec3(svoPos * svoData.invVoxelSize), vec4(max(color, currentColor), 1.0));
 }
