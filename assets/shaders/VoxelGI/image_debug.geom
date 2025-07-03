@@ -57,12 +57,12 @@ void EmitFace(vec3 center, vec3 halfSize, int axis, float sign, vec3 color) {
 void main() {
     vec3 center = iWorldPos[0];
     vec4 color = imageLoad(radianceImageMips[mipLevel],
-            ivec3(((center + svoData.leftBound) * svoData.invVoxelSize) / float(mipLevel + 1.0)));
+            ivec3((center + svoData.leftBound) / float(svoData.voxelSize * pow(2, mipLevel))));
     if (color.a == 0.0) {
         return;
     }
 
-    float cubesPerAxis = imageSize(radianceImageMips[mipLevel]).x / float(svoData.voxelSize * pow(2, mipLevel));
+    float cubesPerAxis = imageSize(radianceImageMips[mipLevel]).x;
     vec3 halfSize = svoData.leftBound / cubesPerAxis;
 
     for (int axis = 0; axis < 3; ++axis) {

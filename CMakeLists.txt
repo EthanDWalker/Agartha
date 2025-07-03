@@ -37,12 +37,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(fastgltf)
 
+FetchContent_Declare(
+    volk
+    GIT_REPOSITORY https://github.com/zeux/volk.git
+    GIT_TAG 0b17a763ba5643e32da1b2152f8140461b3b7345
+)
+FetchContent_MakeAvailable(volk)
+
 find_package(Vulkan REQUIRED)
 
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG f5befd2d29e66809cd1110a152e375a7f1981f06
+    GIT_TAG 85b2fe8486190fa9326565a2fb5fccb6caea4396
 )
 FetchContent_MakeAvailable(imgui)
 
@@ -60,7 +67,7 @@ target_include_directories(imgui PUBLIC
     ${Vulkan_INCLUDE_DIR}
 )
 
-target_link_libraries(imgui PUBLIC glfw ${Vulkan_LIBRARY})
+target_link_libraries(imgui PUBLIC glfw ${Vulkan_LIBRARY} volk::volk)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.cpp)
 
@@ -73,7 +80,8 @@ target_include_directories(engine PUBLIC
     imgui
 )
 
-target_link_libraries(engine PRIVATE imgui ${Vulkan_LIBRARY} fastgltf::fastgltf glfw fmt::fmt vk-bootstrap::vk-bootstrap)
+target_link_libraries(engine PRIVATE imgui 
+                      ${Vulkan_LIBRARY} volk::volk fastgltf::fastgltf glfw fmt::fmt vk-bootstrap::vk-bootstrap)
 
 file(GLOB_RECURSE SHADER_SRC
     ${CMAKE_SOURCE_DIR}/assets/shaders/*.frag 

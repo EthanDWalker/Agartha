@@ -1,7 +1,7 @@
 #pragma once
 #include "Backend/context.h"
 #include "Backend/immediate_submit.h"
-#include <Volk/volk.h>
+#include <volk.h>
 
 struct AllocatedBuffer {
   VmaAllocationInfo info;

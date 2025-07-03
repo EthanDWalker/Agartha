@@ -8,34 +8,56 @@ layout(push_constant) uniform PushConstants {
     uint mipLevel; // starts at 1
 };
 
+const float w1_16 = 1.0 / 22.0;
+const float w1_8  = 1.0 / 12.0;
+const float w1_4  = 1.0 / 6.0;
+const float WEIGHTS[3][3][3] = {
+    {
+        {w1_16, w1_16, w1_16},
+        {w1_16, w1_8, w1_16},
+        {w1_16, w1_16, w1_16}
+    },
+    {
+        {w1_16, w1_8, w1_16},
+        {w1_8,  w1_4, w1_8},
+        {w1_16, w1_8, w1_16}
+    },
+    {
+        {w1_16, w1_16, w1_16},
+        {w1_16, w1_8, w1_16},
+        {w1_16, w1_16, w1_16}
+    }
+};
+
 void main() {
     uvec3 coord = gl_GlobalInvocationID.xyz;
     uvec3 mipSize = uvec3(imageSize(radianceImageMips[mipLevel]));
 
     if (coord.x >= mipSize.x || coord.y >= mipSize.y || coord.z >= mipSize.z) return;
 
-    const uint pixelsPerTexel = 8;
-    const float invPixelsPerTexel = 1 / 8.0;
-
-    vec4 texelColors[pixelsPerTexel];
-    for (uint i = 0; i < 2; ++i) {
-        for (uint j = 0; j < 2; ++j) {
-            for (uint k = 0; k < 2; ++k) {
-                uvec3 localCoord = 2 * coord + uvec3(i, j, k);
-                texelColors[(i) + (j << 1) + (k << 2)] = imageLoad(radianceImageMips[mipLevel - 1], ivec3(localCoord));
+    vec4 texelColors[3][3][3];
+    for (int i = -1; i <= 1; ++i) {
+        for (int j = -1; j <= 1; ++j) {
+            for (int k = -1; k <= 1; ++k) {
+                uvec3 localCoord = 2 * coord + ivec3(i, j, k);
+                texelColors[i + 1][j + 1][k + 1] = imageLoad(radianceImageMips[mipLevel - 1], ivec3(localCoord));
             }
         }
     }
 
-    vec3 color = vec3(0.0);
-    bool visible = false;
+    vec4 color = vec4(0.0);
 
-    for (uint i = 0; i < pixelsPerTexel; ++i) {
-        color = max(color, texelColors[i].rgb);
-        visible = texelColors[i].a != 0.0 ? true : visible;
+    const uint BEST_SAMPLE_COUNT = 5;
+    vec4 bestPixels[BEST_SAMPLE_COUNT];
+
+    for (int i = -1; i <= 1; ++i) {
+        for (int j = -1; j <= 1; ++j) {
+            for (int k = -1; k <= 1; ++k) {
+                vec4 texel = texelColors[i + 1][j + 1][k + 1];
+                color += texel * WEIGHTS[i + 1][j + 1][k + 1];
+            }
+        }
     }
 
-    if (visible) {
-        imageStore(radianceImageMips[mipLevel], ivec3(coord), vec4(color, 1.0));
-    }
+    imageStore(radianceImageMips[mipLevel], ivec3(coord), color);
 }

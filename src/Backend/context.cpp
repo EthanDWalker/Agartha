@@ -3,7 +3,7 @@
 #include "Backend/util.h"
 #include <GLFW/glfw3.h>
 #include <VkBootstrap.h>
-#include <Volk/volk.h>
+#include <volk.h>
 #include <cassert>
 
 void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {

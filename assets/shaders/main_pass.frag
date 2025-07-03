@@ -271,7 +271,7 @@ float ShadowCalculation(vec3 L, vec3 N, DirectionalLight directionalLight) {
 
 vec3 SafeNormalize(vec3 v) {
     v = normalize(v);
-    return any(isinf(v)) || any(isnan(v)) ? vec3(0) : v;
+    return any(isinf(v)) || any(isnan(v)) ? vec3(0.0, 1.0, 0.0) : v;
 }
 
 vec3 CalculateIndirectLight(vec3 N) {
@@ -286,49 +286,46 @@ vec3 CalculateIndirectLight(vec3 N) {
             0.28, 0.18, 0.18, 0.18, 0.18
         );
 
+    const float coneHalfAngle = radians(25.0);
+
     const float invSqrt2 = 1.0 / sqrt(2.0);
     const vec3 normalOffset = N * (1.0 + 4.0 * invSqrt2) * svoData.voxelSize;
 
-    const vec3 t0 = cross(vec3(0.0, 1.0, 0.0), N);
-    const vec3 t1 = cross(vec3(0.0, 0.0, 1.0), N);
-    vec3 tangent = normalize(length(t0) < length(t1) ? t1 : t0);
-    const vec3 bitangent = normalize(cross(tangent, N));
-    tangent = SafeNormalize(cross(bitangent, N));
-    const mat3 TBN = mat3(tangent, bitangent, N);
+    const mat3 TBN = GetTBN();
 
     vec3 mini = -svoData.leftBound;
     vec3 maxi = svoData.leftBound;
     vec3 extent = svoData.leftBound * 2.0;
+    vec3 invExtent = 1.0 / extent;
 
-    const vec3 coneOrigin = iWorldPos + maxi + normalOffset + -0.01 * N;
+    const vec3 coneOrigin = iWorldPos + maxi + normalOffset;
 
     vec3 indirectDiffuse = vec3(0.0);
     for (uint i = 0; i < 5; ++i) {
-        vec3 coneDirection = normalize(TBN * coneDirections[i]);
+        const vec3 coneDirection = normalize(TBN * coneDirections[i]);
 
-        vec4 indirectColor = vec4(0.0);
-        float marchedDistance = 0.1953125;
+        vec3 indirectColor = vec3(0.0);
+        float occlusion = 0.0;
+
+        float marchedDistance = 0.2;
         const float MAX_DIST = 100.0;
 
-        while (indirectColor.a < 1.0 && marchedDistance < MAX_DIST) {
+        while (occlusion < 1.0 && marchedDistance < MAX_DIST) {
             vec3 svoPos = coneOrigin + marchedDistance * coneDirection;
 
             if (any(lessThanEqual(svoPos, vec3(0))) || any(greaterThanEqual(svoPos, extent))) {
                 break;
             }
 
-            float l = (1 + 0.325 * marchedDistance * svoData.invVoxelSize);
-            float level = log2(l);
-            float ll = (level + 1) * (level + 1);
+            marchedDistance = marchedDistance + 2.0 * tan(coneHalfAngle) * marchedDistance;
+            float level = log2(marchedDistance);
 
-            vec4 voxel = textureLod(radianceImage, svoPos / extent, min(4.7, level));
-
-            indirectColor += 0.075 * ll * voxel * pow(1 - voxel.a, 2);
-
-            marchedDistance += ll * svoData.voxelSize * 2.0;
+            vec4 voxel = textureLod(radianceImage, svoPos * invExtent, level);
+            indirectColor = indirectColor + voxel.rgb * (1.0 - occlusion);
+            occlusion = occlusion + (1.0 - occlusion) * voxel.a;
         }
 
-        indirectDiffuse += coneWeights[i] * pow(indirectColor.rgb * 2.0, vec3(1.5));
+        indirectDiffuse += coneWeights[i] * indirectColor.rgb;
     }
 
     return indirectDiffuse;

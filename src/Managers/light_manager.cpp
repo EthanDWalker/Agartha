@@ -3,6 +3,7 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/immediate_submit.h"
+#include <cstddef>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
 
@@ -111,6 +112,20 @@ uint32_t LightManager::AddDirectionalLight(VulkanContext &context,
   matrix_index += CASCADES.size();
 
   return directional_light_index++;
+}
+
+void LightManager::UpdateDirectionalLight(VulkanContext &context,
+                                          glm::vec3 direction, uint32_t index,
+                                          ImmediateSubmit &immediate_submit) {
+  direction = glm::normalize(direction);
+  assert(index <= directional_lights.size() &&
+         "attempt to update out of bounds directional light");
+  directional_lights[index] = direction;
+  uint32_t direction_offset = offsetof(DirectionalLight, direction);
+  UpdateBuffer(context, immediate_submit, &direction,
+               sizeof(direction),
+               (index * sizeof(DirectionalLight)) + direction_offset,
+               directional_light_buffer);
 }
 
 void LightManager::UpdateMatrices(VulkanContext &context,

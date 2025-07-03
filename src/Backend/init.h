@@ -1,5 +1,5 @@
 #pragma once
-#include <Volk/volk.h>
+#include <volk.h>
 #include <span>
 
 namespace vkinit {

@@ -14,12 +14,12 @@
 #include "render_graph.h"
 #include "timer.h"
 #include <GLFW/glfw3.h>
-#include <Volk/volk.h>
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <fmt/base.h>
 #include <vector>
+#include <volk.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
@@ -236,17 +236,54 @@ void Engine::CreateRenderGraph() {
 
     pp_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                                    VK_IMAGE_LAYOUT_GENERAL, depth_image);
+    pp_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
+                                   VK_IMAGE_LAYOUT_GENERAL, ao_image);
 
-    builder.AddPass(3, pp_pass_dep.dependency, [&](VkCommandBuffer cmd) {});
+    builder.AddPass(3, pp_pass_dep.dependency, [&](VkCommandBuffer cmd) {
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                        ambient_occlusion_pipeline.obj);
+
+      std::array<VkDescriptorSet, 2> ds = {gbuffer_descriptor_set,
+                                           camera.descriptor_set};
+
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              ambient_occlusion_pipeline.layout, 0, ds.size(),
+                              ds.data(), 0, nullptr);
+
+      vkCmdDispatch(cmd, std::ceil(ao_image.extent.width / 16.0f),
+                    std::ceil(ao_image.extent.height / 16.0f), 1);
+    });
   }
 
   {
-    builder.AddPass(4, {}, [&](VkCommandBuffer cmd) {
+    DependencyBuilder ao_upscale_dep{};
+    ao_upscale_dep.AddImageTransition(VK_IMAGE_LAYOUT_GENERAL,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                      ao_image);
+    builder.AddPass(4, ao_upscale_dep.dependency, [&](VkCommandBuffer cmd) {
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                        upscale_ao_pipeline.obj);
+
+      std::array<VkDescriptorSet, 1> ds = {
+          gbuffer_descriptor_set,
+      };
+
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              upscale_ao_pipeline.layout, 0, ds.size(),
+                              ds.data(), 0, nullptr);
+
+      vkCmdDispatch(cmd, std::ceil(ao_image.extent.width / 16.0f),
+                    std::ceil(ao_image.extent.height / 16.0f), 1);
+    });
+  }
+
+  {
+    builder.AddPass(5, {}, [&](VkCommandBuffer cmd) {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                         tone_map_pipeline.obj);
 
       std::array<VkDescriptorSet, 1> ds = {
-          tone_map_descriptor_set,
+          gbuffer_descriptor_set,
       };
 
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -257,11 +294,11 @@ void Engine::CreateRenderGraph() {
                     std::ceil(main_image.extent.height / 16.0f), 1);
     });
 
-    builder.AddPass(5, {}, [&](VkCommandBuffer cmd) {
+    builder.AddPass(4, {}, [&](VkCommandBuffer cmd) {
       if (!voxel_gi_debug)
         return;
       scene_svo.DrawDebugView(cmd, camera, main_image, depth_image,
-                              VK_IMAGE_LAYOUT_GENERAL);
+                              VK_IMAGE_LAYOUT_GENERAL, voxel_debug_mip_level);
     });
   }
 
@@ -304,7 +341,7 @@ void Engine::Init() {
                    camera, descriptor_builder);
 
   light_manager.AddDirectionalLight(context, glm::vec3(1.0),
-                                    glm::vec3(-1.0, -4.0, -2.0), 4.0,
+                                    glm::vec3(-1.0, -4.0, -1.0), 6.0,
                                     immediate_submit);
 
   VkExtent3D draw_image_extent = {
@@ -364,15 +401,6 @@ void Engine::Init() {
                shadow_visible_instance_buffer);
 
   CreateImageSampler(context, sampler);
-
-  {
-    descriptor_builder.BindStorageImage(0, main_image.image_view);
-    descriptor_builder.BindStorageImage(1, mr_normal_image.image_view);
-    descriptor_builder.BindStorageImage(2, depth_image.image_view);
-    descriptor_builder.BindStorageImage(3, ao_image.image_view);
-    descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
-                             gbuffer_descriptor_set, gbuffer_descriptor_layout);
-  }
 
   {
     descriptor_builder.BindStorageBuffer(0, visible_instance_buffer.buffer);
@@ -446,25 +474,6 @@ void Engine::Init() {
   }
 
   {
-    descriptor_builder.BindStorageImage(0, main_image.image_view);
-    descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
-                             tone_map_descriptor_set,
-                             tone_map_descriptor_layout);
-    ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(context, "tone_map.comp.spv");
-    pipeline_builder.AddDescriptorSetLayout(tone_map_descriptor_layout);
-    pipeline_builder.Build(context, tone_map_pipeline);
-  }
-
-  {
-    ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(context, "ambient_occlusion.comp.spv");
-    pipeline_builder.AddDescriptorSetLayout(gbuffer_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
-    pipeline_builder.Build(context, ambient_occlusion_pipeline);
-  }
-
-  {
     descriptor_builder.BindStorageBuffer(0, shadow_draw_indirect_buffer.buffer);
     descriptor_builder.BindStorageBuffer(
         1, shadow_culled_draw_count_buffer.buffer);
@@ -484,14 +493,34 @@ void Engine::Init() {
   }
 
   {
-    descriptor_builder.BindCombinedImage(0, ao_image.image_view, sampler);
-    descriptor_builder.BindStorageImage(1, main_image.image_view);
+    descriptor_builder.BindStorageImage(0, main_image.image_view);
+    descriptor_builder.BindStorageImage(1, mr_normal_image.image_view);
+    descriptor_builder.BindStorageImage(2, depth_image.image_view);
+    descriptor_builder.BindStorageImage(3, ao_image.image_view);
+    descriptor_builder.BindCombinedImage(4, ao_image.image_view, sampler);
     descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
-                             upscale_ao_descriptor_set,
-                             upscale_ao_descriptor_layout);
+                             gbuffer_descriptor_set, gbuffer_descriptor_layout);
+  }
+
+  {
+    ComputePipelineBuilder pipeline_builder{};
+    pipeline_builder.SetShader(context, "tone_map.comp.spv");
+    pipeline_builder.AddDescriptorSetLayout(gbuffer_descriptor_layout);
+    pipeline_builder.Build(context, tone_map_pipeline);
+  }
+
+  {
+    ComputePipelineBuilder pipeline_builder{};
+    pipeline_builder.SetShader(context, "ambient_occlusion.comp.spv");
+    pipeline_builder.AddDescriptorSetLayout(gbuffer_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
+    pipeline_builder.Build(context, ambient_occlusion_pipeline);
+  }
+
+  {
     ComputePipelineBuilder pipeline_builder{};
     pipeline_builder.SetShader(context, "upscale_ambient_occlusion.comp.spv");
-    pipeline_builder.AddDescriptorSetLayout(upscale_ao_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(gbuffer_descriptor_layout);
     pipeline_builder.Build(context, upscale_ao_pipeline);
   }
 
@@ -546,8 +575,17 @@ void Engine::Init() {
   CreateRenderGraph();
 }
 
+const std::array<glm::vec3, 4> light_directions = {
+    glm::vec3(-1.0f, -4.0f, -1.0f),
+    glm::vec3(1.0f, -4.0f, -1.0f),
+    glm::vec3(-1.0f, -4.0f, 1.0f),
+    glm::vec3(1.0f, -4.0f, 1.0f),
+};
+
 void Engine::Run() {
   bool should_close = false;
+  uint32_t selected_light_direction = 0;
+  bool changing_light_direction = false;
 
   float delta_time;
   while (!glfwWindowShouldClose(window)) {
@@ -556,6 +594,20 @@ void Engine::Run() {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
       glfwSetWindowShouldClose(window, true);
       should_close = true;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+      if (!changing_light_direction) {
+        selected_light_direction++;
+        changing_light_direction = true;
+        light_manager.UpdateDirectionalLight(
+            context,
+            light_directions[selected_light_direction %
+                             light_directions.size()],
+            0, immediate_submit);
+      }
+    } else {
+      changing_light_direction = false;
     }
 
     camera.Update(context, immediate_submit, window, delta_time);
@@ -569,6 +621,12 @@ void Engine::Run() {
       voxel_gi_debug = true;
     } else {
       voxel_gi_debug = false;
+    }
+
+    for (uint32_t i = 0; i < scene_svo.radiance_image_views.size(); i++) {
+      if (glfwGetKey(window, GLFW_KEY_0 + i)) {
+        voxel_debug_mip_level = i;
+      }
     }
 
     render_graph.Render(context);
@@ -602,10 +660,6 @@ void Engine::Destroy() {
   vkDestroyDescriptorSetLayout(context.device, shadow_cull_descriptor_layout,
                                nullptr);
   vkDestroyDescriptorSetLayout(context.device, ray_tracing_descriptor_layout,
-                               nullptr);
-  vkDestroyDescriptorSetLayout(context.device, tone_map_descriptor_layout,
-                               nullptr);
-  vkDestroyDescriptorSetLayout(context.device, upscale_ao_descriptor_layout,
                                nullptr);
   vkDestroyDescriptorSetLayout(context.device, gbuffer_descriptor_layout,
                                nullptr);

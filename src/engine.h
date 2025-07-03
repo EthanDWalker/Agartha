@@ -63,9 +63,6 @@ struct Engine {
   VkDescriptorSet main_descriptor_set;
   VkDescriptorSetLayout main_descriptor_layout;
 
-  VkDescriptorSet tone_map_descriptor_set;
-  VkDescriptorSetLayout tone_map_descriptor_layout;
-
   VkDescriptorSet gbuffer_descriptor_set;
   VkDescriptorSetLayout gbuffer_descriptor_layout;
 
@@ -81,12 +78,11 @@ struct Engine {
   VkDescriptorSet shadow_cull_descriptor_set;
   VkDescriptorSetLayout shadow_cull_descriptor_layout;
 
-  VkDescriptorSet upscale_ao_descriptor_set;
-  VkDescriptorSetLayout upscale_ao_descriptor_layout;
-
   VkSampler sampler;
 
   GLFWwindow *window;
+
+  uint32_t voxel_debug_mip_level;
 
   bool voxel_gi_debug;
 

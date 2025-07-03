@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <Volk/volk.h>
+#include <volk.h>
 
 constexpr static uint32_t GetFormatComponentSize(VkFormat format) {
   switch (format) {

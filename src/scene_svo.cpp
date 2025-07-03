@@ -31,7 +31,8 @@ void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
       static_cast<uint32_t>(SVO_EXTENT.depth / VOXEL_SIZE),
   };
 
-  CreateAllocatedImage(context, radiance_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+  CreateAllocatedImage(context, radiance_image_extent,
+                       VK_FORMAT_R16G16B16A16_SFLOAT,
                        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                        radiance_image, true);
 
@@ -75,11 +76,7 @@ void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
   sampler_ci.magFilter = VK_FILTER_LINEAR;
   sampler_ci.minFilter = VK_FILTER_LINEAR;
   sampler_ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-  sampler_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  sampler_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  sampler_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   sampler_ci.maxLod = static_cast<float>(radiance_image_views.size());
-  
 
   vkCreateSampler(context.device, &sampler_ci, nullptr, &radiance_sampler);
 
@@ -283,9 +280,8 @@ void SceneSvo::Build(VkCommandBuffer cmd, SceneManager &scene_manager,
 void SceneSvo::DrawDebugView(VkCommandBuffer cmd, Camera &camera,
                              AllocatedImage &draw_image,
                              AllocatedImage &depth_image,
-                             VkImageLayout new_layout) {
+                             VkImageLayout new_layout, uint32_t mip_level) {
   const Pipeline pipeline = debug_pipeline;
-  const uint32_t mip_level = 0;
   const uint32_t point_count = std::pow(
       radiance_image.extent.depth / float(VOXEL_SIZE * std::pow(2, mip_level)),
       3);

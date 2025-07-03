@@ -14,7 +14,7 @@ const uint32_t MAX_LIGHT_MATRICES = MAX_DIRECTIONAL_LIGHTS * CASCADES.size();
 
 const float DIRECTIONAL_LIGHT_DISTANCE = 1000.0f;
 const float DIRECTIONAL_LIGHT_FAR_PLANE = 1100.0f;
-const float DIRECTIONAL_LIGHT_NEAR_PLANE = 300.1f;
+const float DIRECTIONAL_LIGHT_NEAR_PLANE = 500.0f;
 
 const VkExtent3D SHADOW_IMAGE_EXTENT = {1024, 1024, 1};
 
@@ -61,6 +61,10 @@ struct LightManager {
   uint32_t AddPointLight(VulkanContext &context, glm::vec3 color,
                          glm::vec3 position, float intensity,
                          ImmediateSubmit &immediate_submit);
+
+  void UpdateDirectionalLight(VulkanContext &context, glm::vec3 direction,
+                              uint32_t index,
+                              ImmediateSubmit &immediate_submit);
 
   void UpdateMatrices(VulkanContext &context, ImmediateSubmit &immediate_submit,
                       glm::vec3 camera_position);

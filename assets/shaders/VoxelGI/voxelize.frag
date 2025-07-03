@@ -132,11 +132,11 @@ void main() {
     vec3 maxi = svoData.leftBound;
     vec3 extent = svoData.leftBound * 2.0;
 
-    if (iWorldPos.x <= mini.x || iWorldPos.x >= maxi.x ||
-            iWorldPos.y <= mini.y || iWorldPos.y >= maxi.y ||
-            iWorldPos.z <= mini.z || iWorldPos.z >= maxi.z) discard;
-
     vec3 svoPos = iWorldPos + maxi;
+
+    if (any(lessThanEqual(svoPos, vec3(0))) || any(greaterThanEqual(svoPos, extent))) {
+        discard;
+    }
 
     vec3 currentColor = imageLoad(radianceImageMips[0], ivec3(svoPos * svoData.invVoxelSize)).rgb;
     imageStore(radianceImageMips[0], ivec3(svoPos * svoData.invVoxelSize), vec4(max(color, currentColor), 1.0));

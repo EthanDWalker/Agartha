@@ -3,7 +3,7 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/pipeline.h"
-#include <Volk/volk.h>
+#include <volk.h>
 #include <span>
 
 struct ShaderBindingTable {

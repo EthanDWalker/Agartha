@@ -33,6 +33,7 @@ void GenerateMipmaps(VkCommandBuffer cmd, AllocatedImage &image) {
 
   int32_t mip_width = image.extent.width;
   int32_t mip_height = image.extent.height;
+  int32_t mip_depth = image.extent.depth;
 
   for (uint32_t i = 1; i < mip_levels; i++) {
     barrier.subresourceRange.baseMipLevel = i - 1;
@@ -47,7 +48,7 @@ void GenerateMipmaps(VkCommandBuffer cmd, AllocatedImage &image) {
 
     VkImageBlit blit{};
     blit.srcOffsets[0] = {0, 0, 0};
-    blit.srcOffsets[1] = {mip_width, mip_height, 1};
+    blit.srcOffsets[1] = {mip_width, mip_height, mip_depth};
     blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     blit.srcSubresource.mipLevel = i - 1;
     blit.srcSubresource.baseArrayLayer = 0;
@@ -55,7 +56,8 @@ void GenerateMipmaps(VkCommandBuffer cmd, AllocatedImage &image) {
 
     blit.dstOffsets[0] = {0, 0, 0};
     blit.dstOffsets[1] = {mip_width > 1 ? mip_width / 2 : 1,
-                          mip_height > 1 ? mip_height / 2 : 1, 1};
+                          mip_height > 1 ? mip_height / 2 : 1,
+                          mip_depth > 1 ? mip_depth / 2 : 1};
     blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     blit.dstSubresource.mipLevel = i;
     blit.dstSubresource.baseArrayLayer = 0;
@@ -76,6 +78,7 @@ void GenerateMipmaps(VkCommandBuffer cmd, AllocatedImage &image) {
 
     mip_width = mip_width > 1 ? mip_width / 2 : 1;
     mip_height = mip_height > 1 ? mip_height / 2 : 1;
+    mip_depth = mip_depth > 1 ? mip_depth / 2 : 1;
   }
 
   barrier.subresourceRange.baseMipLevel = mip_levels - 1;

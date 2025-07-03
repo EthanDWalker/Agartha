@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <mutex>
-#include <Volk/volk.h>
+#include <volk.h>
 #include <GLFW/glfw3.h>
 #include <vma/vk_mem_alloc.h>
 
