@@ -48,16 +48,22 @@ void GenerateMipmaps(VkCommandBuffer cmd, AllocatedImage &image) {
 
     VkImageBlit blit{};
     blit.srcOffsets[0] = {0, 0, 0};
-    blit.srcOffsets[1] = {mip_width, mip_height, mip_depth};
+    blit.srcOffsets[1] = {
+        mip_width,
+        mip_height,
+        mip_depth,
+    };
     blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     blit.srcSubresource.mipLevel = i - 1;
     blit.srcSubresource.baseArrayLayer = 0;
     blit.srcSubresource.layerCount = 1;
 
     blit.dstOffsets[0] = {0, 0, 0};
-    blit.dstOffsets[1] = {mip_width > 1 ? mip_width / 2 : 1,
-                          mip_height > 1 ? mip_height / 2 : 1,
-                          mip_depth > 1 ? mip_depth / 2 : 1};
+    blit.dstOffsets[1] = {
+        mip_width > 1 ? mip_width / 2 : 1,
+        mip_height > 1 ? mip_height / 2 : 1,
+        mip_depth > 1 ? mip_depth / 2 : 1,
+    };
     blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     blit.dstSubresource.mipLevel = i;
     blit.dstSubresource.baseArrayLayer = 0;

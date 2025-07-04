@@ -244,37 +244,7 @@ void SceneSvo::Build(VkCommandBuffer cmd, SceneManager &scene_manager,
                           mip_pipeline.layout, 0, 1, &svo_descriptor_set, 0,
                           nullptr);
 
-  VkImageMemoryBarrier barrier{};
-  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  barrier.image = radiance_image.image;
-  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  barrier.subresourceRange.layerCount = 1;
-  barrier.subresourceRange.levelCount = 1;
-
-  float imageSize = radiance_image.extent.depth;
-  const float invLocalSize = 1.0 / 8.0;
-
-  for (uint32_t i = 1; i < radiance_image_views.size(); i++) {
-    barrier.subresourceRange.baseMipLevel = i - 1;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0,
-                         nullptr, 1, &barrier);
-
-    vkCmdPushConstants(cmd, mip_pipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                       sizeof(uint32_t), &i);
-
-    uint32_t dispatchSize = std::ceil(imageSize * invLocalSize);
-
-    vkCmdDispatch(cmd, dispatchSize, dispatchSize, dispatchSize);
-    imageSize *= 0.5;
-  }
+  GenerateMipmaps(cmd, radiance_image);
 }
 
 void SceneSvo::DrawDebugView(VkCommandBuffer cmd, Camera &camera,

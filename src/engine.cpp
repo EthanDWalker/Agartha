@@ -324,7 +324,9 @@ void Engine::CreateRenderGraph() {
 void Engine::Init() {
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_FALSE);
-  window = glfwCreateWindow(1600, 900, "Engine", nullptr, nullptr);
+  VkExtent2D window_size = {1600 * 2, 900 * 2};
+  window = glfwCreateWindow(window_size.width, window_size.height, "Engine",
+                            nullptr, nullptr);
 
   InitVulkanContext(window, DEBUG, context);
 
@@ -341,12 +343,12 @@ void Engine::Init() {
                    camera, descriptor_builder);
 
   light_manager.AddDirectionalLight(context, glm::vec3(1.0),
-                                    glm::vec3(-1.0, -4.0, -1.0), 6.0,
+                                    glm::vec3(-1.0, -4.0, -1.0), 30.0,
                                     immediate_submit);
 
   VkExtent3D draw_image_extent = {
-      1600,
-      900,
+      window_size.width,
+      window_size.height,
       1,
   };
 
@@ -366,13 +368,13 @@ void Engine::Init() {
                            VK_IMAGE_USAGE_STORAGE_BIT,
                        mr_normal_image);
 
-  VkExtent3D half_draw_image_extent = {
-      1600 / 2,
-      900 / 2,
+  VkExtent3D ao_draw_image_extent = {
+      draw_image_extent.width / 2,
+      draw_image_extent.height / 2,
       1,
   };
 
-  CreateAllocatedImage(context, half_draw_image_extent, VK_FORMAT_R8_UNORM,
+  CreateAllocatedImage(context, ao_draw_image_extent, VK_FORMAT_R8_UNORM,
                        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                        ao_image);
 

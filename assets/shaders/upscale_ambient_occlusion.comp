@@ -20,13 +20,13 @@ void main() {
     vec2 inputUV = vec2(gl_GlobalInvocationID.xy) * invInputImageExtent;
     vec4 inputValue = texture(aoImage, inputUV);
 
-    vec2 uvStep = vec2(2.0) * invInputImageExtent;
+    vec2 uvStep = vec2(SCALE) * invInputImageExtent;
 
     for (int i = 0; i < SCALE; ++i) {
         for (int j = 0; j < SCALE; ++j) {
             float ao = texture(aoImage, inputUV + (uvStep * vec2(i, j))).r;
-            vec4 color = imageLoad(mainImage, ivec2(gl_GlobalInvocationID.xy * 2) + ivec2(i, j));
-            imageStore(mainImage, ivec2(gl_GlobalInvocationID.xy * 2) + ivec2(i, j), color * ao);
+            vec4 color = imageLoad(mainImage, ivec2(gl_GlobalInvocationID.xy * SCALE) + ivec2(i, j));
+            imageStore(mainImage, ivec2(gl_GlobalInvocationID.xy * SCALE) + ivec2(i, j), color * ao);
         }
     }
 }
