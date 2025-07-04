@@ -18,8 +18,11 @@ void GenerateMipmaps(VkCommandBuffer cmd, AllocatedImage &image) {
 
   uint32_t mip_levels = CalculateMipLevels(image.extent);
 
-  TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+  TransitionImage(cmd, {}, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                  VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                  VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image.image);
+
   VkImageMemoryBarrier barrier{};
   barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
   barrier.image = image.image;
@@ -180,7 +183,9 @@ void CreateImageDataAsync(VulkanContext &context, void *data,
   memcpy(upload_buffer.info.pMappedData, data, data_size);
 
   ImmediateSubmit::SubmitAsync(context, [&](VkCommandBuffer cmd) {
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+    TransitionImage(cmd, {}, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image.image);
 
     VkBufferImageCopy copy_region{};
@@ -197,7 +202,11 @@ void CreateImageDataAsync(VulkanContext &context, void *data,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                            &copy_region);
 
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    TransitionImage(cmd, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    VK_ACCESS_2_SHADER_READ_BIT,
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, image.image);
     if (mipmapped) {
       GenerateMipmaps(cmd, image);
@@ -207,29 +216,28 @@ void CreateImageDataAsync(VulkanContext &context, void *data,
   DestroyBuffer(context, upload_buffer);
 }
 
-void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,
-                     VkImageLayout new_layout, VkImage image,
-                     uint32_t mip_levels, bool depth) {
+void TransitionImage(VkCommandBuffer cmd, VkAccessFlags2 src_access,
+                     VkAccessFlags2 dst_access, VkPipelineStageFlags2 src_stage,
+                     VkPipelineStageFlags2 dst_stage, VkImageLayout old_layout,
+                     VkImageLayout new_layout, VkImage image, bool depth) {
   VkImageMemoryBarrier2 image_barrier{};
   image_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
   image_barrier.image = image;
-  image_barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-  image_barrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
-  image_barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-  image_barrier.dstAccessMask =
-      VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT;
+  image_barrier.srcStageMask = src_stage;
+  image_barrier.dstStageMask = dst_stage;
+  image_barrier.srcAccessMask = src_access;
+  image_barrier.dstAccessMask = dst_access;
 
   image_barrier.oldLayout = old_layout;
   image_barrier.newLayout = new_layout;
 
-  VkImageAspectFlags aspect_mask =
-      (new_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
-       old_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
-          ? VK_IMAGE_ASPECT_DEPTH_BIT
-          : VK_IMAGE_ASPECT_COLOR_BIT;
+  VkImageAspectFlagBits aspect_mask;
 
-  if (depth)
+  if (depth) {
     aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT;
+  } else {
+    aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT;
+  }
 
   image_barrier.subresourceRange = vkinit::ImageSubresourceRange(aspect_mask);
   image_barrier.image = image;

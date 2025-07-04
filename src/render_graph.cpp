@@ -11,11 +11,10 @@
 #include <limits>
 #include <mutex>
 
-void DependencyBuilder::AddDependency(AllocatedBuffer buffer,
-                                      VkAccessFlagBits2 src_access,
-                                      VkAccessFlagBits2 dst_access,
-                                      VkPipelineStageFlagBits2 src_stage,
-                                      VkPipelineStageFlagBits2 dst_stage) {
+void DependencyBuilder::AddBufferDependency(
+    AllocatedBuffer buffer, VkAccessFlagBits2 src_access,
+    VkAccessFlagBits2 dst_access, VkPipelineStageFlagBits2 src_stage,
+    VkPipelineStageFlagBits2 dst_stage) {
   VkBufferMemoryBarrier2 barrier{};
   barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
   barrier.buffer = buffer.buffer;
@@ -29,11 +28,11 @@ void DependencyBuilder::AddDependency(AllocatedBuffer buffer,
   dependency.buffer_deps.push_back(barrier);
 }
 
-void DependencyBuilder::AddDependency(AllocatedImage image,
-                                      VkAccessFlagBits2 src_access,
-                                      VkAccessFlagBits2 dst_access,
-                                      VkPipelineStageFlagBits2 src_stage,
-                                      VkPipelineStageFlagBits2 dst_stage) {
+void DependencyBuilder::AddImageDependency(
+    AllocatedImage image, VkAccessFlagBits2 src_access,
+    VkAccessFlagBits2 dst_access, VkPipelineStageFlagBits2 src_stage,
+    VkPipelineStageFlagBits2 dst_stage, VkImageLayout old_layout,
+    VkImageLayout new_layout, bool depth) {
   VkImageMemoryBarrier2 barrier{};
   barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
   barrier.image = image.image;
@@ -43,7 +42,15 @@ void DependencyBuilder::AddDependency(AllocatedImage image,
   barrier.dstAccessMask = dst_access;
   barrier.srcStageMask = src_stage;
   barrier.dstStageMask = dst_stage;
-  barrier.subresourceRange = vkinit::ImageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+  barrier.oldLayout = old_layout;
+  barrier.newLayout = new_layout;
+  if (depth) {
+    barrier.subresourceRange =
+        vkinit::ImageSubresourceRange(VK_IMAGE_ASPECT_DEPTH_BIT);
+  } else {
+    barrier.subresourceRange =
+        vkinit::ImageSubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+  }
   dependency.image_deps.push_back(barrier);
 }
 
@@ -58,31 +65,6 @@ void DependencyBuilder::AddDependency(VkAccessFlagBits2 src_access,
   barrier.srcStageMask = src_stage;
   barrier.dstStageMask = dst_stage;
   dependency.memory_deps.push_back(barrier);
-}
-
-void DependencyBuilder::AddImageTransition(VkImageLayout old_layout,
-                                           VkImageLayout new_layout,
-                                           AllocatedImage image) {
-  VkImageMemoryBarrier2 barrier{};
-  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-  barrier.image = image.image;
-  barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-  barrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
-  barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-  barrier.dstAccessMask =
-      VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT;
-  barrier.oldLayout = old_layout;
-  barrier.newLayout = new_layout;
-
-  VkImageAspectFlags aspect_mask =
-      (new_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL ||
-       old_layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
-          ? VK_IMAGE_ASPECT_DEPTH_BIT
-          : VK_IMAGE_ASPECT_COLOR_BIT;
-
-  barrier.subresourceRange = vkinit::ImageSubresourceRange(aspect_mask);
-
-  dependency.image_deps.push_back(barrier);
 }
 
 void RenderGraphBuilder::AddPass(uint32_t level, Dependency dependency,

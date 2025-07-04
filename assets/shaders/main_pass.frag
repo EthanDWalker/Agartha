@@ -307,8 +307,8 @@ vec3 CalculateIndirectLight(vec3 N) {
         vec3 indirectColor = vec3(0.0);
         float occlusion = 0.0;
 
-        float marchedDistance = 0.2;
-        const float MAX_DIST = 50.0;
+        float marchedDistance = svoData.voxelSize;
+        const float MAX_DIST = 100.0;
 
         while (occlusion < 1.0 && marchedDistance < MAX_DIST) {
             vec3 svoPos = coneOrigin + marchedDistance * coneDirection;

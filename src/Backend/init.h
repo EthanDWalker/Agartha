@@ -1,6 +1,6 @@
 #pragma once
-#include <volk.h>
 #include <span>
+#include <volk.h>
 
 namespace vkinit {
 VkCommandBufferBeginInfo
@@ -22,7 +22,9 @@ VkRenderingAttachmentInfo AttachmentInfo(VkImageView view,
                                          VkClearValue *clear,
                                          VkImageLayout layout);
 VkRenderingAttachmentInfo DepthAttachmentInfo(VkImageView image_view,
-                                              VkImageLayout layout);
+                                              VkImageLayout layout,
+                                              VkAttachmentLoadOp load_op,
+                                              VkAttachmentStoreOp store_op);
 VkRenderingInfo
 RenderingInfo(VkExtent3D render_extent,
               std::span<VkRenderingAttachmentInfo> color_attachments,

@@ -59,6 +59,7 @@ struct Engine {
   Pipeline tone_map_pipeline;
   Pipeline ambient_occlusion_pipeline;
   Pipeline upscale_ao_pipeline;
+  Pipeline depth_pipeline;
 
   VkDescriptorSet main_descriptor_set;
   VkDescriptorSetLayout main_descriptor_layout;

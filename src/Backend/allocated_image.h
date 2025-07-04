@@ -1,7 +1,7 @@
 #pragma once
 #include "Backend/context.h"
-#include <volk.h>
 #include <vma/vk_mem_alloc.h>
+#include <volk.h>
 
 struct AllocatedImage {
   VkExtent3D extent;
@@ -31,9 +31,10 @@ void CreateImageDataAsync(
     bool mipmapped = false,
     VkSampleCountFlagBits sample_count = VK_SAMPLE_COUNT_1_BIT);
 
-void TransitionImage(VkCommandBuffer cmd, VkImageLayout old_layout,
-                     VkImageLayout new_layout, VkImage image,
-                     uint32_t mip_levels = 1, bool depth = false);
+void TransitionImage(VkCommandBuffer cmd, VkAccessFlags2 src_access,
+                     VkAccessFlags2 dst_access, VkPipelineStageFlags2 src_stage,
+                     VkPipelineStageFlags2 dst_stage, VkImageLayout old_layout,
+                     VkImageLayout new_layout, VkImage image, bool depth = false);
 
 void CopyImageToImage(VkCommandBuffer cmd, VkImage source, VkImage destination,
                       VkExtent2D src_size, VkExtent2D dst_size);

@@ -5,7 +5,6 @@
 #include "Backend/pipeline.h"
 #include "Loaders/image.h"
 #include "Loaders/model.h"
-#include "timer.h"
 #include <cmath>
 #include <future>
 #include <mutex>
@@ -204,9 +203,13 @@ Material TextureManager::UploadMaterial(VulkanContext &context,
     pipeline_builder.Build(context, pipeline);
 
     ImmediateSubmit::SubmitAsync(context, [&](VkCommandBuffer cmd) {
-      TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+      TransitionImage(cmd, {}, VK_ACCESS_2_SHADER_WRITE_BIT, {},
+                      VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                      VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
                       albedo_ao.image);
-      TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+      TransitionImage(cmd, {}, VK_ACCESS_2_SHADER_WRITE_BIT, {},
+                      VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                      VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
                       mr_normal.image);
 
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.obj);

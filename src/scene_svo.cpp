@@ -75,6 +75,9 @@ void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
   sampler_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
   sampler_ci.magFilter = VK_FILTER_LINEAR;
   sampler_ci.minFilter = VK_FILTER_LINEAR;
+  sampler_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   sampler_ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
   sampler_ci.maxLod = static_cast<float>(radiance_image_views.size());
 
@@ -160,6 +163,9 @@ void SceneSvo::Create(VulkanContext &context, SceneManager &scene_manager,
 
 void SceneSvo::BuildDrawCommands(VkCommandBuffer cmd,
                                  SceneManager &scene_manager) {
+  if (scene_manager.instance_index == 0)
+    return;
+
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                     build_draw_buffer_pipeline.obj);
 
@@ -173,10 +179,6 @@ void SceneSvo::BuildDrawCommands(VkCommandBuffer cmd,
                           build_draw_buffer_pipeline.layout, 0, ds.size(),
                           ds.data(), 0, nullptr);
 
-  if (scene_manager.instance_index == 0) {
-    return;
-  }
-
   vkCmdDispatch(cmd, std::ceil(scene_manager.instance_index / 64.0f), 1, 1);
 }
 
@@ -189,7 +191,9 @@ void SceneSvo::Build(VkCommandBuffer cmd, SceneManager &scene_manager,
     return;
   }
 
-  TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+  TransitionImage(cmd, {}, VK_ACCESS_2_SHADER_WRITE_BIT, {},
+                  VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                  VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
                   radiance_image.image);
 
   VkClearColorValue clear_color_value{};
@@ -249,14 +253,15 @@ void SceneSvo::Build(VkCommandBuffer cmd, SceneManager &scene_manager,
 
 void SceneSvo::DrawDebugView(VkCommandBuffer cmd, Camera &camera,
                              AllocatedImage &draw_image,
-                             AllocatedImage &depth_image,
-                             VkImageLayout new_layout, uint32_t mip_level) {
+                             AllocatedImage &depth_image, uint32_t mip_level) {
   const Pipeline pipeline = debug_pipeline;
   const uint32_t point_count = std::pow(
       radiance_image.extent.depth / float(VOXEL_SIZE * std::pow(2, mip_level)),
       3);
 
-  TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+  TransitionImage(cmd, {}, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, {},
+                  VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                  VK_IMAGE_LAYOUT_UNDEFINED,
                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, draw_image.image);
 
   VkViewport viewport = vkinit::Viewport(draw_image.extent);
@@ -279,7 +284,8 @@ void SceneSvo::DrawDebugView(VkCommandBuffer cmd, Camera &camera,
   };
 
   VkRenderingAttachmentInfo depth_att = vkinit::DepthAttachmentInfo(
-      depth_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+      depth_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+      VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE);
 
   VkRenderingInfo rendering_info =
       vkinit::RenderingInfo(draw_image.extent, attachments, &depth_att);
@@ -303,9 +309,6 @@ void SceneSvo::DrawDebugView(VkCommandBuffer cmd, Camera &camera,
   vkCmdDraw(cmd, point_count, 1, 0, 0);
 
   vkCmdEndRendering(cmd);
-
-  TransitionImage(cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, new_layout,
-                  draw_image.image);
 }
 
 void SceneSvo::Destroy(VulkanContext &context) {

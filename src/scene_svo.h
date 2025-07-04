@@ -46,7 +46,7 @@ struct SceneSvo {
 
   void DrawDebugView(VkCommandBuffer cmd, Camera &camera,
                      AllocatedImage &draw_image, AllocatedImage &depth_image,
-                     VkImageLayout new_layout, uint32_t mip_level);
+                     uint32_t mip_level);
 
   void Destroy(VulkanContext &context);
 };

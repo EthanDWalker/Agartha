@@ -29,6 +29,8 @@ void Engine::CreateRenderGraph() {
 
   {
     builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
+      if (scene_manager.instance_index == 0)
+        return;
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cull_pipeline.obj);
 
       std::array<VkDescriptorSet, 4> ds = {
@@ -46,6 +48,8 @@ void Engine::CreateRenderGraph() {
     });
 
     builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
+      if (scene_manager.instance_index == 0)
+        return;
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                         shadow_cull_pipeline.obj);
 
@@ -68,7 +72,80 @@ void Engine::CreateRenderGraph() {
   }
 
   {
+    DependencyBuilder depth_pass_dep{};
+
+    depth_pass_dep.AddImageDependency(
+        depth_image, {}, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, {},
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, true);
+
+    depth_pass_dep.AddBufferDependency(
+        culled_draw_count_buffer, VK_ACCESS_2_SHADER_WRITE_BIT,
+        VK_ACCESS_2_HOST_READ_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_2_HOST_BIT);
+
+    depth_pass_dep.AddBufferDependency(
+        draw_indirect_buffer, VK_ACCESS_2_SHADER_WRITE_BIT,
+        VK_ACCESS_2_SHADER_READ_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT);
+
+    builder.AddPass(1, depth_pass_dep.dependency, [&](VkCommandBuffer cmd) {
+      uint32_t draw_count = 0;
+      memcpy(&draw_count, culled_draw_count_buffer.info.pMappedData,
+             sizeof(uint32_t));
+      if (draw_count > scene_manager.instance_index || draw_count == 0) {
+        return;
+      }
+
+      VkViewport viewport = vkinit::Viewport(depth_image.extent);
+      vkCmdSetViewport(cmd, 0, 1, &viewport);
+      VkRect2D scissor = vkinit::Scissor(depth_image.extent);
+      vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+      VkRenderingAttachmentInfo depth_att = vkinit::DepthAttachmentInfo(
+          depth_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+          VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE);
+
+      VkRenderingInfo render_info =
+          vkinit::RenderingInfo(depth_image.extent, {}, &depth_att);
+
+      vkCmdBeginRendering(cmd, &render_info);
+
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        depth_pipeline.obj);
+
+      std::array<VkDescriptorSet, 4> ds = {
+          cull_descriptor_set,
+          scene_manager.instance_descriptor_set,
+          scene_manager.object_descriptor_set,
+          camera.descriptor_set,
+      };
+
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              depth_pipeline.layout, 0, ds.size(), ds.data(), 0,
+                              nullptr);
+
+      vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
+                           VK_INDEX_TYPE_UINT32);
+
+      vkCmdDrawIndexedIndirect(
+          cmd, draw_indirect_buffer.buffer, 0, draw_count,
+          static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
+
+      vkCmdEndRendering(cmd);
+    });
+  }
+
+  {
     builder.AddPass(1, {}, [&](VkCommandBuffer cmd) {
+      uint32_t draw_count = 0;
+
+      memcpy(&draw_count, shadow_culled_draw_count_buffer.info.pMappedData,
+             sizeof(uint32_t));
+
+      if (draw_count > scene_manager.instance_index || draw_count == 0)
+        return;
+
       VkViewport viewport = vkinit::Viewport(SHADOW_IMAGE_EXTENT);
       vkCmdSetViewport(cmd, 0, 1, &viewport);
       VkRect2D scissor = vkinit::Scissor(SHADOW_IMAGE_EXTENT);
@@ -77,12 +154,14 @@ void Engine::CreateRenderGraph() {
       for (uint32_t i = 0; i < light_manager.matrix_index; i++) {
         AllocatedImage shadow_image = light_manager.shadow_images[i];
 
-        TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+        TransitionImage(cmd, {}, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                        {}, VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, {},
                         VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                        shadow_image.image);
+                        shadow_image.image, true);
 
         VkRenderingAttachmentInfo depth = vkinit::DepthAttachmentInfo(
-            shadow_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+            shadow_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE);
 
         VkRenderingInfo render_info =
             vkinit::RenderingInfo(SHADOW_IMAGE_EXTENT, {}, &depth);
@@ -94,16 +173,6 @@ void Engine::CreateRenderGraph() {
 
         vkCmdPushConstants(cmd, shadow_pipeline.layout,
                            VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(uint32_t), &i);
-
-        uint32_t draw_count = 0;
-
-        memcpy(&draw_count, shadow_culled_draw_count_buffer.info.pMappedData,
-               sizeof(uint32_t));
-
-        if (draw_count > scene_manager.instance_index) {
-          vkCmdEndRendering(cmd);
-          return;
-        }
 
         std::array<VkDescriptorSet, 4> ds = {
             shadow_descriptor_set,
@@ -125,9 +194,13 @@ void Engine::CreateRenderGraph() {
 
         vkCmdEndRendering(cmd);
 
-        TransitionImage(cmd, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        TransitionImage(cmd, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+                        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                        VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        shadow_image.image);
+                        shadow_image.image, true);
       }
     });
   }
@@ -138,21 +211,20 @@ void Engine::CreateRenderGraph() {
 
   {
     DependencyBuilder main_pass_dep{};
-    main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
-                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                     main_image);
+    main_pass_dep.AddImageDependency(
+        main_image, {}, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, {},
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-    main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
-                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                     mr_normal_image);
+    main_pass_dep.AddImageDependency(
+        mr_normal_image, {}, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, {},
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-    main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
-                                     VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                                     depth_image);
-
-    main_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
-                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                     scene_svo.radiance_image);
+    main_pass_dep.AddImageDependency(
+        depth_image, {}, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, {},
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, true);
 
     builder.AddPass(2, main_pass_dep.dependency, [&](VkCommandBuffer cmd) {
       VkViewport viewport = vkinit::Viewport(main_image.extent);
@@ -180,7 +252,8 @@ void Engine::CreateRenderGraph() {
       };
 
       VkRenderingAttachmentInfo depth_att = vkinit::DepthAttachmentInfo(
-          depth_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+          depth_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+          VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE);
 
       VkRenderingInfo rendering_info =
           vkinit::RenderingInfo(main_image.extent, attachments, &depth_att);
@@ -228,16 +301,32 @@ void Engine::CreateRenderGraph() {
 
   {
     DependencyBuilder pp_pass_dep{};
-    pp_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                   VK_IMAGE_LAYOUT_GENERAL, main_image);
+    pp_pass_dep.AddImageDependency(
+        ao_image, {}, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, {},
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL);
 
-    pp_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                   VK_IMAGE_LAYOUT_GENERAL, mr_normal_image);
+    pp_pass_dep.AddImageDependency(
+        main_image, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        VK_ACCESS_2_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 
-    pp_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                                   VK_IMAGE_LAYOUT_GENERAL, depth_image);
-    pp_pass_dep.AddImageTransition(VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_GENERAL, ao_image);
+    pp_pass_dep.AddImageDependency(
+        mr_normal_image, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        VK_ACCESS_2_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+
+    pp_pass_dep.AddImageDependency(
+        depth_image, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        VK_ACCESS_2_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+        true);
 
     builder.AddPass(3, pp_pass_dep.dependency, [&](VkCommandBuffer cmd) {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -257,9 +346,14 @@ void Engine::CreateRenderGraph() {
 
   {
     DependencyBuilder ao_upscale_dep{};
-    ao_upscale_dep.AddImageTransition(VK_IMAGE_LAYOUT_GENERAL,
-                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                      ao_image);
+
+    ao_upscale_dep.AddImageDependency(ao_image, VK_ACCESS_2_SHADER_WRITE_BIT,
+                                      VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                                      VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                      VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                      VK_IMAGE_LAYOUT_GENERAL,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
     builder.AddPass(4, ao_upscale_dep.dependency, [&](VkCommandBuffer cmd) {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                         upscale_ao_pipeline.obj);
@@ -298,7 +392,14 @@ void Engine::CreateRenderGraph() {
       if (!voxel_gi_debug)
         return;
       scene_svo.DrawDebugView(cmd, camera, main_image, depth_image,
-                              VK_IMAGE_LAYOUT_GENERAL, voxel_debug_mip_level);
+                              voxel_debug_mip_level);
+
+      TransitionImage(cmd, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                      VK_ACCESS_2_SHADER_READ_BIT,
+                      VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                      VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                      VK_IMAGE_LAYOUT_GENERAL, main_image.image);
     });
   }
 
@@ -306,17 +407,24 @@ void Engine::CreateRenderGraph() {
   render_graph.render_graph = builder.render_graph;
   render_graph.root_callback = [&](VkCommandBuffer cmd, VkImage swapchain_image,
                                    VkExtent2D swapchain_extent) {
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_GENERAL,
+    TransitionImage(cmd, VK_ACCESS_2_SHADER_READ_BIT,
+                    VK_ACCESS_2_TRANSFER_READ_BIT,
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_IMAGE_LAYOUT_GENERAL,
                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, main_image.image);
 
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
+    TransitionImage(cmd, {}, VK_ACCESS_2_TRANSFER_WRITE_BIT, {},
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT, {},
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, swapchain_image);
 
     CopyImageToImage(cmd, main_image.image, swapchain_image,
                      {main_image.extent.width, main_image.extent.height},
                      swapchain_extent);
 
-    TransitionImage(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    TransitionImage(cmd, VK_ACCESS_2_TRANSFER_WRITE_BIT, {},
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, swapchain_image);
   };
 }
@@ -476,6 +584,20 @@ void Engine::Init() {
   }
 
   {
+    GraphicsPipelineBuilder pipeline_builder{};
+    pipeline_builder.SetShaders(context, "depth_pass.vert.spv",
+                                "none.frag.spv");
+    pipeline_builder.Default();
+    pipeline_builder.AddDescriptorSetLayout(cull_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(
+        scene_manager.instance_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(
+        scene_manager.object_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
+    pipeline_builder.Build(context, depth_pipeline);
+  }
+
+  {
     descriptor_builder.BindStorageBuffer(0, shadow_draw_indirect_buffer.buffer);
     descriptor_builder.BindStorageBuffer(
         1, shadow_culled_draw_count_buffer.buffer);
@@ -578,10 +700,10 @@ void Engine::Init() {
 }
 
 const std::array<glm::vec3, 4> light_directions = {
+    glm::vec3(-1.0f, -4.0f, -2.0f),
     glm::vec3(-1.0f, -4.0f, -1.0f),
-    glm::vec3(1.0f, -4.0f, -1.0f),
+    glm::vec3(-1.0f, -4.0f, 0.0f),
     glm::vec3(-1.0f, -4.0f, 1.0f),
-    glm::vec3(1.0f, -4.0f, 1.0f),
 };
 
 void Engine::Run() {
@@ -690,6 +812,7 @@ void Engine::Destroy() {
   DestroyPipeline(context, tone_map_pipeline);
   DestroyPipeline(context, ambient_occlusion_pipeline);
   DestroyPipeline(context, upscale_ao_pipeline);
+  DestroyPipeline(context, depth_pipeline);
 
   DestroyVulkanContext(context);
 

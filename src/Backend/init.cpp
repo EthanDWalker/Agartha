@@ -105,13 +105,15 @@ VkRenderingAttachmentInfo AttachmentInfo(VkImageView view,
 }
 
 VkRenderingAttachmentInfo DepthAttachmentInfo(VkImageView image_view,
-                                              VkImageLayout layout) {
+                                              VkImageLayout layout,
+                                              VkAttachmentLoadOp load_op,
+                                              VkAttachmentStoreOp store_op) {
   VkRenderingAttachmentInfo info{};
   info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
   info.imageView = image_view;
   info.imageLayout = layout;
-  info.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  info.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  info.loadOp = load_op;
+  info.storeOp = store_op;
   info.clearValue.depthStencil.depth = 0.0f;
   return info;
 }

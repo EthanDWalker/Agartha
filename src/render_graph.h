@@ -26,26 +26,29 @@ struct RenderPass {
 struct DependencyBuilder {
   Dependency dependency;
 
-  void AddDependency(AllocatedImage image, VkAccessFlagBits2 src_access,
-                     VkAccessFlagBits2 dst_access,
-                     VkPipelineStageFlagBits2 src_stage,
-                     VkPipelineStageFlagBits2 dst_stage);
-  void AddDependency(AllocatedBuffer buffer, VkAccessFlagBits2 src_access,
-                     VkAccessFlagBits2 dst_access,
-                     VkPipelineStageFlagBits2 src_stage,
-                     VkPipelineStageFlagBits2 dst_stage);
+  void AddImageDependency(AllocatedImage image, VkAccessFlagBits2 src_access,
+                          VkAccessFlagBits2 dst_access,
+                          VkPipelineStageFlagBits2 src_stage,
+                          VkPipelineStageFlagBits2 dst_stage,
+                          VkImageLayout old_layout, VkImageLayout new_layout,
+                          bool depth = false);
+
+  void AddBufferDependency(AllocatedBuffer buffer, VkAccessFlagBits2 src_access,
+                           VkAccessFlagBits2 dst_access,
+                           VkPipelineStageFlagBits2 src_stage,
+                           VkPipelineStageFlagBits2 dst_stage);
+
   void AddDependency(VkAccessFlagBits2 src_access, VkAccessFlagBits2 dst_access,
                      VkPipelineStageFlagBits2 src_stage,
                      VkPipelineStageFlagBits2 dst_stage);
-  void AddImageTransition(VkImageLayout old_layout, VkImageLayout new_layout,
-                          AllocatedImage image);
 };
 
 struct RenderGraphBuilder {
   std::vector<std::vector<RenderPass>> render_graph;
 
   void AddPass(uint32_t level, Dependency dependency,
-               std::function<void(VkCommandBuffer)> callback, bool *condition = nullptr);
+               std::function<void(VkCommandBuffer)> callback,
+               bool *condition = nullptr);
 };
 
 struct RenderGraph {

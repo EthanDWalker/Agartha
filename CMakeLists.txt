@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMakeChecksCache)
 
 include(FetchContent)
 
@@ -102,7 +103,7 @@ foreach(SHADER ${SHADER_SRC})
 
   add_custom_command(
       OUTPUT ${COMPILED_FILE}
-      COMMAND ${Vulkan_GLSLC_EXECUTABLE} ${SHADER} -o ${COMPILED_FILE}
+      COMMAND ${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE} ${SHADER} -o ${COMPILED_FILE} --target-env vulkan1.3
       DEPENDS ${SHADER} ${SHADER_DEPENDS}
       COMMENT "Compiling shader ${FILE_NAME}"
       VERBATIM
@@ -123,7 +124,7 @@ foreach(SHADER ${RT_SHADER_SRC})
 
   add_custom_command(
       OUTPUT ${COMPILED_FILE}
-      COMMAND ${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE} ${SHADER} -o ${COMPILED_FILE} --target-env vulkan1.2
+      COMMAND ${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE} ${SHADER} -o ${COMPILED_FILE} --target-env vulkan1.3
       DEPENDS ${SHADER} ${SHADER_DEPENDS}
       COMMENT "Compiling shader ${FILE_NAME}"
       VERBATIM
