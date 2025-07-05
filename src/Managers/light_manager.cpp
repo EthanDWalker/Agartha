@@ -148,7 +148,7 @@ void LightManager::UpdateMatrices(VulkanContext &context,
 
   for (auto &direction : directional_lights) {
     glm::vec3 light_pos =
-        camera_position - direction * DIRECTIONAL_LIGHT_DISTANCE;
+      glm::vec3(camera_position.x, 0, camera_position.z) - direction * DIRECTIONAL_LIGHT_DISTANCE;
 
     glm::mat4 light_view = glm::lookAt(light_pos, camera_position, up);
 

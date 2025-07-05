@@ -10,6 +10,8 @@
 #include "Managers/light_manager.h"
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
+#include "UI/context.h"
+#include "UI/render.h"
 #include "fmt/format.h"
 #include "render_graph.h"
 #include "timer.h"
@@ -388,7 +390,7 @@ void Engine::CreateRenderGraph() {
                     std::ceil(main_image.extent.height / 16.0f), 1);
     });
 
-    builder.AddPass(4, {}, [&](VkCommandBuffer cmd) {
+    builder.AddPass(5, {}, [&](VkCommandBuffer cmd) {
       if (!voxel_gi_debug)
         return;
       scene_svo.DrawDebugView(cmd, camera, main_image, depth_image,
@@ -403,14 +405,35 @@ void Engine::CreateRenderGraph() {
     });
   }
 
+  {
+    DependencyBuilder ui_pass_dep{};
+    ui_pass_dep.AddImageDependency(
+        main_image, VK_ACCESS_2_SHADER_READ_BIT,
+        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    ui_pass_dep.AddImageDependency(
+        depth_image, VK_ACCESS_2_SHADER_READ_BIT,
+        VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, VK_IMAGE_LAYOUT_GENERAL,
+        VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, true);
+
+    builder.AddPass(6, ui_pass_dep.dependency,
+                    [&](VkCommandBuffer cmd) { RenderUi(cmd, main_image); });
+  }
+
   render_graph.Init(context, window);
   render_graph.render_graph = builder.render_graph;
   render_graph.root_callback = [&](VkCommandBuffer cmd, VkImage swapchain_image,
                                    VkExtent2D swapchain_extent) {
-    TransitionImage(cmd, VK_ACCESS_2_SHADER_READ_BIT,
+    TransitionImage(cmd, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
                     VK_ACCESS_2_TRANSFER_READ_BIT,
-                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_IMAGE_LAYOUT_GENERAL,
+                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, main_image.image);
 
     TransitionImage(cmd, {}, VK_ACCESS_2_TRANSFER_WRITE_BIT, {},
@@ -470,6 +493,8 @@ void Engine::Init() {
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                            VK_IMAGE_USAGE_STORAGE_BIT,
                        depth_image);
+
+  CreateUiContext(context, window, &main_image.format);
 
   CreateAllocatedImage(context, draw_image_extent, VK_FORMAT_R8G8B8A8_UNORM,
                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
@@ -699,17 +724,9 @@ void Engine::Init() {
   CreateRenderGraph();
 }
 
-const std::array<glm::vec3, 4> light_directions = {
-    glm::vec3(-1.0f, -4.0f, -2.0f),
-    glm::vec3(-1.0f, -4.0f, -1.0f),
-    glm::vec3(-1.0f, -4.0f, 0.0f),
-    glm::vec3(-1.0f, -4.0f, 1.0f),
-};
-
 void Engine::Run() {
   bool should_close = false;
-  uint32_t selected_light_direction = 0;
-  bool changing_light_direction = false;
+  glm::vec3 directional_light = {-1.0, -4.0, -1.0};
 
   float delta_time;
   while (!glfwWindowShouldClose(window)) {
@@ -720,19 +737,10 @@ void Engine::Run() {
       should_close = true;
     }
 
-    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
-      if (!changing_light_direction) {
-        selected_light_direction++;
-        changing_light_direction = true;
-        light_manager.UpdateDirectionalLight(
-            context,
-            light_directions[selected_light_direction %
-                             light_directions.size()],
-            0, immediate_submit);
-      }
-    } else {
-      changing_light_direction = false;
-    }
+    UpdateUi(window, &directional_light);
+
+    light_manager.UpdateDirectionalLight(context, directional_light, 0,
+                                         immediate_submit);
 
     camera.Update(context, immediate_submit, window, delta_time);
     light_manager.UpdateMatrices(context, immediate_submit, camera.position);
@@ -775,6 +783,8 @@ void Engine::Destroy() {
   immediate_submit.Destroy(context);
   camera.Destroy(context);
   scene_svo.Destroy(context);
+
+  DestroyUiContext();
 
   vkDestroyDescriptorSetLayout(context.device, main_descriptor_layout, nullptr);
   vkDestroyDescriptorSetLayout(context.device, cull_descriptor_layout, nullptr);

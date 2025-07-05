@@ -68,11 +68,14 @@ target_include_directories(imgui PUBLIC
     ${Vulkan_INCLUDE_DIR}
 )
 
-target_link_libraries(imgui PUBLIC glfw ${Vulkan_LIBRARY} volk::volk)
+target_link_libraries(imgui PUBLIC glfw volk::volk)
+
+target_compile_definitions(imgui PRIVATE IMGUI_IMPL_VULKAN_USE_VOLK)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.cpp)
 
 add_executable(engine ${SOURCES})
+
 
 target_include_directories(engine PUBLIC 
     ${CMAKE_SOURCE_DIR}/src

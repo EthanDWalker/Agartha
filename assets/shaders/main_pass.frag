@@ -286,7 +286,7 @@ vec3 CalculateIndirectLight(vec3 N) {
             0.28, 0.18, 0.18, 0.18, 0.18
         );
 
-    const float coneHalfAngle = radians(25.0);
+    const float coneHalfAngle = radians(30.0);
 
     const float invSqrt2 = 1.0 / sqrt(2.0);
     const vec3 normalOffset = N * (1.0 + 4.0 * invSqrt2) * svoData.voxelSize;
@@ -317,12 +317,12 @@ vec3 CalculateIndirectLight(vec3 N) {
                 break;
             }
 
-            marchedDistance = marchedDistance + 2.0 * tan(coneHalfAngle) * marchedDistance;
+            marchedDistance += 2.0 * tan(coneHalfAngle) * marchedDistance;
             float level = log2(marchedDistance);
 
-            vec4 voxel = textureLod(radianceImage, svoPos * invExtent, level);
-            indirectColor = indirectColor + voxel.rgb * (1.0 - occlusion);
-            occlusion = occlusion + (1.0 - occlusion) * voxel.a;
+      vec4 voxel = textureLod(radianceImage, svoPos * invExtent, min(3.5, level));
+            indirectColor += voxel.rgb * (1.0 - occlusion);
+            occlusion += (1.0 - occlusion) * voxel.a;
         }
 
         indirectDiffuse += coneWeights[i] * indirectColor.rgb;
