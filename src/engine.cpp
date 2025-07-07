@@ -459,7 +459,7 @@ void Engine::Init() {
   window = glfwCreateWindow(window_size.width, window_size.height, "Engine",
                             nullptr, nullptr);
 
-  InitVulkanContext(window, DEBUG, context);
+  InitVulkanContext(window, context);
 
   immediate_submit.Create(context);
 
@@ -474,7 +474,7 @@ void Engine::Init() {
                    camera, descriptor_builder);
 
   light_manager.AddDirectionalLight(context, glm::vec3(1.0),
-                                    glm::vec3(-1.0, -4.0, -1.0), 30.0,
+                                    glm::vec3(-1.0, -4.0, -1.0), 40.0,
                                     immediate_submit);
 
   VkExtent3D draw_image_extent = {
@@ -575,7 +575,6 @@ void Engine::Init() {
     pipeline_builder.Default();
     pipeline_builder.SetCullMode(VK_CULL_MODE_BACK_BIT,
                                  VK_FRONT_FACE_CLOCKWISE);
-
     pipeline_builder.AddDescriptorSetLayout(shadow_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);

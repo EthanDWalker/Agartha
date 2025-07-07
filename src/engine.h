@@ -15,12 +15,6 @@
 #include "render_graph.h"
 #include "scene_svo.h"
 
-#if defined(DEBUG)
-constexpr bool DEBUG = true;
-#else
-constexpr bool DEBUG = false;
-#endif
-
 struct Engine {
   VulkanContext context;
 

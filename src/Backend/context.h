@@ -20,6 +20,6 @@ struct VulkanContext {
   uint32_t compute_queue_index;
 };
 
-void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context);
+void InitVulkanContext(GLFWwindow *window, VulkanContext &context);
 
 void DestroyVulkanContext(VulkanContext &context);

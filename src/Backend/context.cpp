@@ -6,7 +6,7 @@
 #include <cassert>
 #include <volk.h>
 
-void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
+void InitVulkanContext(GLFWwindow *window, VulkanContext &context) {
   volkInitialize();
   vkb::InstanceBuilder instance_builder;
 
@@ -73,12 +73,6 @@ void InitVulkanContext(GLFWwindow *window, bool debug, VulkanContext &context) {
   raytracing_features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
   raytracing_features.rayTracingPipeline = true;
-
-  VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR
-      raytracing_position_features{};
-  raytracing_position_features.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR;
-  raytracing_position_features.rayTracingPositionFetch = true;
 
   vkb::PhysicalDeviceSelector physical_device_selector{vkb_instance};
   vkb::PhysicalDevice vkb_physical_device =

@@ -269,11 +269,6 @@ float ShadowCalculation(vec3 L, vec3 N, DirectionalLight directionalLight) {
     return shadow;
 }
 
-vec3 SafeNormalize(vec3 v) {
-    v = normalize(v);
-    return any(isinf(v)) || any(isnan(v)) ? vec3(0.0, 1.0, 0.0) : v;
-}
-
 vec3 CalculateIndirectLight(vec3 N) {
     const vec3 coneDirections[5] = vec3[5](
             vec3(0.0, 0.0, 1.0),
@@ -308,7 +303,7 @@ vec3 CalculateIndirectLight(vec3 N) {
         float occlusion = 0.0;
 
         float marchedDistance = svoData.voxelSize;
-        const float MAX_DIST = 100.0;
+        const float MAX_DIST = 25.0;
 
         while (occlusion < 1.0 && marchedDistance < MAX_DIST) {
             vec3 svoPos = coneOrigin + marchedDistance * coneDirection;
@@ -320,7 +315,7 @@ vec3 CalculateIndirectLight(vec3 N) {
             marchedDistance += 2.0 * tan(coneHalfAngle) * marchedDistance;
             float level = log2(marchedDistance);
 
-      vec4 voxel = textureLod(radianceImage, svoPos * invExtent, min(3.5, level));
+            vec4 voxel = textureLod(radianceImage, svoPos * invExtent, min(3.5, level));
             indirectColor += voxel.rgb * (1.0 - occlusion);
             occlusion += (1.0 - occlusion) * voxel.a;
         }
