@@ -12,10 +12,6 @@ layout(set = 0, binding = 1) buffer DrawCount {
     uint drawCount;
 };
 
-layout(set = 0, binding = 2) buffer VisibleInstances {
-    uint visibleInstances[];
-};
-
 layout(set = 1, binding = 0) uniform CameraUBO {
     Camera camera;
 };
@@ -54,14 +50,12 @@ void main() {
     if (isBoundingSphereVisible(vec3(instanceMatrix * vec4(0.0)), bounds.radius)) {
         uint index = atomicAdd(drawCount, 1);
 
-        visibleInstances[index] = id;
-
         DrawIndexedIndirectCommand command;
         command.indexCount = gpuMeshes[objectId].indexCount;
         command.instanceCount = 1;
         command.firstIndex = gpuMeshes[objectId].firstIndex;
         command.vertexOffset = 0;
-        command.firstInstance = index;
+        command.firstInstance = id;
 
         drawCommands[index] = command;
     }

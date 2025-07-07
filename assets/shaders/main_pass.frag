@@ -13,41 +13,41 @@ layout(location = 3) flat in uint iObjectIndex;
 layout(location = 0) out vec4 oColor;
 layout(location = 1) out vec4 oMrNormal;
 
-layout(set = 1, binding = 0) uniform texture2D textures[];
+layout(set = 0, binding = 0) uniform texture2D textures[];
 
-layout(set = 1, binding = 1) uniform sampler textureSampler;
+layout(set = 0, binding = 1) uniform sampler textureSampler;
 
-layout(set = 2, binding = 0) uniform CameraUBO {
+layout(set = 1, binding = 0) uniform CameraUBO {
     Camera camera;
 };
 
-layout(set = 3, binding = 0) readonly buffer ObjectBuffer {
+layout(set = 2, binding = 0) readonly buffer ObjectBuffer {
     Object objects[];
 };
 
-layout(set = 5, binding = 0) readonly buffer PointLightBuffer {
+layout(set = 4, binding = 0) readonly buffer PointLightBuffer {
     PointLight pointLight;
 };
 
-layout(set = 5, binding = 1) readonly buffer DirectionalLightBuffer {
+layout(set = 4, binding = 1) readonly buffer DirectionalLightBuffer {
     DirectionalLight directionalLight;
 };
 
-layout(set = 6, binding = 0) uniform texture2D shadowMaps[];
+layout(set = 5, binding = 0) uniform texture2D shadowMaps[];
 
-layout(set = 6, binding = 1) readonly buffer LightMatrixBuffer {
+layout(set = 5, binding = 1) readonly buffer LightMatrixBuffer {
     mat4 lightMatrices[];
 };
 
-layout(set = 6, binding = 2) uniform sampler shadowSampler;
+layout(set = 5, binding = 2) uniform sampler shadowSampler;
 
-layout(set = 7, binding = 0, rgba16) readonly uniform image3D radianceImageMips[];
+layout(set = 6, binding = 0, rgba16) readonly uniform image3D radianceImageMips[];
 
-layout(set = 7, binding = 1) uniform SvoDataUbo {
+layout(set = 6, binding = 1) uniform SvoDataUbo {
     SvoData svoData;
 };
 
-layout(set = 7, binding = 2) uniform sampler3D radianceImage;
+layout(set = 6, binding = 2) uniform sampler3D radianceImage;
 
 const float PI = 3.14159265359;
 

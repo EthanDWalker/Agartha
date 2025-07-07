@@ -22,8 +22,7 @@ layout(set = 3, binding = 0) uniform CameraUbo {
 };
 
 void main() {
-    return;
-    Instance instance = instances[visibleInstances[gl_InstanceIndex]];
+    Instance instance = instances[gl_InstanceIndex];
     uint objectIndex = GetObjectIndex(instance);
     mat4 instanceMatrix = GetInstanceMatrix(instance);
     Vertex vertex = gpuMeshes[objectIndex].vertexBuffer.vertices[gl_VertexIndex];

@@ -4,12 +4,14 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
+#include "Backend/immediate_submit.h"
 #include "Backend/init.h"
 #include "Backend/pipeline.h"
 #include "Loaders/model.h"
 #include "Managers/light_manager.h"
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
+#include "Physics/context.h"
 #include "UI/context.h"
 #include "UI/render.h"
 #include "fmt/format.h"
@@ -176,8 +178,7 @@ void Engine::CreateRenderGraph() {
         vkCmdPushConstants(cmd, shadow_pipeline.layout,
                            VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(uint32_t), &i);
 
-        std::array<VkDescriptorSet, 4> ds = {
-            shadow_descriptor_set,
+        std::array<VkDescriptorSet, 3> ds = {
             scene_manager.instance_descriptor_set,
             scene_manager.object_descriptor_set,
             light_manager.shadow_descriptor_set,
@@ -275,8 +276,7 @@ void Engine::CreateRenderGraph() {
           return;
         }
 
-        std::array<VkDescriptorSet, 8> ds = {
-            main_descriptor_set,
+        std::array<VkDescriptorSet, 7> ds = {
             texture_manager.descriptor_set,
             camera.descriptor_set,
             scene_manager.object_descriptor_set,
@@ -425,7 +425,7 @@ void Engine::CreateRenderGraph() {
                     [&](VkCommandBuffer cmd) { RenderUi(cmd, main_image); });
   }
 
-  render_graph.Init(context, window);
+  render_graph.Init(vulkan_context, window);
   render_graph.render_graph = builder.render_graph;
   render_graph.root_callback = [&](VkCommandBuffer cmd, VkImage swapchain_image,
                                    VkExtent2D swapchain_extent) {
@@ -459,21 +459,24 @@ void Engine::Init() {
   window = glfwCreateWindow(window_size.width, window_size.height, "Engine",
                             nullptr, nullptr);
 
-  InitVulkanContext(window, context);
+  InitVulkanContext(window, vulkan_context);
 
-  immediate_submit.Create(context);
+  immediate_submit.Create(vulkan_context);
 
-  descriptor_builder.Init(context);
-  texture_manager.Init(context, descriptor_builder);
-  scene_manager.Init(context, descriptor_builder);
-  light_manager.Init(context, descriptor_builder);
+  descriptor_builder.Init(vulkan_context);
+  texture_manager.Init(vulkan_context, descriptor_builder);
+  scene_manager.Init(vulkan_context, descriptor_builder);
+  light_manager.Init(vulkan_context, descriptor_builder);
 
-  camera.Create(context, descriptor_builder);
+  InitPhysicsContext(vulkan_context, descriptor_builder,
+                     scene_manager.as_descriptor_layout, physics_context);
 
-  scene_svo.Create(context, scene_manager, light_manager, texture_manager,
-                   camera, descriptor_builder);
+  camera.Create(vulkan_context, descriptor_builder);
 
-  light_manager.AddDirectionalLight(context, glm::vec3(1.0),
+  scene_svo.Create(vulkan_context, scene_manager, light_manager,
+                   texture_manager, camera, descriptor_builder);
+
+  light_manager.AddDirectionalLight(vulkan_context, glm::vec3(1.0),
                                     glm::vec3(-1.0, -4.0, -1.0), 40.0,
                                     immediate_submit);
 
@@ -484,22 +487,22 @@ void Engine::Init() {
   };
 
   CreateAllocatedImage(
-      context, draw_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+      vulkan_context, draw_image_extent, VK_FORMAT_R16G16B16A16_SFLOAT,
       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
           VK_IMAGE_USAGE_STORAGE_BIT,
       main_image);
 
-  CreateAllocatedImage(context, draw_image_extent, VK_FORMAT_D32_SFLOAT,
+  CreateAllocatedImage(vulkan_context, draw_image_extent, VK_FORMAT_D32_SFLOAT,
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                            VK_IMAGE_USAGE_STORAGE_BIT,
                        depth_image);
 
-  CreateUiContext(context, window, &main_image.format);
+  CreateUiContext(vulkan_context, window, &main_image.format);
 
-  CreateAllocatedImage(context, draw_image_extent, VK_FORMAT_R8G8B8A8_UNORM,
-                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                           VK_IMAGE_USAGE_STORAGE_BIT,
-                       mr_normal_image);
+  CreateAllocatedImage(
+      vulkan_context, draw_image_extent, VK_FORMAT_R8G8B8A8_UNORM,
+      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+      mr_normal_image);
 
   VkExtent3D ao_draw_image_extent = {
       draw_image_extent.width / 2,
@@ -507,49 +510,37 @@ void Engine::Init() {
       1,
   };
 
-  CreateAllocatedImage(context, ao_draw_image_extent, VK_FORMAT_R8_UNORM,
+  CreateAllocatedImage(vulkan_context, ao_draw_image_extent, VK_FORMAT_R8_UNORM,
                        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                        ao_image);
 
-  CreateBuffer(context, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-               VMA_MEMORY_USAGE_AUTO, culled_draw_count_buffer);
+  CreateBuffer(vulkan_context, sizeof(uint32_t),
+               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO,
+               culled_draw_count_buffer);
 
   CreateBuffer(
-      context, sizeof(VkDrawIndexedIndirectCommand) * SCENE_MAX_OBJECTS,
+      vulkan_context, sizeof(VkDrawIndexedIndirectCommand) * SCENE_MAX_OBJECTS,
       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
       VMA_MEMORY_USAGE_GPU_ONLY, draw_indirect_buffer);
 
-  CreateBuffer(context, sizeof(uint32_t) * SCENE_MAX_INSTANCES,
-               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
-               visible_instance_buffer);
-
-  CreateBuffer(context, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-               VMA_MEMORY_USAGE_AUTO, shadow_culled_draw_count_buffer);
+  CreateBuffer(vulkan_context, sizeof(uint32_t),
+               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO,
+               shadow_culled_draw_count_buffer);
 
   CreateBuffer(
-      context, sizeof(VkDrawIndexedIndirectCommand) * SCENE_MAX_OBJECTS,
+      vulkan_context, sizeof(VkDrawIndexedIndirectCommand) * SCENE_MAX_OBJECTS,
       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
       VMA_MEMORY_USAGE_GPU_ONLY, shadow_draw_indirect_buffer);
 
-  CreateBuffer(context, sizeof(uint32_t) * SCENE_MAX_INSTANCES,
-               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
-               shadow_visible_instance_buffer);
-
-  CreateImageSampler(context, sampler);
+  CreateImageSampler(vulkan_context, sampler);
 
   {
-    descriptor_builder.BindStorageBuffer(0, visible_instance_buffer.buffer);
-    descriptor_builder.Build(
-        context, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT,
-        main_descriptor_set, main_descriptor_layout);
-
     GraphicsPipelineBuilder pipeline_builder;
-    pipeline_builder.SetShaders(context, "main_pass.vert.spv",
+    pipeline_builder.SetShaders(vulkan_context, "main_pass.vert.spv",
                                 "main_pass.frag.spv");
     pipeline_builder.Default();
     pipeline_builder.AddColorAttachment(main_image.format);
     pipeline_builder.AddColorAttachment(mr_normal_image.format);
-    pipeline_builder.AddDescriptorSetLayout(main_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         texture_manager.descriptor_set_layout);
     pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
@@ -562,20 +553,16 @@ void Engine::Init() {
     pipeline_builder.AddDescriptorSetLayout(
         light_manager.shadow_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(scene_svo.svo_descriptor_layout);
-    pipeline_builder.Build(context, main_pipeline);
+    pipeline_builder.Build(vulkan_context, main_pipeline);
   }
 
   {
-    descriptor_builder.BindStorageBuffer(0,
-                                         shadow_visible_instance_buffer.buffer);
-    descriptor_builder.Build(context, VK_SHADER_STAGE_VERTEX_BIT,
-                             shadow_descriptor_set, shadow_descriptor_layout);
     GraphicsPipelineBuilder pipeline_builder;
-    pipeline_builder.SetShaders(context, "shadow.vert.spv", "none.frag.spv");
+    pipeline_builder.SetShaders(vulkan_context, "shadow.vert.spv",
+                                "none.frag.spv");
     pipeline_builder.Default();
     pipeline_builder.SetCullMode(VK_CULL_MODE_BACK_BIT,
                                  VK_FRONT_FACE_CLOCKWISE);
-    pipeline_builder.AddDescriptorSetLayout(shadow_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
@@ -586,30 +573,30 @@ void Engine::Init() {
     pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT,
                                           sizeof(uint32_t));
 
-    pipeline_builder.Build(context, shadow_pipeline);
+    pipeline_builder.Build(vulkan_context, shadow_pipeline);
   }
 
   {
     descriptor_builder.BindStorageBuffer(0, draw_indirect_buffer.buffer);
     descriptor_builder.BindStorageBuffer(1, culled_draw_count_buffer.buffer);
-    descriptor_builder.BindStorageBuffer(2, visible_instance_buffer.buffer);
-    descriptor_builder.Build(
-        context, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT,
-        cull_descriptor_set, cull_descriptor_layout);
+    descriptor_builder.Build(vulkan_context,
+                             VK_SHADER_STAGE_COMPUTE_BIT |
+                                 VK_SHADER_STAGE_VERTEX_BIT,
+                             cull_descriptor_set, cull_descriptor_layout);
     ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(context, "frustum_cull.comp.spv");
+    pipeline_builder.SetShader(vulkan_context, "frustum_cull.comp.spv");
     pipeline_builder.AddDescriptorSetLayout(cull_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.object_descriptor_layout);
-    pipeline_builder.Build(context, cull_pipeline);
+    pipeline_builder.Build(vulkan_context, cull_pipeline);
   }
 
   {
     GraphicsPipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShaders(context, "depth_pass.vert.spv",
+    pipeline_builder.SetShaders(vulkan_context, "depth_pass.vert.spv",
                                 "none.frag.spv");
     pipeline_builder.Default();
     pipeline_builder.AddDescriptorSetLayout(cull_descriptor_layout);
@@ -618,26 +605,24 @@ void Engine::Init() {
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.object_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
-    pipeline_builder.Build(context, depth_pipeline);
+    pipeline_builder.Build(vulkan_context, depth_pipeline);
   }
 
   {
     descriptor_builder.BindStorageBuffer(0, shadow_draw_indirect_buffer.buffer);
     descriptor_builder.BindStorageBuffer(
         1, shadow_culled_draw_count_buffer.buffer);
-    descriptor_builder.BindStorageBuffer(2,
-                                         shadow_visible_instance_buffer.buffer);
-    descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
+    descriptor_builder.Build(vulkan_context, VK_SHADER_STAGE_COMPUTE_BIT,
                              shadow_cull_descriptor_set,
                              shadow_cull_descriptor_layout);
     ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(context, "shadow_cull.comp.spv");
+    pipeline_builder.SetShader(vulkan_context, "shadow_cull.comp.spv");
     pipeline_builder.AddDescriptorSetLayout(shadow_cull_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.object_descriptor_layout);
-    pipeline_builder.Build(context, shadow_cull_pipeline);
+    pipeline_builder.Build(vulkan_context, shadow_cull_pipeline);
   }
 
   {
@@ -646,30 +631,31 @@ void Engine::Init() {
     descriptor_builder.BindStorageImage(2, depth_image.image_view);
     descriptor_builder.BindStorageImage(3, ao_image.image_view);
     descriptor_builder.BindCombinedImage(4, ao_image.image_view, sampler);
-    descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
+    descriptor_builder.Build(vulkan_context, VK_SHADER_STAGE_COMPUTE_BIT,
                              gbuffer_descriptor_set, gbuffer_descriptor_layout);
   }
 
   {
     ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(context, "tone_map.comp.spv");
+    pipeline_builder.SetShader(vulkan_context, "tone_map.comp.spv");
     pipeline_builder.AddDescriptorSetLayout(gbuffer_descriptor_layout);
-    pipeline_builder.Build(context, tone_map_pipeline);
+    pipeline_builder.Build(vulkan_context, tone_map_pipeline);
   }
 
   {
     ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(context, "ambient_occlusion.comp.spv");
+    pipeline_builder.SetShader(vulkan_context, "ambient_occlusion.comp.spv");
     pipeline_builder.AddDescriptorSetLayout(gbuffer_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
-    pipeline_builder.Build(context, ambient_occlusion_pipeline);
+    pipeline_builder.Build(vulkan_context, ambient_occlusion_pipeline);
   }
 
   {
     ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(context, "upscale_ambient_occlusion.comp.spv");
+    pipeline_builder.SetShader(vulkan_context,
+                               "upscale_ambient_occlusion.comp.spv");
     pipeline_builder.AddDescriptorSetLayout(gbuffer_descriptor_layout);
-    pipeline_builder.Build(context, upscale_ao_pipeline);
+    pipeline_builder.Build(vulkan_context, upscale_ao_pipeline);
   }
 
   std::thread([this]() {
@@ -678,8 +664,8 @@ void Engine::Init() {
 
     for (auto &mesh : gltf_data) {
       scene_manager.AddObject(
-          context, mesh,
-          texture_manager.UploadMaterial(context, descriptor_builder,
+          vulkan_context, mesh,
+          texture_manager.UploadMaterial(vulkan_context, descriptor_builder,
                                          mesh.material_data));
     }
 
@@ -692,12 +678,12 @@ void Engine::Init() {
       descriptor_builder.BindStorageImage(2, mr_normal_image.image_view);
       descriptor_builder.BindStorageImage(3, depth_image.image_view);
       descriptor_builder.Build(
-          context,
+          vulkan_context,
           VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
           ray_tracing_descriptor_set, ray_tracing_descriptor_layout);
 
       RaytracingPipelineBuilder pipeline_builder{};
-      pipeline_builder.SetShaders(context, "reflections.rgen.spv",
+      pipeline_builder.SetShaders(vulkan_context, "reflections.rgen.spv",
                                   "reflections.rmiss.spv",
                                   "reflections.rchit.spv");
       pipeline_builder.AddDescriptorSetLayout(ray_tracing_descriptor_layout);
@@ -711,9 +697,10 @@ void Engine::Init() {
       pipeline_builder.AddDescriptorSetLayout(
           light_manager.shadow_descriptor_layout);
       const uint8_t max_recursion = 1;
-      pipeline_builder.Build(context, max_recursion, ray_tracing_pipeline);
+      pipeline_builder.Build(vulkan_context, max_recursion,
+      ray_tracing_pipeline);
 
-      CreateShaderBindingTable(context, ray_tracing_pipeline,
+      CreateShaderBindingTable(vulkan_context, ray_tracing_pipeline,
                                pipeline_builder.shader_groups,
                                shader_binding_table);
       */
@@ -736,13 +723,14 @@ void Engine::Run() {
       should_close = true;
     }
 
-    UpdateUi(window, &directional_light);
+    bool ui_layer_used = UpdateUi(window, &directional_light);
 
-    light_manager.UpdateDirectionalLight(context, directional_light, 0,
+    light_manager.UpdateDirectionalLight(vulkan_context, directional_light, 0,
                                          immediate_submit);
 
-    camera.Update(context, immediate_submit, window, delta_time);
-    light_manager.UpdateMatrices(context, immediate_submit, camera.position);
+    camera.Update(vulkan_context, immediate_submit, window, delta_time);
+    light_manager.UpdateMatrices(vulkan_context, immediate_submit,
+                                 camera.position);
 
     if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
       fmt::println("{}", glm::to_string(camera.position));
@@ -760,9 +748,26 @@ void Engine::Run() {
       }
     }
 
-    render_graph.Render(context);
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS &&
+        !ui_layer_used) {
+      RayCastQuery ray_query{};
+      ray_query.direction = glm::vec3(0.0f, 1.0f, 0.0f);
+      ray_query.position = glm::vec3(0.0f, 0.0f, 0.0f);
+      ray_query.tmax = 1000.0f;
+      PhysicsQueueRayCast(vulkan_context, immediate_submit, physics_context,
+                          &ray_query);
+    }
+
+    std::thread([this]() {
+      ImmediateSubmit::SubmitAsync(vulkan_context, [this](VkCommandBuffer cmd) {
+        PhysicsCastRays(cmd, vulkan_context, physics_context,
+                        scene_manager.as_descriptor_set);
+      });
+    }).detach();
+
+    render_graph.Render(vulkan_context);
     if (render_graph.resize_requested == true) {
-      render_graph.Resize(context, window);
+      render_graph.Resize(vulkan_context, window);
     }
 
     delta_time = timer.Elapsed();
@@ -772,58 +777,54 @@ void Engine::Run() {
 }
 
 void Engine::Destroy() {
-  vkDeviceWaitIdle(context.device);
+  vkDeviceWaitIdle(vulkan_context.device);
 
-  render_graph.Destroy(context);
-  light_manager.Destroy(context);
-  texture_manager.Destroy(context);
-  descriptor_builder.Destroy(context);
-  scene_manager.Destroy(context);
-  immediate_submit.Destroy(context);
-  camera.Destroy(context);
-  scene_svo.Destroy(context);
+  render_graph.Destroy(vulkan_context);
+  light_manager.Destroy(vulkan_context);
+  texture_manager.Destroy(vulkan_context);
+  descriptor_builder.Destroy(vulkan_context);
+  scene_manager.Destroy(vulkan_context);
+  immediate_submit.Destroy(vulkan_context);
+  camera.Destroy(vulkan_context);
+  scene_svo.Destroy(vulkan_context);
 
+  DestroyPhysicsContext(vulkan_context, physics_context);
   DestroyUiContext();
 
-  vkDestroyDescriptorSetLayout(context.device, main_descriptor_layout, nullptr);
-  vkDestroyDescriptorSetLayout(context.device, cull_descriptor_layout, nullptr);
-
-  vkDestroyDescriptorSetLayout(context.device, shadow_descriptor_layout,
+  vkDestroyDescriptorSetLayout(vulkan_context.device, cull_descriptor_layout,
                                nullptr);
-  vkDestroyDescriptorSetLayout(context.device, shadow_cull_descriptor_layout,
+  vkDestroyDescriptorSetLayout(vulkan_context.device, gbuffer_descriptor_layout,
                                nullptr);
-  vkDestroyDescriptorSetLayout(context.device, ray_tracing_descriptor_layout,
-                               nullptr);
-  vkDestroyDescriptorSetLayout(context.device, gbuffer_descriptor_layout,
-                               nullptr);
+  vkDestroyDescriptorSetLayout(vulkan_context.device,
+                               shadow_cull_descriptor_layout, nullptr);
+  vkDestroyDescriptorSetLayout(vulkan_context.device,
+                               ray_tracing_descriptor_layout, nullptr);
 
-  DestroyImageSampler(context, sampler);
+  DestroyImageSampler(vulkan_context, sampler);
 
-  DestroyShaderBindingTable(context, shader_binding_table);
+  DestroyShaderBindingTable(vulkan_context, shader_binding_table);
 
-  DestroyBuffer(context, draw_indirect_buffer);
-  DestroyBuffer(context, culled_draw_count_buffer);
-  DestroyBuffer(context, visible_instance_buffer);
-  DestroyBuffer(context, shadow_culled_draw_count_buffer);
-  DestroyBuffer(context, shadow_draw_indirect_buffer);
-  DestroyBuffer(context, shadow_visible_instance_buffer);
+  DestroyBuffer(vulkan_context, draw_indirect_buffer);
+  DestroyBuffer(vulkan_context, culled_draw_count_buffer);
+  DestroyBuffer(vulkan_context, shadow_culled_draw_count_buffer);
+  DestroyBuffer(vulkan_context, shadow_draw_indirect_buffer);
 
-  DestroyAllocatedImage(context, depth_image);
-  DestroyAllocatedImage(context, main_image);
-  DestroyAllocatedImage(context, mr_normal_image);
-  DestroyAllocatedImage(context, ao_image);
+  DestroyAllocatedImage(vulkan_context, depth_image);
+  DestroyAllocatedImage(vulkan_context, main_image);
+  DestroyAllocatedImage(vulkan_context, mr_normal_image);
+  DestroyAllocatedImage(vulkan_context, ao_image);
 
-  DestroyPipeline(context, main_pipeline);
-  DestroyPipeline(context, shadow_pipeline);
-  DestroyPipeline(context, cull_pipeline);
-  DestroyPipeline(context, shadow_cull_pipeline);
-  DestroyPipeline(context, ray_tracing_pipeline);
-  DestroyPipeline(context, tone_map_pipeline);
-  DestroyPipeline(context, ambient_occlusion_pipeline);
-  DestroyPipeline(context, upscale_ao_pipeline);
-  DestroyPipeline(context, depth_pipeline);
+  DestroyPipeline(vulkan_context, main_pipeline);
+  DestroyPipeline(vulkan_context, shadow_pipeline);
+  DestroyPipeline(vulkan_context, cull_pipeline);
+  DestroyPipeline(vulkan_context, shadow_cull_pipeline);
+  DestroyPipeline(vulkan_context, ray_tracing_pipeline);
+  DestroyPipeline(vulkan_context, tone_map_pipeline);
+  DestroyPipeline(vulkan_context, ambient_occlusion_pipeline);
+  DestroyPipeline(vulkan_context, upscale_ao_pipeline);
+  DestroyPipeline(vulkan_context, depth_pipeline);
 
-  DestroyVulkanContext(context);
+  DestroyVulkanContext(vulkan_context);
 
   glfwDestroyWindow(window);
   glfwTerminate();

@@ -11,12 +11,14 @@
 #include "Managers/light_manager.h"
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
+#include "Physics/context.h"
 #include "camera.h"
 #include "render_graph.h"
 #include "scene_svo.h"
 
 struct Engine {
-  VulkanContext context;
+  VulkanContext vulkan_context;
+  PhysicsContext physics_context;
 
   LightManager light_manager;
   SceneManager scene_manager;
@@ -39,11 +41,9 @@ struct Engine {
 
   AllocatedBuffer culled_draw_count_buffer;
   AllocatedBuffer draw_indirect_buffer;
-  AllocatedBuffer visible_instance_buffer;
 
   AllocatedBuffer shadow_culled_draw_count_buffer;
   AllocatedBuffer shadow_draw_indirect_buffer;
-  AllocatedBuffer shadow_visible_instance_buffer;
 
   Pipeline main_pipeline;
   Pipeline shadow_pipeline;
@@ -55,9 +55,6 @@ struct Engine {
   Pipeline upscale_ao_pipeline;
   Pipeline depth_pipeline;
 
-  VkDescriptorSet main_descriptor_set;
-  VkDescriptorSetLayout main_descriptor_layout;
-
   VkDescriptorSet gbuffer_descriptor_set;
   VkDescriptorSetLayout gbuffer_descriptor_layout;
 
@@ -66,9 +63,6 @@ struct Engine {
 
   VkDescriptorSet cull_descriptor_set;
   VkDescriptorSetLayout cull_descriptor_layout;
-
-  VkDescriptorSet shadow_descriptor_set;
-  VkDescriptorSetLayout shadow_descriptor_layout;
 
   VkDescriptorSet shadow_cull_descriptor_set;
   VkDescriptorSetLayout shadow_cull_descriptor_layout;

@@ -5,19 +5,15 @@
 #extension GL_EXT_buffer_reference2 : require
 #include "common.glsl"
 
-layout(set = 0, binding = 0) readonly buffer VisibileInstances {
-    uint visibleInstances[];
-};
-
-layout(set = 2, binding = 0) uniform CameraUBO {
+layout(set = 1, binding = 0) uniform CameraUBO {
     Camera camera;
 };
 
-layout(set = 3, binding = 1) readonly buffer MeshBuffer {
+layout(set = 2, binding = 1) readonly buffer MeshBuffer {
     GpuMesh gpuMeshes[];
 };
 
-layout(set = 4, binding = 0) readonly buffer InstanceBuffer {
+layout(set = 3, binding = 0) readonly buffer InstanceBuffer {
     Instance instances[];
 };
 
@@ -27,7 +23,7 @@ layout(location = 2) out vec2 uv;
 layout(location = 3) flat out uint objectIndex;
 
 void main() {
-    Instance instance = instances[visibleInstances[gl_InstanceIndex]];
+    Instance instance = instances[gl_InstanceIndex];
     objectIndex = GetObjectIndex(instance);
     mat4 instanceMatrix = GetInstanceMatrix(instance);
     Vertex vertex = gpuMeshes[objectIndex].vertexBuffer.vertices[gl_VertexIndex];

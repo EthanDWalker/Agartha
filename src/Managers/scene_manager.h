@@ -61,6 +61,9 @@ struct SceneManager {
   VkDescriptorSet instance_descriptor_set;
   VkDescriptorSetLayout instance_descriptor_layout;
 
+  VkDescriptorSet as_descriptor_set;
+  VkDescriptorSetLayout as_descriptor_layout;
+
   std::mutex object_mutex;
   std::mutex instance_mutex;
 

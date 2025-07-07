@@ -8,7 +8,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 
-void UpdateUi(GLFWwindow *window, glm::vec3 *directional_light) {
+bool UpdateUi(GLFWwindow *window, glm::vec3 *directional_light) {
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplGlfw_NewFrame();
 
@@ -18,6 +18,7 @@ void UpdateUi(GLFWwindow *window, glm::vec3 *directional_light) {
   }
   ImGui::End();
   ImGui::EndFrame();
+  return ImGui::GetIO().WantCaptureMouse;
 }
 
 void RenderUi(VkCommandBuffer cmd, AllocatedImage &draw_image) {

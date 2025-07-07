@@ -44,7 +44,10 @@ void SceneManager::Init(VulkanContext &context,
           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
       VMA_MEMORY_USAGE_GPU_ONLY, index_buffer);
 
-  descriptor_builder.Reset();
+  CreateTopLevelAS(context, 0, 0,
+                   VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR,
+                   top_level_as);
+
   descriptor_builder.BindStorageBuffer(0, object_buffer.buffer);
   descriptor_builder.BindStorageBuffer(1, mesh_buffer.buffer);
   descriptor_builder.BindStorageBuffer(2, sphere_bounds_buffer.buffer);
@@ -52,10 +55,13 @@ void SceneManager::Init(VulkanContext &context,
   descriptor_builder.Build(context, VK_SHADER_STAGE_ALL, object_descriptor_set,
                            object_descriptor_layout);
 
-  descriptor_builder.Reset();
   descriptor_builder.BindStorageBuffer(0, instance_buffer.buffer);
   descriptor_builder.Build(context, VK_SHADER_STAGE_ALL,
                            instance_descriptor_set, instance_descriptor_layout);
+
+  descriptor_builder.BindAccelerationStructure(0, top_level_as.obj);
+  descriptor_builder.Build(context, VK_SHADER_STAGE_ALL, as_descriptor_set,
+                           as_descriptor_layout);
 }
 
 std::vector<uint32_t>
@@ -278,6 +284,22 @@ uint32_t SceneManager::AddInstance(VulkanContext &context, Instance &instance) {
       context, GetDeviceAddress(context, instance_buffer.buffer), index,
       VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, top_level_as);
 
+  VkWriteDescriptorSetAccelerationStructureKHR as_info{};
+  as_info.sType =
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+  as_info.accelerationStructureCount = 1;
+  as_info.pAccelerationStructures = &top_level_as.obj;
+
+  VkWriteDescriptorSet write{};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.descriptorCount = 1;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+  write.dstBinding = 0;
+  write.dstSet = as_descriptor_set;
+  write.pNext = &as_info;
+
+  vkUpdateDescriptorSets(context.device, 1, &write, 0, nullptr);
+
   {
     std::lock_guard<std::mutex> lock(instance_mutex);
     if (removed_instances.empty()) {
@@ -333,6 +355,7 @@ void SceneManager::Destroy(VulkanContext &context) {
 
   vkDestroyDescriptorSetLayout(context.device, object_descriptor_layout,
                                nullptr);
+  vkDestroyDescriptorSetLayout(context.device, as_descriptor_layout, nullptr);
   vkDestroyDescriptorSetLayout(context.device, instance_descriptor_layout,
                                nullptr);
 }
