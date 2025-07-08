@@ -260,8 +260,7 @@ void SceneSvo::DrawDebugView(VkCommandBuffer cmd, Camera &camera,
       3);
 
   TransitionImage(cmd, {}, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, {},
-                  VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                  VK_IMAGE_LAYOUT_UNDEFINED,
+                  VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, {},
                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, draw_image.image);
 
   VkViewport viewport = vkinit::Viewport(draw_image.extent);

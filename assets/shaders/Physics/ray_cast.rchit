@@ -9,4 +9,6 @@ struct Payload {
 
 layout(location = 0) rayPayloadInEXT Payload payload;
 
-void main() {}
+void main() {
+  payload.outInstanceIndex = gl_InstanceID + 1;
+}

@@ -5,17 +5,16 @@
 #include "Backend/immediate_submit.h"
 #include "Backend/pipeline.h"
 #include "Backend/util.h"
-#include "fmt/base.h"
 
 void InitPhysicsContext(VulkanContext &vulkan_context,
                         DescriptorBuilder &descriptor_builder,
                         VkDescriptorSetLayout as_descriptor_layout,
                         PhysicsContext &context) {
-  CreateBuffer(vulkan_context, sizeof(RayCastQuery) * MAX_RAY_CASTS,
+  CreateBuffer(vulkan_context, sizeof(RayCastQuery) * PHYSICS_MAX_RAY_CASTS,
                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                VMA_MEMORY_USAGE_GPU_ONLY, context.ray_cast_query_buffer);
-  CreateBuffer(vulkan_context, sizeof(RayCastResult) * MAX_RAY_CASTS,
+  CreateBuffer(vulkan_context, sizeof(RayCastResult) * PHYSICS_MAX_RAY_CASTS,
                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
                context.ray_cast_result_buffer);
 

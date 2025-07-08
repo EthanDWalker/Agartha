@@ -14,14 +14,13 @@
 #include "Physics/context.h"
 #include "UI/context.h"
 #include "UI/render.h"
-#include "fmt/format.h"
 #include "render_graph.h"
 #include "timer.h"
 #include <GLFW/glfw3.h>
 #include <array>
 #include <cstdint>
-#include <cstring>
 #include <fmt/base.h>
+#include <fmt/format.h>
 #include <vector>
 #include <volk.h>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -35,39 +34,54 @@ void Engine::CreateRenderGraph() {
     builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
       if (scene_manager.instance_index == 0)
         return;
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cull_pipeline.obj);
 
-      std::array<VkDescriptorSet, 4> ds = {
-          cull_descriptor_set,
+      std::array<VkDescriptorSet, 3> ds = {
           camera.descriptor_set,
           scene_manager.instance_descriptor_set,
           scene_manager.object_descriptor_set,
       };
 
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                              cull_pipeline.layout, 0, ds.size(), ds.data(), 0,
-                              nullptr);
-
-      vkCmdDispatch(cmd, std::ceil(scene_manager.instance_index / 64.0f), 1, 1);
+      main_draw_command.BuildDraw(
+          cmd, ds.data(), ds.size(),
+          {
+              static_cast<uint32_t>(
+                  std::ceil(scene_manager.instance_index / 64.0f)),
+              1,
+              1,
+          });
     });
 
     builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
       if (scene_manager.instance_index == 0)
         return;
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                        shadow_cull_pipeline.obj);
-
-      std::array<VkDescriptorSet, 3> ds = {
-          shadow_cull_descriptor_set,
+      std::array<VkDescriptorSet, 2> ds = {
           scene_manager.instance_descriptor_set,
           scene_manager.object_descriptor_set,
       };
 
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                              shadow_cull_pipeline.layout, 0, ds.size(),
-                              ds.data(), 0, nullptr);
+      shadow_draw_command.BuildDraw(
+          cmd, ds.data(), ds.size(),
+          {
+              static_cast<uint32_t>(
+                  std::ceil(scene_manager.instance_index / 64.0f)),
+              1,
+              1,
+          });
+    });
 
-      vkCmdDispatch(cmd, std::ceil(scene_manager.instance_index / 64.0f), 1, 1);
+    builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
+      std::array<VkDescriptorSet, 3> ds = {
+          physics_context.ray_cast_descriptor_set,
+          scene_manager.instance_descriptor_set,
+          scene_manager.object_descriptor_set,
+      };
+
+      outline_draw_command.BuildDraw(cmd, ds.data(), ds.size(),
+                                     {
+                                         2,
+                                         1,
+                                         1,
+                                     });
     });
 
     builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
@@ -83,24 +97,7 @@ void Engine::CreateRenderGraph() {
         VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, true);
 
-    depth_pass_dep.AddBufferDependency(
-        culled_draw_count_buffer, VK_ACCESS_2_SHADER_WRITE_BIT,
-        VK_ACCESS_2_HOST_READ_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_2_HOST_BIT);
-
-    depth_pass_dep.AddBufferDependency(
-        draw_indirect_buffer, VK_ACCESS_2_SHADER_WRITE_BIT,
-        VK_ACCESS_2_SHADER_READ_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT);
-
     builder.AddPass(1, depth_pass_dep.dependency, [&](VkCommandBuffer cmd) {
-      uint32_t draw_count = 0;
-      memcpy(&draw_count, culled_draw_count_buffer.info.pMappedData,
-             sizeof(uint32_t));
-      if (draw_count > scene_manager.instance_index || draw_count == 0) {
-        return;
-      }
-
       VkViewport viewport = vkinit::Viewport(depth_image.extent);
       vkCmdSetViewport(cmd, 0, 1, &viewport);
       VkRect2D scissor = vkinit::Scissor(depth_image.extent);
@@ -118,8 +115,7 @@ void Engine::CreateRenderGraph() {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         depth_pipeline.obj);
 
-      std::array<VkDescriptorSet, 4> ds = {
-          cull_descriptor_set,
+      std::array<VkDescriptorSet, 3> ds = {
           scene_manager.instance_descriptor_set,
           scene_manager.object_descriptor_set,
           camera.descriptor_set,
@@ -132,9 +128,7 @@ void Engine::CreateRenderGraph() {
       vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
                            VK_INDEX_TYPE_UINT32);
 
-      vkCmdDrawIndexedIndirect(
-          cmd, draw_indirect_buffer.buffer, 0, draw_count,
-          static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
+      main_draw_command.Draw(cmd);
 
       vkCmdEndRendering(cmd);
     });
@@ -142,14 +136,6 @@ void Engine::CreateRenderGraph() {
 
   {
     builder.AddPass(1, {}, [&](VkCommandBuffer cmd) {
-      uint32_t draw_count = 0;
-
-      memcpy(&draw_count, shadow_culled_draw_count_buffer.info.pMappedData,
-             sizeof(uint32_t));
-
-      if (draw_count > scene_manager.instance_index || draw_count == 0)
-        return;
-
       VkViewport viewport = vkinit::Viewport(SHADOW_IMAGE_EXTENT);
       vkCmdSetViewport(cmd, 0, 1, &viewport);
       VkRect2D scissor = vkinit::Scissor(SHADOW_IMAGE_EXTENT);
@@ -191,9 +177,7 @@ void Engine::CreateRenderGraph() {
         vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
                              VK_INDEX_TYPE_UINT32);
 
-        vkCmdDrawIndexedIndirect(
-            cmd, shadow_draw_indirect_buffer.buffer, 0, draw_count,
-            static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
+        shadow_draw_command.Draw(cmd);
 
         vkCmdEndRendering(cmd);
 
@@ -267,15 +251,6 @@ void Engine::CreateRenderGraph() {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           main_pipeline.obj);
 
-        uint32_t draw_count = 0;
-        memcpy(&draw_count, culled_draw_count_buffer.info.pMappedData,
-               sizeof(uint32_t));
-
-        if (draw_count > scene_manager.instance_index) {
-          vkCmdEndRendering(cmd);
-          return;
-        }
-
         std::array<VkDescriptorSet, 7> ds = {
             texture_manager.descriptor_set,
             camera.descriptor_set,
@@ -293,9 +268,7 @@ void Engine::CreateRenderGraph() {
         vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
                              VK_INDEX_TYPE_UINT32);
 
-        vkCmdDrawIndexedIndirect(
-            cmd, draw_indirect_buffer.buffer, 0, draw_count,
-            static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
+        main_draw_command.Draw(cmd);
       }
       vkCmdEndRendering(cmd);
     });
@@ -390,30 +363,57 @@ void Engine::CreateRenderGraph() {
                     std::ceil(main_image.extent.height / 16.0f), 1);
     });
 
-    builder.AddPass(5, {}, [&](VkCommandBuffer cmd) {
-      if (!voxel_gi_debug)
-        return;
-      scene_svo.DrawDebugView(cmd, camera, main_image, depth_image,
-                              voxel_debug_mip_level);
-
-      TransitionImage(cmd, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                      VK_ACCESS_2_SHADER_READ_BIT,
-                      VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                      VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                      VK_IMAGE_LAYOUT_GENERAL, main_image.image);
-    });
-  }
-
-  {
-    DependencyBuilder ui_pass_dep{};
-    ui_pass_dep.AddImageDependency(
+    DependencyBuilder outline_pass_dep{};
+    outline_pass_dep.AddImageDependency(
         main_image, VK_ACCESS_2_SHADER_READ_BIT,
         VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
         VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
+    builder.AddPass(5, outline_pass_dep.dependency, [&](VkCommandBuffer cmd) {
+      VkViewport viewport = vkinit::Viewport(main_image.extent);
+      vkCmdSetViewport(cmd, 0, 1, &viewport);
+      VkRect2D scissor = vkinit::Scissor(main_image.extent);
+      vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+      VkRenderingAttachmentInfo color_att =
+          vkinit::AttachmentInfo(main_image.image_view, nullptr, nullptr,
+                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+      std::array<VkRenderingAttachmentInfo, 1> attachments = {
+          color_att,
+      };
+
+      VkRenderingInfo rendering_info =
+          vkinit::RenderingInfo(main_image.extent, attachments, nullptr);
+
+      vkCmdBeginRendering(cmd, &rendering_info);
+
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        outline_pipeline.obj);
+
+      std::array<VkDescriptorSet, 4> ds = {
+          camera.descriptor_set,
+          scene_manager.object_descriptor_set,
+          scene_manager.instance_descriptor_set,
+          physics_context.ray_cast_descriptor_set,
+      };
+
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              outline_pipeline.layout, 0, ds.size(), ds.data(),
+                              0, nullptr);
+
+      vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0,
+                           VK_INDEX_TYPE_UINT32);
+
+      outline_draw_command.Draw(cmd);
+
+      vkCmdEndRendering(cmd);
+    });
+  }
+
+  {
+    DependencyBuilder ui_pass_dep{};
     ui_pass_dep.AddImageDependency(
         depth_image, VK_ACCESS_2_SHADER_READ_BIT,
         VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
@@ -514,23 +514,40 @@ void Engine::Init() {
                        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                        ao_image);
 
-  CreateBuffer(vulkan_context, sizeof(uint32_t),
-               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO,
-               culled_draw_count_buffer);
+  {
+    std::array<VkDescriptorSetLayout, 3> ds = {
+        camera.descriptor_layout,
+        scene_manager.instance_descriptor_layout,
+        scene_manager.object_descriptor_layout,
+    };
 
-  CreateBuffer(
-      vulkan_context, sizeof(VkDrawIndexedIndirectCommand) * SCENE_MAX_OBJECTS,
-      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-      VMA_MEMORY_USAGE_GPU_ONLY, draw_indirect_buffer);
+    main_draw_command.Init(vulkan_context, descriptor_builder,
+                           "frustum_cull.comp.spv", SCENE_MAX_OBJECTS,
+                           ds.data(), ds.size());
+  }
 
-  CreateBuffer(vulkan_context, sizeof(uint32_t),
-               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO,
-               shadow_culled_draw_count_buffer);
+  {
+    std::array<VkDescriptorSetLayout, 2> ds = {
+        scene_manager.instance_descriptor_layout,
+        scene_manager.object_descriptor_layout,
+    };
 
-  CreateBuffer(
-      vulkan_context, sizeof(VkDrawIndexedIndirectCommand) * SCENE_MAX_OBJECTS,
-      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-      VMA_MEMORY_USAGE_GPU_ONLY, shadow_draw_indirect_buffer);
+    shadow_draw_command.Init(vulkan_context, descriptor_builder,
+                             "shadow_cull.comp.spv", SCENE_MAX_OBJECTS,
+                             ds.data(), ds.size());
+  }
+
+  {
+    std::array<VkDescriptorSetLayout, 3> ds = {
+        physics_context.ray_cast_descriptor_layout,
+        scene_manager.instance_descriptor_layout,
+        scene_manager.object_descriptor_layout,
+    };
+
+    outline_draw_command.Init(vulkan_context, descriptor_builder,
+                              "Debug/outline.comp.spv", PHYSICS_MAX_RAY_CASTS,
+                              ds.data(), ds.size());
+  }
 
   CreateImageSampler(vulkan_context, sampler);
 
@@ -557,7 +574,7 @@ void Engine::Init() {
   }
 
   {
-    GraphicsPipelineBuilder pipeline_builder;
+    GraphicsPipelineBuilder pipeline_builder{};
     pipeline_builder.SetShaders(vulkan_context, "shadow.vert.spv",
                                 "none.frag.spv");
     pipeline_builder.Default();
@@ -577,21 +594,21 @@ void Engine::Init() {
   }
 
   {
-    descriptor_builder.BindStorageBuffer(0, draw_indirect_buffer.buffer);
-    descriptor_builder.BindStorageBuffer(1, culled_draw_count_buffer.buffer);
-    descriptor_builder.Build(vulkan_context,
-                             VK_SHADER_STAGE_COMPUTE_BIT |
-                                 VK_SHADER_STAGE_VERTEX_BIT,
-                             cull_descriptor_set, cull_descriptor_layout);
-    ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(vulkan_context, "frustum_cull.comp.spv");
-    pipeline_builder.AddDescriptorSetLayout(cull_descriptor_layout);
+    GraphicsPipelineBuilder pipeline_builder{};
+    pipeline_builder.SetShaders(vulkan_context, "Debug/outline.vert.spv",
+                                "Debug/outline.frag.spv");
+    pipeline_builder.Default();
+    pipeline_builder.SetNoDepthTest();
+    pipeline_builder.SetPolygonMode(VK_POLYGON_MODE_LINE);
+    pipeline_builder.AddColorAttachment(main_image.format);
     pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(
+        scene_manager.object_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
-        scene_manager.object_descriptor_layout);
-    pipeline_builder.Build(vulkan_context, cull_pipeline);
+        physics_context.ray_cast_descriptor_layout);
+    pipeline_builder.Build(vulkan_context, outline_pipeline);
   }
 
   {
@@ -599,30 +616,12 @@ void Engine::Init() {
     pipeline_builder.SetShaders(vulkan_context, "depth_pass.vert.spv",
                                 "none.frag.spv");
     pipeline_builder.Default();
-    pipeline_builder.AddDescriptorSetLayout(cull_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.object_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
     pipeline_builder.Build(vulkan_context, depth_pipeline);
-  }
-
-  {
-    descriptor_builder.BindStorageBuffer(0, shadow_draw_indirect_buffer.buffer);
-    descriptor_builder.BindStorageBuffer(
-        1, shadow_culled_draw_count_buffer.buffer);
-    descriptor_builder.Build(vulkan_context, VK_SHADER_STAGE_COMPUTE_BIT,
-                             shadow_cull_descriptor_set,
-                             shadow_cull_descriptor_layout);
-    ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(vulkan_context, "shadow_cull.comp.spv");
-    pipeline_builder.AddDescriptorSetLayout(shadow_cull_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(
-        scene_manager.instance_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(
-        scene_manager.object_descriptor_layout);
-    pipeline_builder.Build(vulkan_context, shadow_cull_pipeline);
   }
 
   {
@@ -732,16 +731,6 @@ void Engine::Run() {
     light_manager.UpdateMatrices(vulkan_context, immediate_submit,
                                  camera.position);
 
-    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
-      fmt::println("{}", glm::to_string(camera.position));
-    }
-
-    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
-      voxel_gi_debug = true;
-    } else {
-      voxel_gi_debug = false;
-    }
-
     for (uint32_t i = 0; i < scene_svo.radiance_image_views.size(); i++) {
       if (glfwGetKey(window, GLFW_KEY_0 + i)) {
         voxel_debug_mip_level = i;
@@ -750,9 +739,28 @@ void Engine::Run() {
 
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS &&
         !ui_layer_used) {
+
+      double xpos, ypos;
+      glfwGetCursorPos(window, &xpos, &ypos);
+
+      int32_t width, height;
+      glfwGetWindowSize(window, &width, &height);
+
+      glm::vec2 pixel_center =
+          glm::vec2((float)xpos, (float)ypos) + glm::vec2(0.5f);
+      glm::vec2 ndc =
+          (pixel_center / glm::vec2((float)width, (float)height)) * 2.0f - 1.0f;
+
+      glm::vec4 view =
+          camera.buffer_data.inv_proj * glm::vec4(ndc.x, ndc.y, 1, 1);
+
+      glm::vec4 direction = camera.buffer_data.inv_view *
+                            glm::vec4(glm::normalize(glm::vec3(view)), 0);
+
       RayCastQuery ray_query{};
-      ray_query.direction = glm::vec3(0.0f, 1.0f, 0.0f);
-      ray_query.position = glm::vec3(0.0f, 0.0f, 0.0f);
+      ray_query.direction = glm::vec3(direction);
+      ray_query.position = camera.position;
+      ray_query.tmin = 0.1f;
       ray_query.tmax = 1000.0f;
       PhysicsQueueRayCast(vulkan_context, immediate_submit, physics_context,
                           &ray_query);
@@ -791,23 +799,18 @@ void Engine::Destroy() {
   DestroyPhysicsContext(vulkan_context, physics_context);
   DestroyUiContext();
 
-  vkDestroyDescriptorSetLayout(vulkan_context.device, cull_descriptor_layout,
-                               nullptr);
+  main_draw_command.Destroy(vulkan_context);
+  shadow_draw_command.Destroy(vulkan_context);
+  outline_draw_command.Destroy(vulkan_context);
+
   vkDestroyDescriptorSetLayout(vulkan_context.device, gbuffer_descriptor_layout,
                                nullptr);
-  vkDestroyDescriptorSetLayout(vulkan_context.device,
-                               shadow_cull_descriptor_layout, nullptr);
   vkDestroyDescriptorSetLayout(vulkan_context.device,
                                ray_tracing_descriptor_layout, nullptr);
 
   DestroyImageSampler(vulkan_context, sampler);
 
   DestroyShaderBindingTable(vulkan_context, shader_binding_table);
-
-  DestroyBuffer(vulkan_context, draw_indirect_buffer);
-  DestroyBuffer(vulkan_context, culled_draw_count_buffer);
-  DestroyBuffer(vulkan_context, shadow_culled_draw_count_buffer);
-  DestroyBuffer(vulkan_context, shadow_draw_indirect_buffer);
 
   DestroyAllocatedImage(vulkan_context, depth_image);
   DestroyAllocatedImage(vulkan_context, main_image);
@@ -823,6 +826,7 @@ void Engine::Destroy() {
   DestroyPipeline(vulkan_context, ambient_occlusion_pipeline);
   DestroyPipeline(vulkan_context, upscale_ao_pipeline);
   DestroyPipeline(vulkan_context, depth_pipeline);
+  DestroyPipeline(vulkan_context, outline_pipeline);
 
   DestroyVulkanContext(vulkan_context);
 

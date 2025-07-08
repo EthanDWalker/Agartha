@@ -28,9 +28,12 @@ layout(set = 1, binding = 1) writeonly buffer RayCastResultBuffer {
 
 void main() {
     RayCastQuery query = queries[gl_LaunchIDEXT.x];
+
     traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0,
         query.position,
         query.tmin,
         query.direction,
         query.tmax, 0);
+
+    results[gl_LaunchIDEXT.x] = payload.inInstanceIndex;
 }

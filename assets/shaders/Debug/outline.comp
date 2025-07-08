@@ -1,0 +1,54 @@
+#version 450
+layout(local_size_x = 64) in;
+
+#extension GL_GOOGLE_include_directive : require
+#include "../common.glsl"
+
+layout(set = 0, binding = 0) buffer DrawCommands {
+    DrawIndexedIndirectCommand drawCommands[];
+};
+
+layout(set = 0, binding = 1) buffer DrawCount {
+    uint drawCount;
+};
+
+layout(set = 1, binding = 1) readonly buffer RayCastQueryResults {
+    uint results[];
+};
+
+layout(set = 2, binding = 0) readonly buffer InstanceBuffer {
+    Instance instances[];
+};
+
+layout(set = 3, binding = 1) readonly buffer GpuMeshes {
+    GpuMesh gpuMeshes[];
+};
+
+void main() {
+    if (gl_GlobalInvocationID.x == 0) {
+        drawCount = 0;
+    }
+
+    barrier();
+
+    if (gl_GlobalInvocationID.x != 0) return;
+
+    uint instanceIndexPlusOne = results[0];
+
+    if (results[0] == 0) return;
+
+    uint instanceIndex = instanceIndexPlusOne - 1;
+
+    uint drawIndex = atomicAdd(drawCount, 1);
+
+    uint objectId = GetObjectIndex(instances[instanceIndex]);
+
+    DrawIndexedIndirectCommand command;
+    command.indexCount = gpuMeshes[objectId].indexCount;
+    command.instanceCount = 1;
+    command.firstIndex = gpuMeshes[objectId].firstIndex;
+    command.vertexOffset = 0;
+    command.firstInstance = instanceIndex;
+
+    drawCommands[drawIndex] = command;
+}

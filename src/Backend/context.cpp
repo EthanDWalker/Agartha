@@ -37,7 +37,7 @@ void InitVulkanContext(GLFWwindow *window, VulkanContext &context) {
   features.geometryShader = true;
   features.multiDrawIndirect = true;
   features.fragmentStoresAndAtomics = true;
-  features.shaderFloat64 = true;
+  features.fillModeNonSolid = true;
 
   VkPhysicalDeviceVulkan13Features features_13{};
   features_13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;

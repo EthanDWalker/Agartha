@@ -7,7 +7,7 @@
 #include "Backend/pipeline.h"
 #include <glm/vec3.hpp>
 
-const uint32_t MAX_RAY_CASTS = 16;
+const uint32_t PHYSICS_MAX_RAY_CASTS = 16;
 
 struct RayCastResult {
   uint32_t instance_index;
