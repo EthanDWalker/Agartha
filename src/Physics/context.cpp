@@ -15,7 +15,7 @@ void InitPhysicsContext(VulkanContext &vulkan_context,
                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                VMA_MEMORY_USAGE_GPU_ONLY, context.ray_cast_query_buffer);
   CreateBuffer(vulkan_context, sizeof(RayCastResult) * PHYSICS_MAX_RAY_CASTS,
-               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
+               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO,
                context.ray_cast_result_buffer);
 
   {

@@ -75,13 +75,14 @@ void InitVulkanContext(GLFWwindow *window, VulkanContext &context) {
   raytracing_features.rayTracingPipeline = true;
 
   vkb::PhysicalDeviceSelector physical_device_selector{vkb_instance};
+  
   vkb::PhysicalDevice vkb_physical_device =
       physical_device_selector.set_minimum_version(1, 3)
           .set_required_features_13(features_13)
           .set_required_features_12(features_12)
           .set_required_features(features)
           .set_surface(context.surface)
-          .add_required_extension("VK_EXT_robustness2")
+          .add_required_extension(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME)
           .add_required_extension_features(robustness2)
           .add_required_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
           .add_required_extension_features(as_features)

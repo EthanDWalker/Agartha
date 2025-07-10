@@ -1,5 +1,5 @@
 #version 450
-layout(local_size_x = 64) in;
+layout(local_size_x = 1) in;
 
 #extension GL_GOOGLE_include_directive : require
 #include "../common.glsl"
@@ -33,11 +33,9 @@ void main() {
 
     if (gl_GlobalInvocationID.x != 0) return;
 
-    uint instanceIndexPlusOne = results[0];
+    uint instanceIndex  = results[0];
 
-    if (results[0] == 0) return;
-
-    uint instanceIndex = instanceIndexPlusOne - 1;
+    if (instanceIndex == -1) return;
 
     uint drawIndex = atomicAdd(drawCount, 1);
 

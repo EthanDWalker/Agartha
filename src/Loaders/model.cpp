@@ -150,7 +150,7 @@ std::vector<MeshData> LoadModel(std::string path) {
           asset.get(), position_accessor,
           [&](glm::vec3 position, size_t index) {
             Vertex vertex;
-            vertex.position = position / 30.f;
+            vertex.position = position;
             vertex.normal = {1, 0, 0};
             vertex.uv_x = 0;
             vertex.uv_y = 0;
@@ -196,7 +196,7 @@ std::vector<MeshData> LoadModel(std::string path) {
 
       centroid /= static_cast<float>(vertices.size());
 
-      glm::mat4 new_instance = glm::translate(glm::mat4(1.0), centroid);
+      glm::mat4 new_instance = glm::translate(glm::mat4(1.0f), centroid);
 
       if (it != unique_check_sums.end()) {
         size_t mesh_index = std::distance(unique_check_sums.begin(), it);

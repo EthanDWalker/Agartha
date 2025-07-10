@@ -4,11 +4,11 @@
 #include "../common.glsl"
 
 struct Payload {
-    uint outInstanceIndex;
+    int outInstanceIndex;
 };
 
 layout(location = 0) rayPayloadInEXT Payload payload;
 
 void main() {
-  payload.outInstanceIndex = gl_InstanceID + 1;
+  payload.outInstanceIndex = gl_InstanceID;
 }

@@ -10,7 +10,7 @@
 const uint32_t PHYSICS_MAX_RAY_CASTS = 16;
 
 struct RayCastResult {
-  uint32_t instance_index;
+  int32_t instance_index;
 };
 
 struct RayCastQuery {

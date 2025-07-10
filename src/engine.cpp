@@ -19,6 +19,7 @@
 #include <GLFW/glfw3.h>
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <fmt/base.h>
 #include <fmt/format.h>
 #include <vector>
@@ -392,11 +393,10 @@ void Engine::CreateRenderGraph() {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         outline_pipeline.obj);
 
-      std::array<VkDescriptorSet, 4> ds = {
+      std::array<VkDescriptorSet, 3> ds = {
           camera.descriptor_set,
           scene_manager.object_descriptor_set,
           scene_manager.instance_descriptor_set,
-          physics_context.ray_cast_descriptor_set,
       };
 
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -421,8 +421,31 @@ void Engine::CreateRenderGraph() {
         VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, VK_IMAGE_LAYOUT_GENERAL,
         VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, true);
 
-    builder.AddPass(6, ui_pass_dep.dependency,
-                    [&](VkCommandBuffer cmd) { RenderUi(cmd, main_image); });
+    builder.AddPass(6, ui_pass_dep.dependency, [&](VkCommandBuffer cmd) {
+      VkViewport viewport = vkinit::Viewport(main_image.extent);
+      vkCmdSetViewport(cmd, 0, 1, &viewport);
+      VkRect2D scissor = vkinit::Scissor(main_image.extent);
+      vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+      VkRenderingAttachmentInfo color_att =
+          vkinit::AttachmentInfo(main_image.image_view, nullptr, nullptr,
+                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+      std::array<VkRenderingAttachmentInfo, 1> attachments = {
+          color_att,
+      };
+
+      VkRenderingInfo rendering_info =
+          vkinit::RenderingInfo(main_image.extent, attachments, nullptr);
+
+      vkCmdBeginRendering(cmd, &rendering_info);
+
+      translation_widget.Draw(cmd, camera);
+
+      RenderUi(cmd);
+
+      vkCmdEndRendering(cmd);
+    });
   }
 
   render_graph.Init(vulkan_context, window);
@@ -496,6 +519,9 @@ void Engine::Init() {
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                            VK_IMAGE_USAGE_STORAGE_BIT,
                        depth_image);
+
+  translation_widget.Create(vulkan_context, immediate_submit,
+                            descriptor_builder, camera, main_image.format);
 
   CreateUiContext(vulkan_context, window, &main_image.format);
 
@@ -598,16 +624,14 @@ void Engine::Init() {
     pipeline_builder.SetShaders(vulkan_context, "Debug/outline.vert.spv",
                                 "Debug/outline.frag.spv");
     pipeline_builder.Default();
+    pipeline_builder.AddColorAttachment(main_image.format);
     pipeline_builder.SetNoDepthTest();
     pipeline_builder.SetPolygonMode(VK_POLYGON_MODE_LINE);
-    pipeline_builder.AddColorAttachment(main_image.format);
     pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.object_descriptor_layout);
     pipeline_builder.AddDescriptorSetLayout(
         scene_manager.instance_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(
-        physics_context.ray_cast_descriptor_layout);
     pipeline_builder.Build(vulkan_context, outline_pipeline);
   }
 
@@ -659,50 +683,31 @@ void Engine::Init() {
 
   std::thread([this]() {
     SCOPED_TIMER("Scene load");
-    auto gltf_data = LoadModel("Sponza.gltf");
-
-    for (auto &mesh : gltf_data) {
-      scene_manager.AddObject(
-          vulkan_context, mesh,
-          texture_manager.UploadMaterial(vulkan_context, descriptor_builder,
-                                         mesh.material_data));
-    }
-
     {
-      /*
+      {
+        auto gltf_data = LoadModel("Sponza.gltf");
 
-      descriptor_builder.BindAccelerationStructure(
-          0, scene_manager.top_level_as.obj);
-      descriptor_builder.BindStorageImage(1, main_image.image_view);
-      descriptor_builder.BindStorageImage(2, mr_normal_image.image_view);
-      descriptor_builder.BindStorageImage(3, depth_image.image_view);
-      descriptor_builder.Build(
-          vulkan_context,
-          VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
-          ray_tracing_descriptor_set, ray_tracing_descriptor_layout);
+        for (auto &mesh : gltf_data) {
+          for (auto &instance : mesh.instances) {
+            instance /= 30.0f;
+          }
+          scene_manager.AddObject(
+              vulkan_context, mesh,
+              texture_manager.UploadMaterial(vulkan_context, descriptor_builder,
+                                             mesh.material_data));
+        }
+      }
 
-      RaytracingPipelineBuilder pipeline_builder{};
-      pipeline_builder.SetShaders(vulkan_context, "reflections.rgen.spv",
-                                  "reflections.rmiss.spv",
-                                  "reflections.rchit.spv");
-      pipeline_builder.AddDescriptorSetLayout(ray_tracing_descriptor_layout);
-      pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
-      pipeline_builder.AddDescriptorSetLayout(
-          scene_manager.object_descriptor_layout);
-      pipeline_builder.AddDescriptorSetLayout(
-          texture_manager.descriptor_set_layout);
-      pipeline_builder.AddDescriptorSetLayout(
-          light_manager.light_descriptor_layout);
-      pipeline_builder.AddDescriptorSetLayout(
-          light_manager.shadow_descriptor_layout);
-      const uint8_t max_recursion = 1;
-      pipeline_builder.Build(vulkan_context, max_recursion,
-      ray_tracing_pipeline);
+      {
+        auto gltf_data = LoadModel("DamagedHelmet.gltf");
 
-      CreateShaderBindingTable(vulkan_context, ray_tracing_pipeline,
-                               pipeline_builder.shader_groups,
-                               shader_binding_table);
-      */
+        for (auto &mesh : gltf_data) {
+          scene_manager.AddObject(
+              vulkan_context, mesh,
+              texture_manager.UploadMaterial(vulkan_context, descriptor_builder,
+                                             mesh.material_data));
+        }
+      }
     }
   }).detach();
 
@@ -722,8 +727,6 @@ void Engine::Run() {
       should_close = true;
     }
 
-    bool ui_layer_used = UpdateUi(window, &directional_light);
-
     light_manager.UpdateDirectionalLight(vulkan_context, directional_light, 0,
                                          immediate_submit);
 
@@ -731,47 +734,72 @@ void Engine::Run() {
     light_manager.UpdateMatrices(vulkan_context, immediate_submit,
                                  camera.position);
 
-    for (uint32_t i = 0; i < scene_svo.radiance_image_views.size(); i++) {
-      if (glfwGetKey(window, GLFW_KEY_0 + i)) {
-        voxel_debug_mip_level = i;
-      }
+    bool ui_layer_used = UpdateUi(window, &directional_light);
+
+    int32_t selected_instance_index;
+    memcpy(&selected_instance_index,
+           physics_context.ray_cast_result_buffer.info.pMappedData,
+           sizeof(uint32_t));
+    if (selected_instance_index != -1 &&
+        selected_instance_index < scene_manager.instance_index) {
+      translation_widget.matrix = glm::mat4(1.0f);
+      translation_widget.matrix[3] = glm::vec4(
+          glm::vec3(
+              scene_manager.instance_matrices[selected_instance_index][3]),
+          translation_widget.matrix[3][3]);
+
+      translation_widget.Update(window, camera);
+
+      glm::mat4 new_matrix =
+          scene_manager.instance_matrices[selected_instance_index];
+      new_matrix[3] =
+          glm::vec4(glm::vec3(translation_widget.matrix[3]), new_matrix[3][3]);
+
+      scene_manager.UpdateInstance(new_matrix, selected_instance_index);
+    } else {
+      translation_widget.matrix = glm::mat4(0.0f);
     }
+
+    ui_layer_used |= translation_widget.selected_direction !=
+                     TranslationWidget::TranslationDirections::COUNT;
 
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS &&
         !ui_layer_used) {
-
       double xpos, ypos;
       glfwGetCursorPos(window, &xpos, &ypos);
 
       int32_t width, height;
       glfwGetWindowSize(window, &width, &height);
 
-      glm::vec2 pixel_center =
-          glm::vec2((float)xpos, (float)ypos) + glm::vec2(0.5f);
-      glm::vec2 ndc =
-          (pixel_center / glm::vec2((float)width, (float)height)) * 2.0f - 1.0f;
+      std::thread([=, this]() {
+        glm::vec2 pixel_center =
+            glm::vec2((float)xpos, (float)ypos) + glm::vec2(0.5f);
+        glm::vec2 ndc =
+            (pixel_center / glm::vec2((float)width, (float)height)) * 2.0f -
+            1.0f;
 
-      glm::vec4 view =
-          camera.buffer_data.inv_proj * glm::vec4(ndc.x, ndc.y, 1, 1);
+        glm::vec4 view =
+            camera.buffer_data.inv_proj * glm::vec4(ndc.x, ndc.y, 1, 1);
 
-      glm::vec4 direction = camera.buffer_data.inv_view *
-                            glm::vec4(glm::normalize(glm::vec3(view)), 0);
+        glm::vec4 direction = camera.buffer_data.inv_view *
+                              glm::vec4(glm::normalize(glm::vec3(view)), 0);
+        RayCastQuery ray_query{};
+        ray_query.direction = glm::vec3(direction);
+        ray_query.position = camera.position;
+        ray_query.tmin = 0.1f;
+        ray_query.tmax = 1000.0f;
+        PhysicsQueueRayCast(vulkan_context, immediate_submit, physics_context,
+                            &ray_query);
 
-      RayCastQuery ray_query{};
-      ray_query.direction = glm::vec3(direction);
-      ray_query.position = camera.position;
-      ray_query.tmin = 0.1f;
-      ray_query.tmax = 1000.0f;
-      PhysicsQueueRayCast(vulkan_context, immediate_submit, physics_context,
-                          &ray_query);
+        ImmediateSubmit::SubmitAsync(
+            vulkan_context, [this](VkCommandBuffer cmd) {
+              PhysicsCastRays(cmd, vulkan_context, physics_context,
+                              scene_manager.as_descriptor_set);
+            });
+      }).detach();
     }
 
-    std::thread([this]() {
-      ImmediateSubmit::SubmitAsync(vulkan_context, [this](VkCommandBuffer cmd) {
-        PhysicsCastRays(cmd, vulkan_context, physics_context,
-                        scene_manager.as_descriptor_set);
-      });
-    }).detach();
+    scene_manager.UpdateInstances(vulkan_context);
 
     render_graph.Render(vulkan_context);
     if (render_graph.resize_requested == true) {
@@ -795,6 +823,8 @@ void Engine::Destroy() {
   immediate_submit.Destroy(vulkan_context);
   camera.Destroy(vulkan_context);
   scene_svo.Destroy(vulkan_context);
+
+  translation_widget.Destroy(vulkan_context);
 
   DestroyPhysicsContext(vulkan_context, physics_context);
   DestroyUiContext();

@@ -17,10 +17,6 @@ layout(set = 2, binding = 0) readonly buffer InstanceBuffer {
     Instance instances[];
 };
 
-layout(set = 3, binding = 1) readonly buffer RayCastResultBuffer {
-    uint results[];
-};
-
 void main() {
     Instance instance = instances[gl_InstanceIndex];
     uint objectIndex = GetObjectIndex(instance);

@@ -122,8 +122,7 @@ void LightManager::UpdateDirectionalLight(VulkanContext &context,
          "attempt to update out of bounds directional light");
   directional_lights[index] = direction;
   uint32_t direction_offset = offsetof(DirectionalLight, direction);
-  UpdateBuffer(context, immediate_submit, &direction,
-               sizeof(direction),
+  UpdateBuffer(context, immediate_submit, &direction, sizeof(direction),
                (index * sizeof(DirectionalLight)) + direction_offset,
                directional_light_buffer);
 }
@@ -147,12 +146,13 @@ void LightManager::UpdateMatrices(VulkanContext &context,
   const glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 
   for (auto &direction : directional_lights) {
-    glm::vec3 light_pos =
-      glm::vec3(camera_position.x, 0, camera_position.z) - direction * DIRECTIONAL_LIGHT_DISTANCE;
+    glm::vec3 light_pos = glm::vec3(camera_position.x, 0, camera_position.z) -
+                          direction * DIRECTIONAL_LIGHT_DISTANCE;
 
     glm::mat4 light_view = glm::lookAt(light_pos, camera_position, up);
 
     for (uint32_t i = 0; i < CASCADES.size(); i++) {
+
       matrices.push_back(cascade_projection_matrices[i] * light_view);
     }
   }

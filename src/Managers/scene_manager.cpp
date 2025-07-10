@@ -2,8 +2,8 @@
 #include "Backend/acceleration_structure.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
-#include "Backend/immediate_submit.h"
 #include "Backend/util.h"
+#include "timer.h"
 #include <cassert>
 #include <fmt/base.h>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -150,11 +150,7 @@ uint32_t SceneManager::AddObject(VulkanContext &context, MeshData &mesh_data,
   uint32_t index;
   {
     std::lock_guard<std::mutex> lock(object_mutex);
-    if (removed_objects.empty()) {
-      index = object_index;
-    } else {
-      index = removed_objects.front();
-    }
+    index = object_index;
   }
   assert(index < SCENE_MAX_OBJECTS && "Reached max object for the scene");
 
@@ -222,45 +218,15 @@ uint32_t SceneManager::AddObject(VulkanContext &context, MeshData &mesh_data,
   last_index += mesh_data.indices.size();
 
   std::lock_guard<std::mutex> lock(object_mutex);
-  if (removed_objects.empty()) {
-    return object_index++;
-  } else {
-    removed_objects.pop();
-    return index;
-  }
-}
-
-// DOESNT WORK WITH ACCELERATION STRUCTURES
-void SceneManager::RemoveObject(VulkanContext &context,
-                                ImmediateSubmit &immediate_submit,
-                                uint32_t index) {
-  assert(index < object_index && "Cannot remove unused index");
-
-  SphereBounds zero_sphere_bounds{};
-  UpdateBuffer(context, immediate_submit, &zero_sphere_bounds,
-               sizeof(SphereBounds), index * sizeof(SphereBounds),
-               sphere_bounds_buffer);
-
-  Mesh zero_mesh{};
-  UpdateBuffer(context, immediate_submit, &zero_mesh, sizeof(Mesh),
-               index * sizeof(Mesh), mesh_buffer);
-
-  Object zero_object{};
-  UpdateBuffer(context, immediate_submit, &zero_object, sizeof(Object),
-               index * sizeof(Object), object_buffer);
-
-  removed_objects.push(index);
+  return object_index++;
 }
 
 uint32_t SceneManager::AddInstance(VulkanContext &context, Instance &instance) {
   uint32_t index;
   {
     std::lock_guard<std::mutex> lock(instance_mutex);
-    if (removed_instances.empty()) {
-      index = instance_index;
-    } else {
-      index = removed_instances.front();
-    }
+    instance_matrices.push_back(instance.matrix);
+    index = instance_index;
   }
 
   assert(index <= SCENE_MAX_INSTANCES && "Reached max instances for the scene");
@@ -270,8 +236,7 @@ uint32_t SceneManager::AddInstance(VulkanContext &context, Instance &instance) {
   gpu_instance.instanceCustomIndex = instance.object_index;
   gpu_instance.mask = 0xFF;
   gpu_instance.instanceShaderBindingTableRecordOffset = 0;
-  gpu_instance.flags =
-      VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+  gpu_instance.flags = 0;
   gpu_instance.accelerationStructureReference = GetDeviceAddress(
       context, bottom_level_as_vector[instance.object_index].obj);
 
@@ -279,10 +244,21 @@ uint32_t SceneManager::AddInstance(VulkanContext &context, Instance &instance) {
       context, &gpu_instance, sizeof(VkAccelerationStructureInstanceKHR),
       index * sizeof(VkAccelerationStructureInstanceKHR), instance_buffer);
 
+  RecreateTopLevelAS(context);
+
+  {
+    std::lock_guard<std::mutex> lock(instance_mutex);
+    return instance_index++;
+  }
+}
+
+void SceneManager::RecreateTopLevelAS(VulkanContext &context) {
+  std::lock_guard<std::mutex> lock(as_mutex);
   DestroyAccelerationStructure(context, top_level_as);
-  CreateTopLevelAS(
-      context, GetDeviceAddress(context, instance_buffer.buffer), index,
-      VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, top_level_as);
+  CreateTopLevelAS(context, GetDeviceAddress(context, instance_buffer.buffer),
+                   instance_matrices.size(),
+                   VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR,
+                   top_level_as);
 
   VkWriteDescriptorSetAccelerationStructureKHR as_info{};
   as_info.sType =
@@ -299,43 +275,39 @@ uint32_t SceneManager::AddInstance(VulkanContext &context, Instance &instance) {
   write.pNext = &as_info;
 
   vkUpdateDescriptorSets(context.device, 1, &write, 0, nullptr);
+}
 
-  {
-    std::lock_guard<std::mutex> lock(instance_mutex);
-    if (removed_instances.empty()) {
-      return instance_index++;
-    } else {
-      removed_instances.pop();
-      return index;
+void SceneManager::UpdateInstance(glm::mat4 new_matrix, uint32_t index) {
+  instance_matrices[index] = new_matrix;
+  changed_instances.push(index);
+}
+
+void SceneManager::UpdateInstances(VulkanContext &context) {
+  if (changed_instances.size() == 0)
+    return;
+  std::thread([&]() {
+    for (uint32_t i = 0; i < changed_instances.size(); i++) {
+      uint32_t instance_index = changed_instances.front();
+
+      VkTransformMatrixKHR transform_matrix =
+          Mat4ToVkTransform(instance_matrices[instance_index]);
+
+      UpdateBufferAsync(
+          context, &transform_matrix, sizeof(VkTransformMatrixKHR),
+          instance_index * sizeof(VkAccelerationStructureInstanceKHR),
+          instance_buffer);
+
+      changed_instances.pop();
     }
-  }
-}
 
-// DOESNT WORK WITH ACCELERATION STRUCTURES
-void SceneManager::EditInstance(VulkanContext &context,
-                                ImmediateSubmit &immediate_submit,
-                                Instance *instance, uint32_t index) {
-  assert(index < instance_index &&
-         "Use SceneManager::AddObject to allow for desired behavior");
-
-  UpdateBuffer(context, immediate_submit, instance, sizeof(Instance),
-               index * sizeof(Instance), instance_buffer);
-}
-
-// DOESNT WORK WITH ACCELERATION STRUCTURES
-void SceneManager::RemoveInstance(VulkanContext &context,
-                                  ImmediateSubmit &immediate_submit,
-                                  uint32_t index) {
-  assert(index < instance_index && "Cannot remove unset index");
-
-  Instance zero_instance{};
-  UpdateBuffer(context, immediate_submit, &zero_instance, sizeof(Instance),
-               index * sizeof(Instance), instance_buffer);
-
-  removed_instances.push(index);
+    RecreateTopLevelAS(context);
+  }).detach();
 }
 
 void SceneManager::Destroy(VulkanContext &context) {
+  std::lock_guard<std::mutex> as_lock(as_mutex);
+  std::lock_guard<std::mutex> instance_lock(instance_mutex);
+  std::lock_guard<std::mutex> object_lock(object_mutex);
   for (auto &mesh : meshes) {
     DestroyBuffer(context, mesh.vertex_buffer);
   }

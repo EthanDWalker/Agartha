@@ -12,6 +12,7 @@
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
 #include "Physics/context.h"
+#include "UI/Widgets/translation.h"
 #include "camera.h"
 #include "render_graph.h"
 #include "scene_svo.h"
@@ -27,6 +28,8 @@ struct Engine {
   SceneSvo scene_svo;
 
   DescriptorBuilder descriptor_builder;
+
+  TranslationWidget translation_widget;
 
   ImmediateSubmit immediate_submit;
   Camera camera;
@@ -63,8 +66,6 @@ struct Engine {
   VkSampler sampler;
 
   GLFWwindow *window;
-
-  uint32_t voxel_debug_mip_level;
 
   void Init();
 

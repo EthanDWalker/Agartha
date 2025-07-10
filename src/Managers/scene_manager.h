@@ -49,11 +49,11 @@ struct SceneManager {
 
   std::vector<Mesh> meshes;
   std::vector<AccelerationStructure> bottom_level_as_vector;
+  std::vector<glm::mat4> instance_matrices;
 
   AccelerationStructure top_level_as;
 
-  std::queue<uint32_t> removed_objects;
-  std::queue<uint32_t> removed_instances;
+  std::queue<uint32_t> changed_instances;
 
   VkDescriptorSet object_descriptor_set;
   VkDescriptorSetLayout object_descriptor_layout;
@@ -66,6 +66,7 @@ struct SceneManager {
 
   std::mutex object_mutex;
   std::mutex instance_mutex;
+  std::mutex as_mutex;
 
   uint32_t object_index;
   uint32_t instance_index;
@@ -80,16 +81,13 @@ struct SceneManager {
   uint32_t AddObject(VulkanContext &context, MeshData &data,
                      Material material = {});
 
-  void RemoveObject(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                    uint32_t index);
-
   uint32_t AddInstance(VulkanContext &context, Instance &instance);
 
-  void EditInstance(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                    Instance *instance, uint32_t index);
+  void UpdateInstance(glm::mat4 new_matrix, uint32_t index);
 
-  void RemoveInstance(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                      uint32_t index);
+  void UpdateInstances(VulkanContext &context);
+
+  void RecreateTopLevelAS(VulkanContext &context);
 
   void Destroy(VulkanContext &context);
 };
