@@ -522,6 +522,7 @@ void Engine::Init() {
 
   translation_widget.Create(vulkan_context, immediate_submit,
                             descriptor_builder, camera, main_image.format);
+  translation_widget.selected_mode = TranslationWidget::TranslationMode::SCALE;
 
   CreateUiContext(vulkan_context, window, &main_image.format);
 
@@ -688,9 +689,6 @@ void Engine::Init() {
         auto gltf_data = LoadModel("Sponza.gltf");
 
         for (auto &mesh : gltf_data) {
-          for (auto &instance : mesh.instances) {
-            instance /= 30.0f;
-          }
           scene_manager.AddObject(
               vulkan_context, mesh,
               texture_manager.UploadMaterial(vulkan_context, descriptor_builder,
@@ -747,6 +745,7 @@ void Engine::Run() {
           glm::vec3(
               scene_manager.instance_matrices[selected_instance_index][3]),
           translation_widget.matrix[3][3]);
+      translation_widget.matrix = scene_manager.instance_matrices[selected_instance_index];
 
       translation_widget.Update(window, camera);
 
@@ -754,6 +753,7 @@ void Engine::Run() {
           scene_manager.instance_matrices[selected_instance_index];
       new_matrix[3] =
           glm::vec4(glm::vec3(translation_widget.matrix[3]), new_matrix[3][3]);
+      new_matrix = translation_widget.matrix;
 
       scene_manager.UpdateInstance(new_matrix, selected_instance_index);
     } else {
@@ -788,8 +788,7 @@ void Engine::Run() {
         ray_query.position = camera.position;
         ray_query.tmin = 0.1f;
         ray_query.tmax = 1000.0f;
-        PhysicsQueueRayCast(vulkan_context, immediate_submit, physics_context,
-                            &ray_query);
+        PhysicsQueueRayCast(vulkan_context, physics_context, &ray_query);
 
         ImmediateSubmit::SubmitAsync(
             vulkan_context, [this](VkCommandBuffer cmd) {

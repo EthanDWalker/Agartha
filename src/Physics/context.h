@@ -39,7 +39,6 @@ void InitPhysicsContext(VulkanContext &vulkan_context,
                         PhysicsContext &context);
 
 uint32_t PhysicsQueueRayCast(VulkanContext &vulkan_context,
-                             ImmediateSubmit &immediate_submit,
                              PhysicsContext &context,
                              RayCastQuery *ray_cast_query);
 

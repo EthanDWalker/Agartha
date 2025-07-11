@@ -13,14 +13,15 @@ void InitVulkanContext(GLFWwindow *window, VulkanContext &context) {
 #if !defined(NDEBUG)
   fmt::println("DEBUG ACTIVE");
 #endif
-  auto instance_return = instance_builder
-                             .set_app_name("Engine")
+  auto instance_return =
+      instance_builder
+          .set_app_name("Engine")
 #if !defined(NDEBUG)
-                             .request_validation_layers()
-                             .use_default_debug_messenger()
+          .request_validation_layers()
+          .use_default_debug_messenger()
 #endif
-                             .require_api_version(1, 3)
-                             .build();
+          .require_api_version(1, 3)
+          .build();
 
   assert(instance_return);
 
@@ -75,7 +76,7 @@ void InitVulkanContext(GLFWwindow *window, VulkanContext &context) {
   raytracing_features.rayTracingPipeline = true;
 
   vkb::PhysicalDeviceSelector physical_device_selector{vkb_instance};
-  
+
   vkb::PhysicalDevice vkb_physical_device =
       physical_device_selector.set_minimum_version(1, 3)
           .set_required_features_13(features_13)

@@ -2,7 +2,6 @@
 #include "Backend/binding_table.h"
 #include "Backend/buffer.h"
 #include "Backend/descriptors.h"
-#include "Backend/immediate_submit.h"
 #include "Backend/pipeline.h"
 #include "Backend/util.h"
 
@@ -44,13 +43,11 @@ void InitPhysicsContext(VulkanContext &vulkan_context,
 }
 
 uint32_t PhysicsQueueRayCast(VulkanContext &vulkan_context,
-                             ImmediateSubmit &immediate_submit,
                              PhysicsContext &context,
                              RayCastQuery *ray_cast_query) {
-  UpdateBuffer(vulkan_context, immediate_submit, ray_cast_query,
-               sizeof(RayCastQuery),
-               sizeof(RayCastQuery) * context.ray_cast_index,
-               context.ray_cast_query_buffer);
+  UpdateBufferAsync(vulkan_context, ray_cast_query, sizeof(RayCastQuery),
+                    sizeof(RayCastQuery) * context.ray_cast_index,
+                    context.ray_cast_query_buffer);
 
   return context.ray_cast_index++;
 }

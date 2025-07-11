@@ -8,6 +8,7 @@
 #include "Loaders/model.h"
 #include "camera.h"
 #include "fmt/base.h"
+#include <cassert>
 #include <cstdint>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/vec3.hpp>
@@ -29,8 +30,8 @@ void TranslationWidget::Create(VulkanContext &vulkan_context,
                         sizeof(Vertex) * mesh_data.vertices.size(),
                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, vertex_buffer);
 
-  bounds_min = mesh_data.aabb_bounds.first;
-  bounds_max = mesh_data.aabb_bounds.second;
+  bounds_min = mesh_data.aabb_bounds.first * 1.4f;
+  bounds_max = mesh_data.aabb_bounds.second * 1.4f;
 
   CreateBufferData(vulkan_context, immediate_submit,
                    (void *)DIRECTION_INSTANCES,
@@ -63,16 +64,6 @@ void TranslationWidget::Create(VulkanContext &vulkan_context,
 }
 
 void TranslationWidget::Update(GLFWwindow *window, Camera &camera) {
-  float scale = glm::clamp(
-      glm::distance(camera.position,
-                    glm::vec3(matrix * glm::vec4(glm::vec3(0.0f), 1.0f))),
-      0.1f, 1000.0f);
-  scale *= 0.025f;
-
-  matrix[0][0] = scale;
-  matrix[1][1] = scale;
-  matrix[2][2] = scale;
-
   if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS) {
     selected_direction = TranslationDirections::COUNT;
     return;
@@ -119,43 +110,106 @@ void TranslationWidget::Update(GLFWwindow *window, Camera &camera) {
     }
   }
 
-  glm::mat4 inv_view_proj = glm::inverse(view_proj);
+  switch (selected_mode) {
+  case (TranslationMode::MOVE): {
+    glm::mat4 inv_view_proj = glm::inverse(view_proj);
+    glm::vec2 ndc = 2.0f * mouse_pos - 1.0f;
 
-  glm::ivec2 window_size;
-  glfwGetWindowSize(window, &window_size.x, &window_size.y);
-  glm::vec2 ndc = 2.0f * mouse_pos - 1.0f;
+    glm::vec4 near_clip = glm::vec4(ndc, 0.0f, 1.0f);
+    glm::vec4 far_clip = glm::vec4(ndc, 1.0f, 1.0f);
 
-  glm::vec4 near_clip = glm::vec4(ndc, 0.0f, 1.0f);
-  glm::vec4 far_clip = glm::vec4(ndc, 1.0f, 1.0f);
+    glm::vec4 near_world4 = inv_view_proj * near_clip;
+    glm::vec4 far_world4 = inv_view_proj * far_clip;
 
-  glm::vec4 near_world4 = inv_view_proj * near_clip;
-  glm::vec4 far_world4 = inv_view_proj * far_clip;
+    glm::vec3 near_world = glm::vec3(near_world4) / near_world4.w;
+    glm::vec3 far_world = glm::vec3(far_world4) / far_world4.w;
 
-  glm::vec3 near_world = glm::vec3(near_world4) / near_world4.w;
-  glm::vec3 far_world = glm::vec3(far_world4) / far_world4.w;
+    glm::vec3 ray_origin = near_world;
+    glm::vec3 ray_dir = glm::normalize(far_world - near_world);
 
-  glm::vec3 ray_origin = near_world;
-  glm::vec3 ray_dir = glm::normalize(far_world - near_world);
+    glm::vec3 plane_normal = DIRECTION_PLANES[selected_direction];
+    glm::vec3 plane_point = matrix * glm::vec4(glm::vec3(0.0f), 1.0f);
+    glm::vec3 widget_offset = DIRECTION_INSTANCES[selected_direction] *
+                              glm::vec4(glm::vec3(0.0f), 1.0f);
 
-  glm::vec3 plane_normal = DIRECTION_PLANES[selected_direction];
-  glm::vec3 plane_point = matrix * glm::vec4(glm::vec3(0.0f), 1.0f);
-  glm::vec3 widget_offset = DIRECTION_INSTANCES[selected_direction] *
-                            glm::vec4(glm::vec3(0.0f), 1.0f);
+    float denom = glm::dot(ray_dir, plane_normal);
 
-  float denom = glm::dot(ray_dir, plane_normal);
+    float t = glm::dot(plane_point - ray_origin, plane_normal) / denom;
+    glm::vec3 intersection = ray_origin + t * ray_dir;
 
-  float t = glm::dot(plane_point - ray_origin, plane_normal) / denom;
-  glm::vec3 intersection = ray_origin + t * ray_dir;
-
-  if (glm::any(glm::isnan(intersection)) ||
-      glm::any(glm::isinf(intersection))) {
-    fmt::println("hi");
-    return;
+    matrix[3][selected_direction] =
+        intersection[selected_direction] -
+        DIRECTION_INSTANCES[selected_direction][3][selected_direction];
+    break;
   }
+  case (TranslationMode::ROTATE): {
+    glm::vec4 widget_pos = view_proj * matrix *
+                           (DIRECTION_INSTANCES[selected_direction] *
+                            glm::vec4(glm::vec3(0.0f), 1.0f));
+    widget_pos /= widget_pos.w;
 
-  matrix[3][selected_direction] =
-      intersection[selected_direction] -
-      DIRECTION_INSTANCES[selected_direction][3][selected_direction] * scale;
+    widget_pos = widget_pos * 0.5f + 0.5f;
+
+    glm::vec2 direction = glm::vec2(widget_pos) - mouse_pos;
+
+    const float rotation_angle =
+        glm::length(direction) * glm::sign(abs(direction.x) > abs(direction.y)
+                                               ? direction.x
+                                               : direction.y);
+
+    const float sin = glm::sin(rotation_angle);
+    const float cos = glm::cos(rotation_angle);
+    glm::mat3 rotation_matrix;
+    switch (selected_direction) {
+    case (TranslationDirections::X): {
+      rotation_matrix = glm::mat3(glm::vec3(1, 0, 0), glm::vec3(0, cos, -sin),
+                                  glm::vec3(0, sin, cos));
+      break;
+    }
+    case (TranslationDirections::Y): {
+      rotation_matrix = glm::mat3(glm::vec3(cos, 0, sin), glm::vec3(0, 1, 0),
+                                  glm::vec3(-sin, 0, cos));
+      break;
+    }
+    case (TranslationDirections::Z): {
+      rotation_matrix = glm::mat3(glm::vec3(cos, -sin, 0),
+                                  glm::vec3(sin, cos, 0), glm::vec3(0, 0, 1));
+      break;
+    }
+    default: {
+      return;
+    }
+    }
+    matrix[0] = glm::vec4(rotation_matrix[0], matrix[0][3]);
+    matrix[1] = glm::vec4(rotation_matrix[1], matrix[1][3]);
+    matrix[2] = glm::vec4(rotation_matrix[2], matrix[2][3]);
+    break;
+  }
+  case (TranslationMode::SCALE): {
+    glm::vec4 widget_pos = view_proj * matrix *
+                           (DIRECTION_INSTANCES[selected_direction] *
+                            glm::vec4(glm::vec3(0.0f), 1.0f));
+    widget_pos /= widget_pos.w;
+
+    widget_pos = widget_pos * 0.5f + 0.5f;
+
+    glm::vec2 direction = glm::vec2(widget_pos) - mouse_pos;
+    const float scale_factor =
+        glm::length(direction) * glm::sign(abs(direction.x) > abs(direction.y)
+                                               ? direction.x
+                                               : direction.y) +
+        1.0f;
+    matrix[0][0] = sqrt(matrix[0][0]) * scale_factor;
+    matrix[1][1] = sqrt(matrix[1][1]) * scale_factor;
+    matrix[2][2] = sqrt(matrix[2][2]) * scale_factor;
+    break;
+  }
+  default: {
+    assert(0 &&
+           "Must set translation mode to one the the enum values as defined in "
+           "the TranslationWidget struct");
+  }
+  }
 }
 
 void TranslationWidget::Draw(VkCommandBuffer cmd, Camera &camera) {

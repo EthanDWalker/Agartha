@@ -4,6 +4,7 @@
 #include "Backend/descriptors.h"
 #include "Backend/pipeline.h"
 #include "camera.h"
+#include <cstdint>
 #include <glm/gtc/matrix_transform.hpp>
 
 struct TranslationWidget {
@@ -12,6 +13,12 @@ struct TranslationWidget {
     Y = 1,
     Z = 2,
     COUNT = 3,
+  };
+
+  enum TranslationMode : uint8_t {
+    MOVE,
+    ROTATE,
+    SCALE,
   };
 
   static constexpr size_t TRANSLATION_DIRECTION_COUNT =
@@ -59,6 +66,8 @@ struct TranslationWidget {
   VkDescriptorSetLayout descriptor_layout;
 
   TranslationDirections selected_direction{TranslationDirections::COUNT};
+
+  TranslationMode selected_mode{TranslationMode::MOVE};
 
   void Create(VulkanContext &vulkan_context, ImmediateSubmit &immediate_submit,
               DescriptorBuilder &descriptor_builder, Camera &camera,
