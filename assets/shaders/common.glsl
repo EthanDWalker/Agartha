@@ -78,14 +78,6 @@ mat4 GetInstanceMatrix(Instance instance) {
     return Mat3x4toMat4(instance.transform);
 }
 
-// expects x and y
-vec3 CalculateNormal(vec2 N) {
-    vec3 n = vec3(N.x, N.y, 1.0 - abs(N.x) - abs(N.y));
-    float t = clamp(-n.z, 0.0, 1.0);
-    n.xy += (n.x >= 0.0 ? -t : t) * (n.y >= 0.0 ? 1.0 : -1.0);
-    return normalize(n);
-}
-
 vec2 OctEncodeNormal(vec3 n) {
     n /= (abs(n.x) + abs(n.y) + abs(n.z));
     vec2 e = n.xy;

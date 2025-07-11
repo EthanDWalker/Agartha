@@ -4,6 +4,7 @@
 #include "Backend/descriptors.h"
 #include "Backend/immediate_submit.h"
 #include "GLFW/glfw3.h"
+#include "input.h"
 #include <fmt/base.h>
 #include <glm/glm.hpp>
 
@@ -43,7 +44,7 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
   pos_y -= window_height / 2.0f;
 
   const double sensitivity = 0.003f;
-  if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT)) {
+  if (InputContext::GetInputHeld(Input::MOUSE_RIGHT)) {
     double dx, dy;
     dx = pos_x - last_x;
     dy = last_y - pos_y;
@@ -64,23 +65,23 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
 
   const float speed = 50.0f * delta_time;
 
-  if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+  if (InputContext::GetInputHeld(Input::W))
     velocity.z = -speed;
-  else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+  else if (InputContext::GetInputHeld(Input::S))
     velocity.z = speed;
   else
     velocity.z = 0.0f;
 
-  if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+  if (InputContext::GetInputHeld(Input::A))
     velocity.x = -speed;
-  else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+  else if (InputContext::GetInputHeld(Input::D))
     velocity.x = speed;
   else
     velocity.x = 0.0f;
 
-  if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+  if (InputContext::GetInputHeld(Input::Q))
     velocity.y = -speed;
-  else if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+  else if (InputContext::GetInputHeld(Input::E))
     velocity.y = speed;
   else
     velocity.y = 0.0f;

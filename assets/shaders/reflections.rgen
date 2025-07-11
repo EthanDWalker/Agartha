@@ -43,7 +43,7 @@ void main() {
 
     vec4 pixelColor = imageLoad(mainImage, ivec2(gl_LaunchIDEXT.xy));
     float depth = imageLoad(depthImage, ivec2(gl_LaunchIDEXT.xy)).r;
-    vec3 normal = CalculateNormal(mrNormals.zw);
+    vec3 normal = OctDecodeNormal(mrNormals.zw);
 
     const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
     const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);

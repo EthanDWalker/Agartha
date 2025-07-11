@@ -7,42 +7,42 @@
 #include <cstdint>
 #include <glm/gtc/matrix_transform.hpp>
 
-struct TranslationWidget {
-  enum TranslationDirections : uint8_t {
+struct TransformationWidget {
+  enum TransformationDirections : uint8_t {
     X = 0,
     Y = 1,
     Z = 2,
     COUNT = 3,
   };
 
-  enum TranslationMode : uint8_t {
+  enum TransformationMode : uint8_t {
     MOVE,
     ROTATE,
     SCALE,
   };
 
-  static constexpr size_t TRANSLATION_DIRECTION_COUNT =
-      static_cast<size_t>(TranslationDirections::COUNT);
+  static constexpr size_t TRANSFORMATION_DIRECTION_COUNT =
+      static_cast<size_t>(TransformationDirections::COUNT);
 
-  const glm::vec3 DIRECTION_VECTORS[TRANSLATION_DIRECTION_COUNT] = {
+  const glm::vec3 DIRECTION_VECTORS[TRANSFORMATION_DIRECTION_COUNT] = {
       glm::vec3(1.0f, 0.0f, 0.0f),
       glm::vec3(0.0f, 1.0f, 0.0f),
       glm::vec3(0.0f, 0.0f, 1.0f),
   };
 
-  const glm::vec3 DIRECTION_PLANES[TRANSLATION_DIRECTION_COUNT] = {
+  const glm::vec3 DIRECTION_PLANES[TRANSFORMATION_DIRECTION_COUNT] = {
       glm::vec3(0.0f, 1.0f, 0.0f),
       glm::vec3(1.0f, 0.0f, 0.0f),
       glm::vec3(0.0f, 1.0f, 0.0f),
   };
 
-  const glm::vec4 DIRECTION_COLORS[TRANSLATION_DIRECTION_COUNT] = {
+  const glm::vec4 DIRECTION_COLORS[TRANSFORMATION_DIRECTION_COUNT] = {
       glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
       glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),
       glm::vec4(0.0f, 0.0f, 1.0f, 1.0f),
   };
 
-  const glm::mat4 DIRECTION_INSTANCES[TRANSLATION_DIRECTION_COUNT] = {
+  const glm::mat4 DIRECTION_INSTANCES[TRANSFORMATION_DIRECTION_COUNT] = {
       glm::translate(glm::mat4(1.0f), DIRECTION_VECTORS[0] * 3.0f),
       glm::rotate(glm::translate(glm::mat4(1.0f), DIRECTION_VECTORS[1] * 3.0f),
                   glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
@@ -65,9 +65,9 @@ struct TranslationWidget {
   VkDescriptorSet descriptor_set;
   VkDescriptorSetLayout descriptor_layout;
 
-  TranslationDirections selected_direction{TranslationDirections::COUNT};
+  TransformationDirections selected_direction{TransformationDirections::COUNT};
 
-  TranslationMode selected_mode{TranslationMode::MOVE};
+  TransformationMode selected_mode{TransformationMode::MOVE};
 
   void Create(VulkanContext &vulkan_context, ImmediateSubmit &immediate_submit,
               DescriptorBuilder &descriptor_builder, Camera &camera,

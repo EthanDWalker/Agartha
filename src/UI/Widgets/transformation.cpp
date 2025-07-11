@@ -1,4 +1,4 @@
-#include "translation.h"
+#include "transformation.h"
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
@@ -7,7 +7,7 @@
 #include "GLFW/glfw3.h"
 #include "Loaders/model.h"
 #include "camera.h"
-#include "fmt/base.h"
+#include "input.h"
 #include <cassert>
 #include <cstdint>
 #include <glm/gtc/matrix_transform.hpp>
@@ -15,11 +15,11 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
 
-void TranslationWidget::Create(VulkanContext &vulkan_context,
+void TransformationWidget::Create(VulkanContext &vulkan_context,
                                ImmediateSubmit &immediate_submit,
                                DescriptorBuilder &descriptor_builder,
                                Camera &camera, VkFormat draw_format) {
-  std::vector<MeshData> gltf_data = LoadModel("TranslationWidget.gltf");
+  std::vector<MeshData> gltf_data = LoadModel("TransformationWidget.gltf");
   MeshData mesh_data = gltf_data[0];
 
   CreateBufferDataAsync(vulkan_context, mesh_data.indices.data(),
@@ -30,15 +30,15 @@ void TranslationWidget::Create(VulkanContext &vulkan_context,
                         sizeof(Vertex) * mesh_data.vertices.size(),
                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, vertex_buffer);
 
-  bounds_min = mesh_data.aabb_bounds.first * 1.4f;
-  bounds_max = mesh_data.aabb_bounds.second * 1.4f;
+  bounds_min = mesh_data.aabb_bounds.first * 2.0f;
+  bounds_max = mesh_data.aabb_bounds.second * 2.0f;
 
   CreateBufferData(vulkan_context, immediate_submit,
                    (void *)DIRECTION_INSTANCES,
-                   sizeof(glm::mat4) * TRANSLATION_DIRECTION_COUNT,
+                   sizeof(glm::mat4) * TRANSFORMATION_DIRECTION_COUNT,
                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, instance_buffer);
   CreateBufferData(vulkan_context, immediate_submit, (void *)DIRECTION_COLORS,
-                   sizeof(glm::vec4) * TRANSLATION_DIRECTION_COUNT,
+                   sizeof(glm::vec4) * TRANSFORMATION_DIRECTION_COUNT,
                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, color_buffer);
 
   matrix = glm::mat4(1.0f);
@@ -63,25 +63,17 @@ void TranslationWidget::Create(VulkanContext &vulkan_context,
   pipeline_builder.Build(vulkan_context, draw_pipeline);
 }
 
-void TranslationWidget::Update(GLFWwindow *window, Camera &camera) {
-  if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS) {
-    selected_direction = TranslationDirections::COUNT;
+void TransformationWidget::Update(GLFWwindow *window, Camera &camera) {
+  if (!InputContext::GetInputHeld(Input::MOUSE_LEFT)) {
+    selected_direction = TransformationDirections::COUNT;
     return;
   }
-  glm::dvec2 pos;
-  glm::ivec2 size;
-
-  glfwGetCursorPos(window, &pos.x, &pos.y);
-  glfwGetWindowSize(window, &size.x, &size.y);
-
-  glm::vec2 mouse_pos =
-      (static_cast<glm::vec2>(pos) / static_cast<glm::vec2>(size));
 
   glm::mat4 view_proj =
       camera.buffer_data.projection_matrix * camera.buffer_data.view_matrix;
 
-  if (selected_direction == TranslationDirections::COUNT) {
-    for (uint32_t i = 0; i < TRANSLATION_DIRECTION_COUNT; i++) {
+  if (selected_direction == TransformationDirections::COUNT) {
+    for (uint32_t i = 0; i < TRANSFORMATION_DIRECTION_COUNT; i++) {
       glm::vec4 bounds_world_min =
           matrix * (DIRECTION_INSTANCES[i] * glm::vec4(bounds_min, 1.0));
 
@@ -93,27 +85,24 @@ void TranslationWidget::Update(GLFWwindow *window, Camera &camera) {
       glm::vec4 bounds_ndc_max = view_proj * bounds_world_max;
       bounds_ndc_max /= bounds_ndc_max.w;
 
-      bounds_ndc_min = bounds_ndc_min * 0.5f + 0.5f;
-      bounds_ndc_max = bounds_ndc_max * 0.5f + 0.5f;
-
       glm::vec2 pmin = glm::min(bounds_ndc_min, bounds_ndc_max);
       glm::vec2 pmax = glm::max(bounds_ndc_min, bounds_ndc_max);
 
-      if (glm::all(glm::lessThan(mouse_pos, pmax)) &&
-          glm::all(glm::greaterThan(mouse_pos, pmin))) {
-        selected_direction = static_cast<TranslationDirections>(i);
+      if (glm::all(glm::lessThan(InputContext::mouse_position, pmax)) &&
+          glm::all(glm::greaterThan(InputContext::mouse_position, pmin))) {
+        selected_direction = static_cast<TransformationDirections>(i);
         break;
       }
     }
-    if (selected_direction == TranslationDirections::COUNT) {
+    if (selected_direction == TransformationDirections::COUNT) {
       return;
     }
   }
 
   switch (selected_mode) {
-  case (TranslationMode::MOVE): {
+  case (TransformationMode::MOVE): {
     glm::mat4 inv_view_proj = glm::inverse(view_proj);
-    glm::vec2 ndc = 2.0f * mouse_pos - 1.0f;
+    glm::vec2 ndc = InputContext::mouse_position;
 
     glm::vec4 near_clip = glm::vec4(ndc, 0.0f, 1.0f);
     glm::vec4 far_clip = glm::vec4(ndc, 1.0f, 1.0f);
@@ -142,15 +131,13 @@ void TranslationWidget::Update(GLFWwindow *window, Camera &camera) {
         DIRECTION_INSTANCES[selected_direction][3][selected_direction];
     break;
   }
-  case (TranslationMode::ROTATE): {
+  case (TransformationMode::ROTATE): {
     glm::vec4 widget_pos = view_proj * matrix *
                            (DIRECTION_INSTANCES[selected_direction] *
                             glm::vec4(glm::vec3(0.0f), 1.0f));
     widget_pos /= widget_pos.w;
 
-    widget_pos = widget_pos * 0.5f + 0.5f;
-
-    glm::vec2 direction = glm::vec2(widget_pos) - mouse_pos;
+    glm::vec2 direction = glm::vec2(widget_pos) - InputContext::mouse_position;
 
     const float rotation_angle =
         glm::length(direction) * glm::sign(abs(direction.x) > abs(direction.y)
@@ -161,17 +148,17 @@ void TranslationWidget::Update(GLFWwindow *window, Camera &camera) {
     const float cos = glm::cos(rotation_angle);
     glm::mat3 rotation_matrix;
     switch (selected_direction) {
-    case (TranslationDirections::X): {
+    case (TransformationDirections::X): {
       rotation_matrix = glm::mat3(glm::vec3(1, 0, 0), glm::vec3(0, cos, -sin),
                                   glm::vec3(0, sin, cos));
       break;
     }
-    case (TranslationDirections::Y): {
+    case (TransformationDirections::Y): {
       rotation_matrix = glm::mat3(glm::vec3(cos, 0, sin), glm::vec3(0, 1, 0),
                                   glm::vec3(-sin, 0, cos));
       break;
     }
-    case (TranslationDirections::Z): {
+    case (TransformationDirections::Z): {
       rotation_matrix = glm::mat3(glm::vec3(cos, -sin, 0),
                                   glm::vec3(sin, cos, 0), glm::vec3(0, 0, 1));
       break;
@@ -185,34 +172,30 @@ void TranslationWidget::Update(GLFWwindow *window, Camera &camera) {
     matrix[2] = glm::vec4(rotation_matrix[2], matrix[2][3]);
     break;
   }
-  case (TranslationMode::SCALE): {
+  case (TransformationMode::SCALE): {
     glm::vec4 widget_pos = view_proj * matrix *
                            (DIRECTION_INSTANCES[selected_direction] *
                             glm::vec4(glm::vec3(0.0f), 1.0f));
     widget_pos /= widget_pos.w;
 
-    widget_pos = widget_pos * 0.5f + 0.5f;
-
-    glm::vec2 direction = glm::vec2(widget_pos) - mouse_pos;
+    glm::vec2 direction = glm::vec2(widget_pos) - InputContext::mouse_position;
     const float scale_factor =
         glm::length(direction) * glm::sign(abs(direction.x) > abs(direction.y)
                                                ? direction.x
                                                : direction.y) +
         1.0f;
-    matrix[0][0] = sqrt(matrix[0][0]) * scale_factor;
-    matrix[1][1] = sqrt(matrix[1][1]) * scale_factor;
-    matrix[2][2] = sqrt(matrix[2][2]) * scale_factor;
+    matrix[selected_direction][selected_direction] = sqrt(matrix[selected_direction][selected_direction]) * scale_factor;
     break;
   }
   default: {
     assert(0 &&
            "Must set translation mode to one the the enum values as defined in "
-           "the TranslationWidget struct");
+           "the TransformationWidget struct");
   }
   }
 }
 
-void TranslationWidget::Draw(VkCommandBuffer cmd, Camera &camera) {
+void TransformationWidget::Draw(VkCommandBuffer cmd, Camera &camera) {
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw_pipeline.obj);
 
   std::array<VkDescriptorSet, 2> ds = {
@@ -230,10 +213,10 @@ void TranslationWidget::Draw(VkCommandBuffer cmd, Camera &camera) {
                      sizeof(glm::mat4), &matrix);
 
   vkCmdDrawIndexed(cmd, index_buffer.info.size / sizeof(uint32_t),
-                   TRANSLATION_DIRECTION_COUNT, 0, 0, 0);
+                   TRANSFORMATION_DIRECTION_COUNT, 0, 0, 0);
 }
 
-void TranslationWidget::Destroy(VulkanContext &vulkan_context) {
+void TransformationWidget::Destroy(VulkanContext &vulkan_context) {
   DestroyPipeline(vulkan_context, draw_pipeline);
   DestroyBuffer(vulkan_context, instance_buffer);
   DestroyBuffer(vulkan_context, vertex_buffer);

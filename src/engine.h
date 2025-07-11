@@ -12,7 +12,7 @@
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
 #include "Physics/context.h"
-#include "UI/Widgets/translation.h"
+#include "UI/Widgets/transformation.h"
 #include "camera.h"
 #include "render_graph.h"
 #include "scene_svo.h"
@@ -29,7 +29,7 @@ struct Engine {
 
   DescriptorBuilder descriptor_builder;
 
-  TranslationWidget translation_widget;
+  TransformationWidget transformation_widget;
 
   ImmediateSubmit immediate_submit;
   Camera camera;

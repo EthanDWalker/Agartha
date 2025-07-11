@@ -12,8 +12,10 @@
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
 #include "Physics/context.h"
+#include "UI/Widgets/transformation.h"
 #include "UI/context.h"
 #include "UI/render.h"
+#include "input.h"
 #include "render_graph.h"
 #include "timer.h"
 #include <GLFW/glfw3.h>
@@ -440,7 +442,7 @@ void Engine::CreateRenderGraph() {
 
       vkCmdBeginRendering(cmd, &rendering_info);
 
-      translation_widget.Draw(cmd, camera);
+      transformation_widget.Draw(cmd, camera);
 
       RenderUi(cmd);
 
@@ -520,9 +522,8 @@ void Engine::Init() {
                            VK_IMAGE_USAGE_STORAGE_BIT,
                        depth_image);
 
-  translation_widget.Create(vulkan_context, immediate_submit,
-                            descriptor_builder, camera, main_image.format);
-  translation_widget.selected_mode = TranslationWidget::TranslationMode::SCALE;
+  transformation_widget.Create(vulkan_context, immediate_submit,
+                               descriptor_builder, camera, main_image.format);
 
   CreateUiContext(vulkan_context, window, &main_image.format);
 
@@ -719,8 +720,8 @@ void Engine::Run() {
   float delta_time;
   while (!glfwWindowShouldClose(window)) {
     Timer timer{};
-    glfwPollEvents();
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+    InputContext::Update(window);
+    if (InputContext::GetInputPressed(Input::ESCAPE)) {
       glfwSetWindowShouldClose(window, true);
       should_close = true;
     }
@@ -740,31 +741,31 @@ void Engine::Run() {
            sizeof(uint32_t));
     if (selected_instance_index != -1 &&
         selected_instance_index < scene_manager.instance_index) {
-      translation_widget.matrix = glm::mat4(1.0f);
-      translation_widget.matrix[3] = glm::vec4(
+      transformation_widget.matrix = glm::mat4(1.0f);
+      transformation_widget.matrix[3] = glm::vec4(
           glm::vec3(
               scene_manager.instance_matrices[selected_instance_index][3]),
-          translation_widget.matrix[3][3]);
-      translation_widget.matrix = scene_manager.instance_matrices[selected_instance_index];
+          transformation_widget.matrix[3][3]);
+      transformation_widget.matrix =
+          scene_manager.instance_matrices[selected_instance_index];
 
-      translation_widget.Update(window, camera);
+      transformation_widget.Update(window, camera);
 
       glm::mat4 new_matrix =
           scene_manager.instance_matrices[selected_instance_index];
-      new_matrix[3] =
-          glm::vec4(glm::vec3(translation_widget.matrix[3]), new_matrix[3][3]);
-      new_matrix = translation_widget.matrix;
+      new_matrix[3] = glm::vec4(glm::vec3(transformation_widget.matrix[3]),
+                                new_matrix[3][3]);
+      new_matrix = transformation_widget.matrix;
 
       scene_manager.UpdateInstance(new_matrix, selected_instance_index);
     } else {
-      translation_widget.matrix = glm::mat4(0.0f);
+      transformation_widget.matrix = glm::mat4(0.0f);
     }
 
-    ui_layer_used |= translation_widget.selected_direction !=
-                     TranslationWidget::TranslationDirections::COUNT;
+    ui_layer_used |= transformation_widget.selected_direction !=
+                     TransformationWidget::TransformationDirections::COUNT;
 
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS &&
-        !ui_layer_used) {
+    if (InputContext::GetInputPressed(Input::MOUSE_LEFT) && !ui_layer_used) {
       double xpos, ypos;
       glfwGetCursorPos(window, &xpos, &ypos);
 
@@ -772,14 +773,8 @@ void Engine::Run() {
       glfwGetWindowSize(window, &width, &height);
 
       std::thread([=, this]() {
-        glm::vec2 pixel_center =
-            glm::vec2((float)xpos, (float)ypos) + glm::vec2(0.5f);
-        glm::vec2 ndc =
-            (pixel_center / glm::vec2((float)width, (float)height)) * 2.0f -
-            1.0f;
-
-        glm::vec4 view =
-            camera.buffer_data.inv_proj * glm::vec4(ndc.x, ndc.y, 1, 1);
+        glm::vec4 view = camera.buffer_data.inv_proj *
+                         glm::vec4(InputContext::mouse_position, 1, 1);
 
         glm::vec4 direction = camera.buffer_data.inv_view *
                               glm::vec4(glm::normalize(glm::vec3(view)), 0);
@@ -823,7 +818,7 @@ void Engine::Destroy() {
   camera.Destroy(vulkan_context);
   scene_svo.Destroy(vulkan_context);
 
-  translation_widget.Destroy(vulkan_context);
+  transformation_widget.Destroy(vulkan_context);
 
   DestroyPhysicsContext(vulkan_context, physics_context);
   DestroyUiContext();
