@@ -3,8 +3,8 @@
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
 #include "Backend/pipeline.h"
-#include "Loaders/image.h"
-#include "Loaders/model.h"
+#include "Parsers/image.h"
+#include "Parsers/model.h"
 #include <cmath>
 #include <future>
 #include <mutex>
@@ -39,7 +39,7 @@ void TextureManager::LoadTexture(VulkanContext &context, std::string filename,
   }
 
   ImageData image_data;
-  LoadImageData(filename, image_data, float_load);
+  ParseImageData(filename, image_data, float_load);
 
   VkExtent3D image_extent = {
       static_cast<uint32_t>(image_data.width),

@@ -3,14 +3,11 @@
 #include "Backend/allocated_image.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
-#include "Loaders/model.h"
+#include "Parsers/model.h"
 #include "types.h"
-#include <filesystem>
 #include <mutex>
 #include <string>
 #include <unordered_map>
-
-static const std::filesystem::path texture_dir = "../assets/textures/";
 
 const uint32_t MAX_TEXTURES = 1024;
 

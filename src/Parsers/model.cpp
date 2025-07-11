@@ -60,15 +60,13 @@ MaterialData ParseMaterialData(fastgltf::Material &material,
   return new_material;
 }
 
-std::vector<MeshData> LoadModel(std::string path) {
+std::vector<MeshData> ParseModel(std::string path) {
   SCOPED_TIMER("model parse")
-  std::string full_file_path = gltf_file_path + path;
-
-  std::filesystem::path file_path = full_file_path;
+  std::filesystem::path file_path = path;
 
   fastgltf::Parser parser;
 
-  auto data = fastgltf::GltfDataBuffer::FromPath(full_file_path);
+  auto data = fastgltf::GltfDataBuffer::FromPath(path);
 
   if (data.error() != fastgltf::Error::None) {
     fmt::println("[ERROR] gltf model {} failed to load", path);
@@ -93,14 +91,16 @@ std::vector<MeshData> LoadModel(std::string path) {
   for (fastgltf::Image &image : asset->images) {
     std::visit(fastgltf::visitor{
                    [](auto &arg) {},
-                   [&](fastgltf::sources::URI &filePath) {
-                     assert(filePath.fileByteOffset == 0);
-                     assert(filePath.uri.isLocalPath());
+                   [&](fastgltf::sources::URI &image_file_path) {
+                     assert(image_file_path.fileByteOffset == 0);
+                     assert(image_file_path.uri.isLocalPath());
 
-                     const std::string path(filePath.uri.path().begin(),
-                                            filePath.uri.path().end());
+                     const std::string image_path(
+                         image_file_path.uri.path().begin(),
+                         image_file_path.uri.path().end());
 
-                     images.push_back(path);
+                     images.push_back(file_path.root_directory().string() +
+                                      image_path);
                    },
                },
                image.data);

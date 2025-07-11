@@ -33,30 +33,12 @@ void Camera::Destroy(VulkanContext &context) {
 
 void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
                     GLFWwindow *window, float delta_time) {
-  static double last_x, last_y;
-  double pos_x, pos_y;
-  int window_width, window_height;
 
-  glfwGetWindowSize(window, &window_width, &window_height);
-  glfwGetCursorPos(window, &pos_x, &pos_y);
-
-  pos_x -= window_width / 2.0f;
-  pos_y -= window_height / 2.0f;
-
-  const double sensitivity = 0.003f;
+  const double sensitivity = 3.0f;
   if (InputContext::GetInputHeld(Input::MOUSE_RIGHT)) {
-    double dx, dy;
-    dx = pos_x - last_x;
-    dy = last_y - pos_y;
-    dx *= sensitivity;
-    dy *= sensitivity;
-
-    yaw += static_cast<float>(dx);
-    pitch += static_cast<float>(dy);
+    yaw -= InputContext::delta_mouse_position.x * sensitivity;
+    pitch += InputContext::delta_mouse_position.y * sensitivity;
   }
-
-  last_x = pos_x;
-  last_y = pos_y;
 
   if (pitch < -89.0f)
     pitch = -89.0f;
@@ -89,7 +71,8 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
   {
     const float z_near = 0.01f;
     const float z_far = 10000.0f;
-    const float aspect_ratio = window_width / static_cast<float>(window_height);
+    const float aspect_ratio =
+        InputContext::window_size.x / InputContext::window_size.y;
     const float fov_y = glm::radians(70.0f);
 
     glm::quat pitch_rotation = glm::angleAxis(pitch, glm::vec3{1.f, 0.f, 0.f});

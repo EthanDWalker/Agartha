@@ -5,7 +5,7 @@
 #include "Backend/immediate_submit.h"
 #include "Backend/pipeline.h"
 #include "GLFW/glfw3.h"
-#include "Loaders/model.h"
+#include "Parsers/model.h"
 #include "camera.h"
 #include "input.h"
 #include <cassert>
@@ -16,10 +16,10 @@
 #include <glm/gtx/string_cast.hpp>
 
 void TransformationWidget::Create(VulkanContext &vulkan_context,
-                               ImmediateSubmit &immediate_submit,
-                               DescriptorBuilder &descriptor_builder,
-                               Camera &camera, VkFormat draw_format) {
-  std::vector<MeshData> gltf_data = LoadModel("TransformationWidget.gltf");
+                                  ImmediateSubmit &immediate_submit,
+                                  DescriptorBuilder &descriptor_builder,
+                                  Camera &camera, VkFormat draw_format) {
+  std::vector<MeshData> gltf_data = ParseModel("../assets/models/TransformationWidget.gltf");
   MeshData mesh_data = gltf_data[0];
 
   CreateBufferDataAsync(vulkan_context, mesh_data.indices.data(),
@@ -184,7 +184,8 @@ void TransformationWidget::Update(GLFWwindow *window, Camera &camera) {
                                                ? direction.x
                                                : direction.y) +
         1.0f;
-    matrix[selected_direction][selected_direction] = sqrt(matrix[selected_direction][selected_direction]) * scale_factor;
+    matrix[selected_direction][selected_direction] =
+        sqrt(matrix[selected_direction][selected_direction]) * scale_factor;
     break;
   }
   default: {

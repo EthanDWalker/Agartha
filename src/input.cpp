@@ -1,24 +1,44 @@
 #include "input.h"
 #include <GLFW/glfw3.h>
+#include <queue>
 
 __uint128_t InputContext::_pressed_input = 0;
 __uint128_t InputContext::_held_input = 0;
 __uint128_t InputContext::_released_input = 0;
-glm::ivec2 InputContext::_window_size = glm::ivec2(1);
+glm::vec2 InputContext::window_size = glm::vec2(1.0f);
 
 glm::vec2 InputContext::mouse_position = glm::vec2(0.0f);
+glm::vec2 InputContext::delta_mouse_position = glm::vec2(0.0f);
+std::queue<std::filesystem::path> InputContext::droped_file_queue = {};
+
+void InputContext::_DropCallback(GLFWwindow *window, int32_t path_count,
+                                 const char *paths[]) {
+  for (int32_t i = 0; i < path_count; i++) {
+    droped_file_queue.push(paths[i]);
+  }
+}
+
+void InputContext::InitCallbacks(GLFWwindow *window) {
+  glfwSetDropCallback(window, _DropCallback);
+};
 
 void InputContext::Update(GLFWwindow *window) {
   glfwPollEvents();
 
-  glfwGetWindowSize(window, &_window_size.x, &_window_size.y);
+  glm::ivec2 window_size_int;
+  glfwGetWindowSize(window, &window_size_int.x, &window_size_int.y);
   glm::dvec2 mouse_position_double;
   glfwGetCursorPos(window, &mouse_position_double.x, &mouse_position_double.y);
 
-  mouse_position =
+  window_size = static_cast<glm::vec2>(window_size_int);
+
+  glm::vec2 new_mouse_position =
       (static_cast<glm::vec2>(mouse_position_double) + glm::vec2(0.5f)) /
-      static_cast<glm::vec2>(_window_size);
-  mouse_position = mouse_position * 2.0f - 1.0f;
+      window_size;
+  new_mouse_position = new_mouse_position * 2.0f - 1.0f;
+
+  delta_mouse_position = mouse_position - new_mouse_position;
+  mouse_position = new_mouse_position;
 
   _pressed_input = 0;
   _released_input = 0;

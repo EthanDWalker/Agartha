@@ -4,8 +4,6 @@
 #include <string>
 #include <vector>
 
-static const std::string gltf_file_path = "../assets/models/";
-
 struct MaterialData {
   std::string albedo;
   std::string metal_roughness;
@@ -23,4 +21,4 @@ struct MeshData {
   float bounds_radius;
 };
 
-std::vector<MeshData> LoadModel(std::string path);
+std::vector<MeshData> ParseModel(std::string path);

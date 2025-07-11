@@ -7,10 +7,10 @@
 #include "Backend/immediate_submit.h"
 #include "Backend/init.h"
 #include "Backend/pipeline.h"
-#include "Loaders/model.h"
 #include "Managers/light_manager.h"
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
+#include "Parsers/model.h"
 #include "Physics/context.h"
 #include "UI/Widgets/transformation.h"
 #include "UI/context.h"
@@ -483,6 +483,7 @@ void Engine::Init() {
   VkExtent2D window_size = {1600 * 2, 900 * 2};
   window = glfwCreateWindow(window_size.width, window_size.height, "Engine",
                             nullptr, nullptr);
+  InputContext::InitCallbacks(window);
 
   InitVulkanContext(window, vulkan_context);
 
@@ -683,32 +684,16 @@ void Engine::Init() {
     pipeline_builder.Build(vulkan_context, upscale_ao_pipeline);
   }
 
-  std::thread([this]() {
-    SCOPED_TIMER("Scene load");
-    {
-      {
-        auto gltf_data = LoadModel("Sponza.gltf");
+  /*{
+    auto gltf_data = ParseModel("DamagedHelmet.gltf");
 
-        for (auto &mesh : gltf_data) {
-          scene_manager.AddObject(
-              vulkan_context, mesh,
-              texture_manager.UploadMaterial(vulkan_context, descriptor_builder,
-                                             mesh.material_data));
-        }
-      }
-
-      {
-        auto gltf_data = LoadModel("DamagedHelmet.gltf");
-
-        for (auto &mesh : gltf_data) {
-          scene_manager.AddObject(
-              vulkan_context, mesh,
-              texture_manager.UploadMaterial(vulkan_context, descriptor_builder,
-                                             mesh.material_data));
-        }
-      }
+    for (auto &mesh : gltf_data) {
+      scene_manager.AddObject(
+          vulkan_context, mesh,
+          texture_manager.UploadMaterial(vulkan_context, descriptor_builder,
+                                         mesh.material_data));
     }
-  }).detach();
+  }*/
 
   CreateRenderGraph();
 }
@@ -724,6 +709,23 @@ void Engine::Run() {
     if (InputContext::GetInputPressed(Input::ESCAPE)) {
       glfwSetWindowShouldClose(window, true);
       should_close = true;
+    }
+
+    if (!InputContext::droped_file_queue.empty()) {
+      for (uint32_t i = 0; i < InputContext::droped_file_queue.size(); i++) {
+        std::filesystem::path file_path =
+            InputContext::droped_file_queue.front();
+        InputContext::droped_file_queue.pop();
+        std::thread([this, file_path]() {
+          auto gltf_data = ParseModel(file_path.string());
+          for (auto &mesh : gltf_data) {
+            scene_manager.AddObject(
+                vulkan_context, mesh,
+                texture_manager.UploadMaterial(
+                    vulkan_context, descriptor_builder, mesh.material_data));
+          }
+        }).detach();
+      }
     }
 
     light_manager.UpdateDirectionalLight(vulkan_context, directional_light, 0,
@@ -766,12 +768,6 @@ void Engine::Run() {
                      TransformationWidget::TransformationDirections::COUNT;
 
     if (InputContext::GetInputPressed(Input::MOUSE_LEFT) && !ui_layer_used) {
-      double xpos, ypos;
-      glfwGetCursorPos(window, &xpos, &ypos);
-
-      int32_t width, height;
-      glfwGetWindowSize(window, &width, &height);
-
       std::thread([=, this]() {
         glm::vec4 view = camera.buffer_data.inv_proj *
                          glm::vec4(InputContext::mouse_position, 1, 1);

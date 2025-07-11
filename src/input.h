@@ -1,7 +1,10 @@
 #pragma once
 
 #include <GLFW/glfw3.h>
+#include <filesystem>
 #include <glm/vec2.hpp>
+#include <queue>
+#include <filesystem>
 
 enum Input : uint8_t {
   SPACE,
@@ -152,9 +155,17 @@ struct InputContext {
   static __uint128_t _pressed_input;
   static __uint128_t _held_input;
   static __uint128_t _released_input;
-  static glm::ivec2 _window_size;
 
+  static glm::vec2 window_size;
   static glm::vec2 mouse_position;
+  static glm::vec2 delta_mouse_position;
+
+  static std::queue<std::filesystem::path> droped_file_queue;
+
+  static void _DropCallback(GLFWwindow *window, int32_t path_count,
+                            const char *paths[]);
+
+  static void InitCallbacks(GLFWwindow *window);
 
   static void Update(GLFWwindow *window);
 

@@ -5,7 +5,7 @@
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
 #include "Backend/immediate_submit.h"
-#include "Loaders/model.h"
+#include "Parsers/model.h"
 #include "types.h"
 #include <glm/vec3.hpp>
 #include <queue>

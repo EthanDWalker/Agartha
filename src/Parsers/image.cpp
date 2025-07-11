@@ -12,7 +12,7 @@ void GetImageInfo(std::string file_name, int32_t *width, int32_t *height) {
   stbi_info(full_path.c_str(), width, height, &comp);
 }
 
-void LoadImageData(std::string file_name, ImageData &image_data,
+void ParseImageData(std::string file_name, ImageData &image_data,
                    bool float_data, bool flip) {
   stbi_set_flip_vertically_on_load(flip);
 
