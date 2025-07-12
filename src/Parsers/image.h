@@ -2,8 +2,6 @@
 
 #include <string>
 
-static const std::string image_file_path = "../assets/textures/";
-
 struct ImageData {
   void *data;
   int32_t width;

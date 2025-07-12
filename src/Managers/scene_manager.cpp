@@ -3,7 +3,6 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/util.h"
-#include "timer.h"
 #include <cassert>
 #include <fmt/base.h>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -64,99 +63,22 @@ void SceneManager::Init(VulkanContext &context,
                            as_descriptor_layout);
 }
 
-std::vector<uint32_t>
-SceneManager::AddObjects(VulkanContext &context, std::vector<MeshData> data,
-                         std::vector<Material> materials) {
-  uint32_t index;
-  index = object_index;
-
-  assert(index + data.size() < SCENE_MAX_OBJECTS &&
-         "Reached max object for the scene");
-  assert(data.size() == materials.size() &&
-         "all objects must have materials if adding in bulk");
-
-  std::vector<Object> objects{};
-  objects.resize(data.size());
-  std::vector<SphereBounds> sphere_bounds{};
-  sphere_bounds.resize(data.size());
-  std::vector<Mesh> new_meshes{};
-  new_meshes.resize(data.size());
-  std::vector<GpuMesh> gpu_meshes{};
-  gpu_meshes.resize(data.size());
-  std::vector<uint32_t> object_indices{};
-  object_indices.resize(data.size());
-
-  for (uint32_t i = 0; i < data.size(); i++) {
-    objects[i].material = materials[i];
-    sphere_bounds[i].radius = data[i].bounds_radius;
-
-    new_meshes[i].first_index = last_index;
-    new_meshes[i].index_count = data[i].indices.size();
-    const size_t vertex_buffer_size = data[i].vertices.size() * sizeof(Vertex);
-    CreateBufferDataAsync(context, data[i].vertices.data(), vertex_buffer_size,
-                          VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                              VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                          new_meshes[i].vertex_buffer);
-
-    gpu_meshes[i].vertex_address =
-        GetDeviceAddress(context, new_meshes[i].vertex_buffer.buffer);
-    gpu_meshes[i].index_count = data[i].indices.size();
-    gpu_meshes[i].first_index = last_index;
-
-    const size_t index_buffer_size = data[i].indices.size() * sizeof(uint32_t);
-    UpdateBufferAsync(context, data[i].indices.data(), index_buffer_size,
-                      sizeof(uint32_t) * last_index, index_buffer);
-
-    for (auto &instance : data[i].instances) {
-      Instance new_instance{};
-      new_instance.matrix = instance;
-      new_instance.object_index = object_index;
-      AddInstance(context, new_instance);
-    }
-
-    AccelerationStructure as;
-    CreateBottomLevelAS(
-        context, new_meshes[i], GetDeviceAddress(context, index_buffer.buffer),
-        VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, as);
-    bottom_level_as_vector.push_back(as);
-
-    last_index += data[i].indices.size();
-    object_indices[i] = object_index++;
-  }
-
-  UpdateBufferAsync(context, objects.data(), sizeof(Object) * objects.size(),
-                    index * sizeof(Object), object_buffer);
-
-  UpdateBufferAsync(context, sphere_bounds.data(),
-                    sizeof(SphereBounds) * sphere_bounds.size(),
-                    index * sizeof(SphereBounds), sphere_bounds_buffer);
-
-  UpdateBufferAsync(context, gpu_meshes.data(),
-                    sizeof(GpuMesh) * gpu_meshes.size(),
-                    index * sizeof(GpuMesh), mesh_buffer);
-
-  {
-    std::lock_guard<std::mutex> lock(object_mutex);
-    for (auto &mesh : new_meshes) {
-      meshes.push_back(mesh);
-    }
-  }
-
-  return object_indices;
-}
-
 uint32_t SceneManager::AddObject(VulkanContext &context, MeshData &mesh_data,
                                  Material material) {
   uint32_t index;
+  uint32_t indice_index;
   {
     std::lock_guard<std::mutex> lock(object_mutex);
     index = object_index;
+    object_index++;
+    indice_index = last_index;
+    last_index += mesh_data.indices.size();
   }
   assert(index < SCENE_MAX_OBJECTS && "Reached max object for the scene");
 
   const size_t index_buffer_size = mesh_data.indices.size() * sizeof(uint32_t);
   UpdateBufferAsync(context, mesh_data.indices.data(), index_buffer_size,
-                    sizeof(uint32_t) * last_index, index_buffer);
+                    sizeof(uint32_t) * indice_index, index_buffer);
 
   Object object{};
   object.material = material;
@@ -183,15 +105,11 @@ uint32_t SceneManager::AddObject(VulkanContext &context, MeshData &mesh_data,
           VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
       mesh.vertex_buffer);
   mesh.index_count = mesh_data.indices.size();
-  mesh.first_index = last_index;
-  {
-    std::lock_guard<std::mutex> lock(object_mutex);
-    meshes.push_back(mesh);
-  }
+  mesh.first_index = indice_index;
 
   GpuMesh gpu_mesh{};
   gpu_mesh.index_count = mesh_data.indices.size();
-  gpu_mesh.first_index = last_index;
+  gpu_mesh.first_index = indice_index;
 
   VkBufferDeviceAddressInfo device_address_info{};
   device_address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
@@ -206,7 +124,10 @@ uint32_t SceneManager::AddObject(VulkanContext &context, MeshData &mesh_data,
   CreateBottomLevelAS(
       context, mesh, GetDeviceAddress(context, index_buffer.buffer),
       VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, as);
-  bottom_level_as_vector.push_back(as);
+  {
+    std::lock_guard<std::mutex> lock(as_mutex);
+    bottom_level_as_vector.push_back(as);
+  }
 
   for (auto &instance : mesh_data.instances) {
     Instance new_instance{};
@@ -215,10 +136,9 @@ uint32_t SceneManager::AddObject(VulkanContext &context, MeshData &mesh_data,
     AddInstance(context, new_instance);
   }
 
-  last_index += mesh_data.indices.size();
-
   std::lock_guard<std::mutex> lock(object_mutex);
-  return object_index++;
+  meshes.push_back(mesh);
+  return index;
 }
 
 uint32_t SceneManager::AddInstance(VulkanContext &context, Instance &instance) {
@@ -243,8 +163,6 @@ uint32_t SceneManager::AddInstance(VulkanContext &context, Instance &instance) {
   UpdateBufferAsync(
       context, &gpu_instance, sizeof(VkAccelerationStructureInstanceKHR),
       index * sizeof(VkAccelerationStructureInstanceKHR), instance_buffer);
-
-  RecreateTopLevelAS(context);
 
   {
     std::lock_guard<std::mutex> lock(instance_mutex);

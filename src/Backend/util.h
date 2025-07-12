@@ -10,7 +10,7 @@
     VkResult err = x;                                                          \
     if (err < 0) {                                                             \
       fmt::println("Detected Vulkan error: {}", string_VkResult(err));         \
-      assert(err >= 0);                                                        \
+      assert(false);                                                           \
     }                                                                          \
   } while (0)
 

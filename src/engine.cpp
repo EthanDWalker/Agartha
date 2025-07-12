@@ -18,6 +18,7 @@
 #include "input.h"
 #include "render_graph.h"
 #include "timer.h"
+#include "types.h"
 #include <GLFW/glfw3.h>
 #include <array>
 #include <cstdint>
@@ -684,17 +685,6 @@ void Engine::Init() {
     pipeline_builder.Build(vulkan_context, upscale_ao_pipeline);
   }
 
-  /*{
-    auto gltf_data = ParseModel("DamagedHelmet.gltf");
-
-    for (auto &mesh : gltf_data) {
-      scene_manager.AddObject(
-          vulkan_context, mesh,
-          texture_manager.UploadMaterial(vulkan_context, descriptor_builder,
-                                         mesh.material_data));
-    }
-  }*/
-
   CreateRenderGraph();
 }
 
@@ -715,15 +705,22 @@ void Engine::Run() {
       for (uint32_t i = 0; i < InputContext::droped_file_queue.size(); i++) {
         std::filesystem::path file_path =
             InputContext::droped_file_queue.front();
+
         InputContext::droped_file_queue.pop();
+
         std::thread([this, file_path]() {
           auto gltf_data = ParseModel(file_path.string());
+
           for (auto &mesh : gltf_data) {
-            scene_manager.AddObject(
-                vulkan_context, mesh,
-                texture_manager.UploadMaterial(
-                    vulkan_context, descriptor_builder, mesh.material_data));
+            if (mesh.material_data.albedo.empty() ||
+                mesh.material_data.normal.empty()) {
+              continue;
+            }
+            Material material = texture_manager.UploadMaterial(
+                vulkan_context, mesh.material_data);
+            scene_manager.AddObject(vulkan_context, mesh, material);
           }
+          fmt::println("done!");
         }).detach();
       }
     }

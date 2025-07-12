@@ -4,7 +4,6 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
-#include "Backend/immediate_submit.h"
 #include "Parsers/model.h"
 #include "types.h"
 #include <glm/vec3.hpp>
@@ -13,7 +12,7 @@
 
 const uint32_t SCENE_MAX_OBJECTS = 2048;
 const uint32_t SCENE_MAX_INSTANCES = 4096;
-const uint32_t SCENE_MAX_INDICES = 10000000; // 10 million
+const uint32_t SCENE_MAX_INDICES = 10'000'000;
 
 struct Object {
   Material material;
@@ -74,12 +73,7 @@ struct SceneManager {
 
   void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
 
-  std::vector<uint32_t> AddObjects(VulkanContext &context,
-                                   std::vector<MeshData> data,
-                                   std::vector<Material> materials = {});
-
-  uint32_t AddObject(VulkanContext &context, MeshData &data,
-                     Material material = {});
+  uint32_t AddObject(VulkanContext &context, MeshData &data, Material material);
 
   uint32_t AddInstance(VulkanContext &context, Instance &instance);
 

@@ -1,6 +1,9 @@
 #include "immediate_submit.h"
 #include "Backend/init.h"
 #include "Backend/util.h"
+#include "fmt/base.h"
+#include <cassert>
+#include <cstdint>
 #include <limits>
 #include <mutex>
 
@@ -58,7 +61,7 @@ void ImmediateSubmit::SubmitAsync(
   }
 
   VK_CHECK(vkWaitForFences(context.device, 1, &fence, VK_TRUE,
-                           std::numeric_limits<uint32_t>::max()));
+                                    std::numeric_limits<uint64_t>::max()));
 
   vkDestroyCommandPool(context.device, command_pool, nullptr);
   vkDestroyFence(context.device, fence, nullptr);

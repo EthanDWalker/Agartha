@@ -5,6 +5,7 @@
 #include "Backend/pipeline.h"
 #include "Parsers/image.h"
 #include "Parsers/model.h"
+#include "fmt/base.h"
 #include <cmath>
 #include <future>
 #include <mutex>
@@ -18,7 +19,6 @@ void TextureManager::Init(VulkanContext &context,
 
   uint32_t alloc_scaler = descriptor_builder.pool.alloc_scaler;
   descriptor_builder.pool.alloc_scaler = std::ceil(MAX_TEXTURES / 3.0f);
-  descriptor_builder.Reset();
   descriptor_builder.BindImages(0, texture_data);
   descriptor_builder.BindSampler(1, sampler);
   descriptor_builder.Build(context,
@@ -26,6 +26,29 @@ void TextureManager::Init(VulkanContext &context,
                                VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
                            descriptor_set, descriptor_set_layout);
   descriptor_builder.pool.alloc_scaler = alloc_scaler;
+
+  AllocatedImage place_holder = texture_data.front();
+  descriptor_builder.BindStorageImage(0, place_holder.image_view);
+  descriptor_builder.BindStorageImage(1, place_holder.image_view);
+  descriptor_builder.BindStorageImage(2, place_holder.image_view);
+  descriptor_builder.BindStorageImage(3, place_holder.image_view);
+  descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
+                           pack_input_descriptor_set,
+                           pack_input_descriptor_layout);
+
+  descriptor_builder.BindStorageImage(0, place_holder.image_view);
+  descriptor_builder.BindStorageImage(1, place_holder.image_view);
+  descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
+                           pack_output_descriptor_set,
+                           pack_output_descriptor_layout);
+
+  {
+    ComputePipelineBuilder pipeline_builder{};
+    pipeline_builder.SetShader(context, "pack_material.comp.spv");
+    pipeline_builder.AddDescriptorSetLayout(pack_input_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(pack_output_descriptor_layout);
+    pipeline_builder.Build(context, pack_pipeline);
+  }
 }
 
 void TextureManager::LoadTexture(VulkanContext &context, std::string filename,
@@ -125,19 +148,26 @@ uint32_t TextureManager::AddAllocatedImage(VulkanContext &context,
 }
 
 Material TextureManager::UploadMaterial(VulkanContext &context,
-                                        DescriptorBuilder &descriptor_builder,
-                                        MaterialData data) {
+                                        MaterialData &data) {
   Material material;
-
-  VkDescriptorSet input_descriptor_set;
-  VkDescriptorSetLayout input_descriptor_layout;
-  VkDescriptorSet output_descriptor_set;
-  VkDescriptorSetLayout output_descriptor_layout;
 
   AllocatedImage albedo{};
   AllocatedImage ao{};
   AllocatedImage mr{};
   AllocatedImage normal{};
+
+  AllocatedImage albedo_ao{};
+  AllocatedImage mr_normal{};
+
+  {
+    std::lock_guard<std::mutex> lock(texture_mutex);
+    if (texture_indices.find(data.albedo) != texture_indices.end() &&
+        texture_indices.find(data.normal) != texture_indices.end()) {
+      material.albedo_ao = texture_indices[data.albedo];
+      material.mr_normal = texture_indices[data.normal];
+      return material;
+    }
+  }
 
   std::vector<std::future<void>> futures{};
   futures.push_back(std::async(std::launch::async, [&]() {
@@ -165,16 +195,12 @@ Material TextureManager::UploadMaterial(VulkanContext &context,
     future.get();
   }
 
-  descriptor_builder.Reset();
-  descriptor_builder.BindStorageImage(0, albedo.image_view);
-  descriptor_builder.BindStorageImage(1, mr.image_view);
-  descriptor_builder.BindStorageImage(2, normal.image_view);
-  descriptor_builder.BindStorageImage(3, ao.image_view);
-  descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
-                           input_descriptor_set, input_descriptor_layout);
-
-  AllocatedImage albedo_ao{};
-  AllocatedImage mr_normal{};
+  UpdateDescriptorSetStorageImage(context, albedo, pack_input_descriptor_set,
+                                  0);
+  UpdateDescriptorSetStorageImage(context, mr, pack_input_descriptor_set, 1);
+  UpdateDescriptorSetStorageImage(context, normal, pack_input_descriptor_set,
+                                  2);
+  UpdateDescriptorSetStorageImage(context, ao, pack_input_descriptor_set, 3);
 
   CreateAllocatedImage(context, albedo.extent, albedo.format,
                        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -185,23 +211,18 @@ Material TextureManager::UploadMaterial(VulkanContext &context,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                        mr_normal, true);
 
-  descriptor_builder.Reset();
-  descriptor_builder.BindStorageImage(0, albedo_ao.image_view);
-  descriptor_builder.BindStorageImage(1, mr_normal.image_view);
-  descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
-                           output_descriptor_set, output_descriptor_layout);
+  UpdateDescriptorSetStorageImage(context, albedo_ao,
+                                  pack_output_descriptor_set, 0);
+  UpdateDescriptorSetStorageImage(context, mr_normal,
+                                  pack_output_descriptor_set, 1);
 
   material.albedo_ao = AddAllocatedImage(context, albedo_ao);
   material.mr_normal = AddAllocatedImage(context, mr_normal);
 
-  std::thread([=, this, &context]() {
-    Pipeline pipeline{};
-    ComputePipelineBuilder pipeline_builder{};
-    pipeline_builder.SetShader(context, "pack_material.comp.spv");
-    pipeline_builder.AddDescriptorSetLayout(input_descriptor_layout);
-    pipeline_builder.AddDescriptorSetLayout(output_descriptor_layout);
-    pipeline_builder.Build(context, pipeline);
+  texture_indices[data.albedo] = material.albedo_ao;
+  texture_indices[data.normal] = material.mr_normal;
 
+  std::thread([=, this, &context]() {
     ImmediateSubmit::SubmitAsync(context, [&](VkCommandBuffer cmd) {
       TransitionImage(cmd, {}, VK_ACCESS_2_SHADER_WRITE_BIT, {},
                       VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -212,15 +233,15 @@ Material TextureManager::UploadMaterial(VulkanContext &context,
                       VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
                       mr_normal.image);
 
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.obj);
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pack_pipeline.obj);
 
       std::array<VkDescriptorSet, 2> ds = {
-          input_descriptor_set,
-          output_descriptor_set,
+          pack_input_descriptor_set,
+          pack_output_descriptor_set,
       };
 
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                              pipeline.layout, 0, ds.size(), ds.data(), 0,
+                              pack_pipeline.layout, 0, ds.size(), ds.data(), 0,
                               nullptr);
 
       vkCmdDispatch(cmd, std::ceil(albedo.extent.width / 16.0f),
@@ -248,12 +269,6 @@ Material TextureManager::UploadMaterial(VulkanContext &context,
 
     vmaDestroyImage(context.allocator, mr.image, mr.allocation);
     vkDestroyImageView(context.device, mr.image_view, nullptr);
-
-    DestroyPipeline(context, pipeline);
-    vkDestroyDescriptorSetLayout(context.device, input_descriptor_layout,
-                                 nullptr);
-    vkDestroyDescriptorSetLayout(context.device, output_descriptor_layout,
-                                 nullptr);
   }).detach();
 
   return material;
@@ -265,6 +280,12 @@ void TextureManager::Destroy(VulkanContext &context) {
       DestroyAllocatedImage(context, image);
     }
   }
+
+  DestroyPipeline(context, pack_pipeline);
+  vkDestroyDescriptorSetLayout(context.device, pack_input_descriptor_layout,
+                               nullptr);
+  vkDestroyDescriptorSetLayout(context.device, pack_output_descriptor_layout,
+                               nullptr);
 
   DestroyImageSampler(context, sampler);
 

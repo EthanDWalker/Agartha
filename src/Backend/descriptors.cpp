@@ -13,6 +13,26 @@
 #include <stdlib.h>
 #include <vector>
 
+void UpdateDescriptorSetStorageImage(VulkanContext &vulkan_context,
+                                     AllocatedImage &image,
+                                     VkDescriptorSet descriptor_set,
+                                     uint32_t binding, uint32_t index) {
+  VkDescriptorImageInfo image_info{};
+  image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+  image_info.imageView = image.image_view;
+
+  VkWriteDescriptorSet write{};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.descriptorCount = 1;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+  write.pImageInfo = &image_info;
+  write.dstBinding = binding;
+  write.dstArrayElement = index;
+  write.dstSet = descriptor_set;
+
+  vkUpdateDescriptorSets(vulkan_context.device, 1, &write, 0, nullptr);
+}
+
 void DescriptorBuilder::Init(VulkanContext &context) { pool.Init(context); }
 
 void DescriptorBuilder::Destroy(VulkanContext &context) {
@@ -344,12 +364,17 @@ void DescriptorPool::Allocate(VulkanContext &context,
 
   switch (result) {
   case VK_ERROR_OUT_OF_POOL_MEMORY:
+    break;
   case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+    break;
   case VK_ERROR_FRAGMENTED_POOL:
+    break;
   default: {
     return;
   }
   }
+
+  fmt::println("creating new pool..");
 
   NewPool(context);
 

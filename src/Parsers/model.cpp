@@ -56,7 +56,6 @@ MaterialData ParseMaterialData(fastgltf::Material &material,
           ? images[textures[material.pbrData.metallicRoughnessTexture
                                 ->textureIndex]]
           : "";
-
   return new_material;
 }
 
@@ -99,7 +98,7 @@ std::vector<MeshData> ParseModel(std::string path) {
                          image_file_path.uri.path().begin(),
                          image_file_path.uri.path().end());
 
-                     images.push_back(file_path.root_directory().string() +
+                     images.push_back(file_path.parent_path().string() + "/" +
                                       image_path);
                    },
                },

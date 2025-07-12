@@ -122,6 +122,7 @@ void RenderGraph::Render(VulkanContext &context) {
       resize_requested = true;
       return;
     }
+    VK_CHECK(e);
   }
 
   VkCommandBuffer cmd = frame.command_buffer;
@@ -218,6 +219,7 @@ void RenderGraph::Render(VulkanContext &context) {
       resize_requested = true;
       return;
     }
+    VK_CHECK(e);
   }
 
   frame_number++;

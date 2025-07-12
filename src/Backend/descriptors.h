@@ -8,6 +8,11 @@
 #include <utility>
 #include <vector>
 
+void UpdateDescriptorSetStorageImage(VulkanContext &vulkan_context,
+                                     AllocatedImage &image,
+                                     VkDescriptorSet descriptor_set,
+                                     uint32_t binding, uint32_t index = 0);
+
 struct DescriptorPool {
   static constexpr std::array<std::pair<VkDescriptorType, float>, 7>
       pool_ratios{{
