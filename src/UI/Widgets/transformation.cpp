@@ -7,6 +7,7 @@
 #include "GLFW/glfw3.h"
 #include "Parsers/model.h"
 #include "camera.h"
+#include "fmt/base.h"
 #include "input.h"
 #include <cassert>
 #include <cstdint>
@@ -19,16 +20,17 @@ void TransformationWidget::Create(VulkanContext &vulkan_context,
                                   ImmediateSubmit &immediate_submit,
                                   DescriptorBuilder &descriptor_builder,
                                   Camera &camera, VkFormat draw_format) {
-  std::vector<MeshData> gltf_data = ParseModel("../assets/models/TransformationWidget.gltf");
+  std::vector<MeshData> gltf_data =
+      ParseModel("../assets/models/TransformationWidget.gltf");
   MeshData mesh_data = gltf_data[0];
 
-  CreateBufferDataAsync(vulkan_context, mesh_data.indices.data(),
-                        sizeof(uint32_t) * mesh_data.indices.size(),
-                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT, index_buffer);
+  CreateBufferData(vulkan_context, immediate_submit, mesh_data.indices.data(),
+                   sizeof(uint32_t) * mesh_data.indices.size(),
+                   VK_BUFFER_USAGE_INDEX_BUFFER_BIT, index_buffer);
 
-  CreateBufferDataAsync(vulkan_context, mesh_data.vertices.data(),
-                        sizeof(Vertex) * mesh_data.vertices.size(),
-                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, vertex_buffer);
+  CreateBufferData(vulkan_context, immediate_submit, mesh_data.vertices.data(),
+                   sizeof(Vertex) * mesh_data.vertices.size(),
+                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, vertex_buffer);
 
   bounds_min = mesh_data.aabb_bounds.first * 2.0f;
   bounds_max = mesh_data.aabb_bounds.second * 2.0f;
@@ -64,6 +66,14 @@ void TransformationWidget::Create(VulkanContext &vulkan_context,
 }
 
 void TransformationWidget::Update(GLFWwindow *window, Camera &camera) {
+  if (InputContext::GetInputHeld(Input::ONE)) {
+    selected_mode = TransformationMode::MOVE;
+  } else if (InputContext::GetInputPressed(Input::TWO)) {
+    selected_mode = TransformationMode::ROTATE;
+  } else if (InputContext::GetInputPressed(Input::THREE)) {
+    selected_mode = TransformationMode::SCALE;
+  }
+
   if (!InputContext::GetInputHeld(Input::MOUSE_LEFT)) {
     selected_direction = TransformationDirections::COUNT;
     return;

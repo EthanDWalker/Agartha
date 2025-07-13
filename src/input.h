@@ -4,8 +4,8 @@
 #include <filesystem>
 #include <glm/vec2.hpp>
 #include <queue>
-#include <filesystem>
 
+namespace Input {
 enum Input : uint8_t {
   SPACE,
   APOSTROPHE, /* ' */
@@ -133,8 +133,9 @@ enum Input : uint8_t {
   KEYBOARD_COUNT = MENU + 1,
   COUNT = MOUSE_MIDDLE + 1,
 };
+}
 
-const uint16_t KEY_TO_GLFW_KEY[Input::KEYBOARD_COUNT] = {
+const uint16_t KEY_TO_GLFW_KEY[static_cast<size_t>(Input::KEYBOARD_COUNT)] = {
     32,  39,  44,  45,  46,  47,  48,  49,  50,  51,  52,  53,  54,  55,  56,
     57,  59,  61,  65,  66,  67,  68,  69,  70,  71,  72,  73,  74,  75,  76,
     77,  78,  79,  80,  81,  82,  83,  84,  85,  86,  87,  88,  89,  90,  91,
@@ -145,10 +146,12 @@ const uint16_t KEY_TO_GLFW_KEY[Input::KEYBOARD_COUNT] = {
     331, 332, 333, 334, 335, 336, 340, 341, 342, 343, 344, 345, 346, 347, 348,
 };
 
-const uint16_t MOUSE_TO_GLFW_MOUSE[Input::COUNT - Input::KEYBOARD_COUNT] = {
-    0,
-    1,
-    2,
+const uint16_t MOUSE_TO_GLFW_MOUSE[static_cast<size_t>(Input::COUNT) -
+                                   static_cast<size_t>(Input::KEYBOARD_COUNT)] =
+    {
+        0,
+        1,
+        2,
 };
 
 struct InputContext {
@@ -169,15 +172,15 @@ struct InputContext {
 
   static void Update(GLFWwindow *window);
 
-  static inline const bool GetInputHeld(Input input) {
-    return (_held_input >> input) & 0b1;
+  static inline const bool GetInputHeld(Input::Input input) {
+    return (_held_input >> static_cast<__uint128_t>(input)) & 0b1;
   };
 
-  static inline const bool GetInputPressed(Input input) {
-    return (_pressed_input >> input) & 0b1;
+  static inline const bool GetInputPressed(Input::Input input) {
+    return (_pressed_input >> static_cast<__uint128_t>(input)) & 0b1;
   };
 
-  static inline const bool GetInputRelease(Input input) {
-    return (_released_input >> input) & 0b1;
+  static inline const bool GetInputRelease(Input::Input input) {
+    return (_released_input >> static_cast<__uint128_t>(input)) & 0b1;
   };
 };

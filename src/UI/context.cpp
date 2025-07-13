@@ -4,8 +4,8 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 
-void CreateUiContext(VulkanContext &vulkan_context, GLFWwindow *window,
-                     VkFormat *color_format) {
+void UiContext::Create(VulkanContext &vulkan_context, GLFWwindow *window,
+                       VkFormat *draw_format) {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGuiIO &io = ImGui::GetIO();
@@ -25,11 +25,28 @@ void CreateUiContext(VulkanContext &vulkan_context, GLFWwindow *window,
   init_info.PipelineRenderingCreateInfo.sType =
       VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
   init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-  init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = color_format;
+  init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = draw_format;
   ImGui_ImplVulkan_Init(&init_info);
 }
 
-void DestroyUiContext() {
+bool UiContext::Update() {
+  ImGui_ImplVulkan_NewFrame();
+  ImGui_ImplGlfw_NewFrame();
+
+  ImGui::NewFrame();
+  for (auto &panel : panels) {
+    panel();
+  }
+  ImGui::EndFrame();
+  return ImGui::GetIO().WantCaptureMouse;
+}
+
+void UiContext::Render(VkCommandBuffer cmd) {
+  ImGui::Render();
+  ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+}
+
+void UiContext::Destroy() {
   ImGui_ImplVulkan_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();

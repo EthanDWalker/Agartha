@@ -60,7 +60,6 @@ MaterialData ParseMaterialData(fastgltf::Material &material,
 }
 
 std::vector<MeshData> ParseModel(std::string path) {
-  SCOPED_TIMER("model parse")
   std::filesystem::path file_path = path;
 
   fastgltf::Parser parser;

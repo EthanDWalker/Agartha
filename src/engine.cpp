@@ -14,17 +14,16 @@
 #include "Physics/context.h"
 #include "UI/Widgets/transformation.h"
 #include "UI/context.h"
-#include "UI/render.h"
 #include "input.h"
 #include "render_graph.h"
 #include "timer.h"
-#include "types.h"
 #include <GLFW/glfw3.h>
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <fmt/base.h>
 #include <fmt/format.h>
+#include <imgui.h>
 #include <vector>
 #include <volk.h>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -86,6 +85,27 @@ void Engine::CreateRenderGraph() {
                                          1,
                                          1,
                                      });
+    });
+
+    DependencyBuilder atmosphere_dep{};
+    atmosphere_dep.AddImageDependency(
+        skybox_image, {}, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, {},
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, {}, VK_IMAGE_LAYOUT_GENERAL);
+
+    builder.AddPass(0, atmosphere_dep.dependency, [&](VkCommandBuffer cmd) {
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                        atmosphere_pipeline.obj);
+      std::array<VkDescriptorSet, 2> ds = {
+          skybox_descriptor_set,
+          light_manager.light_descriptor_set,
+      };
+
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              atmosphere_pipeline.layout, 0, ds.size(),
+                              ds.data(), 0, nullptr);
+
+      vkCmdDispatch(cmd, std::ceil(skybox_image.extent.width / 16.0f),
+                    std::ceil(skybox_image.extent.height / 16.0f), 2);
     });
 
     builder.AddPass(0, {}, [&](VkCommandBuffer cmd) {
@@ -279,6 +299,56 @@ void Engine::CreateRenderGraph() {
   }
 
   {
+    DependencyBuilder skybox_pass{};
+    skybox_pass.AddImageDependency(
+        skybox_image, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_IMAGE_LAYOUT_GENERAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    builder.AddPass(2, skybox_pass.dependency, [&](VkCommandBuffer cmd) {
+      VkViewport viewport = vkinit::Viewport(main_image.extent);
+      vkCmdSetViewport(cmd, 0, 1, &viewport);
+      VkRect2D scissor = vkinit::Scissor(main_image.extent);
+      vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+      VkRenderingAttachmentInfo color_att =
+          vkinit::AttachmentInfo(main_image.image_view, nullptr, nullptr,
+                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+      std::array<VkRenderingAttachmentInfo, 1> attachments = {
+          color_att,
+      };
+
+      VkRenderingAttachmentInfo depth_att = vkinit::DepthAttachmentInfo(
+          depth_image.image_view, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+          VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_NONE);
+
+      VkRenderingInfo rendering_info =
+          vkinit::RenderingInfo(main_image.extent, attachments, &depth_att);
+
+      vkCmdBeginRendering(cmd, &rendering_info);
+
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        skybox_pipeline.obj);
+
+      std::array<VkDescriptorSet, 2> ds = {
+          skybox_descriptor_set,
+          camera.descriptor_set,
+      };
+
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              skybox_pipeline.layout, 0, ds.size(), ds.data(),
+                              0, nullptr);
+
+      vkCmdDraw(cmd, 36, 1, 0, 0);
+
+      vkCmdEndRendering(cmd);
+    });
+  }
+
+  {
     DependencyBuilder pp_pass_dep{};
     pp_pass_dep.AddImageDependency(
         ao_image, {}, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, {},
@@ -445,7 +515,7 @@ void Engine::CreateRenderGraph() {
 
       transformation_widget.Draw(cmd, camera);
 
-      RenderUi(cmd);
+      ui_context.Render(cmd);
 
       vkCmdEndRendering(cmd);
     });
@@ -504,8 +574,7 @@ void Engine::Init() {
                    texture_manager, camera, descriptor_builder);
 
   light_manager.AddDirectionalLight(vulkan_context, glm::vec3(1.0),
-                                    glm::vec3(-1.0, -4.0, -1.0), 40.0,
-                                    immediate_submit);
+                                    sun_direction, 50.0, immediate_submit);
 
   VkExtent3D draw_image_extent = {
       window_size.width,
@@ -524,11 +593,6 @@ void Engine::Init() {
                            VK_IMAGE_USAGE_STORAGE_BIT,
                        depth_image);
 
-  transformation_widget.Create(vulkan_context, immediate_submit,
-                               descriptor_builder, camera, main_image.format);
-
-  CreateUiContext(vulkan_context, window, &main_image.format);
-
   CreateAllocatedImage(
       vulkan_context, draw_image_extent, VK_FORMAT_R8G8B8A8_UNORM,
       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
@@ -543,6 +607,16 @@ void Engine::Init() {
   CreateAllocatedImage(vulkan_context, ao_draw_image_extent, VK_FORMAT_R8_UNORM,
                        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                        ao_image);
+
+  CreateAllocatedImage(vulkan_context, {1024, 1024, 1},
+                       VK_FORMAT_R16G16B16A16_SFLOAT,
+                       VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                       skybox_image, false, true);
+
+  transformation_widget.Create(vulkan_context, immediate_submit,
+                               descriptor_builder, camera, main_image.format);
+
+  ui_context.Create(vulkan_context, window, &main_image.format);
 
   {
     std::array<VkDescriptorSetLayout, 3> ds = {
@@ -685,17 +759,55 @@ void Engine::Init() {
     pipeline_builder.Build(vulkan_context, upscale_ao_pipeline);
   }
 
+  {
+    descriptor_builder.BindStorageImage(0, skybox_image.image_view);
+    descriptor_builder.BindCombinedImage(1, skybox_image.image_view,
+                                         texture_manager.sampler);
+    descriptor_builder.Build(vulkan_context,
+                             VK_SHADER_STAGE_COMPUTE_BIT |
+                                 VK_SHADER_STAGE_FRAGMENT_BIT,
+                             skybox_descriptor_set, skybox_descriptor_layout);
+  }
+
+  {
+    ComputePipelineBuilder pipeline_builder{};
+    pipeline_builder.SetShader(vulkan_context, "skybox.comp.spv");
+    pipeline_builder.AddDescriptorSetLayout(skybox_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(
+        light_manager.light_descriptor_layout);
+    pipeline_builder.Build(vulkan_context, atmosphere_pipeline);
+  }
+
+  {
+    GraphicsPipelineBuilder pipeline_builder{};
+    pipeline_builder.SetShaders(vulkan_context, "skybox.vert.spv",
+                                "skybox.frag.spv");
+    pipeline_builder.Default();
+    pipeline_builder.AddColorAttachment(main_image.format);
+    pipeline_builder.AddDescriptorSetLayout(skybox_descriptor_layout);
+    pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
+    pipeline_builder.Build(vulkan_context, skybox_pipeline);
+  }
+
+  ui_context.panels.push_back([&]() {
+    if (ImGui::Begin("Lighting")) {
+      ImGui::DragFloat3("Sun", (float *)&sun_direction, 0.1f, -4.0f, 4.0f);
+    }
+    ImGui::End();
+  });
+
   CreateRenderGraph();
 }
 
 void Engine::Run() {
   bool should_close = false;
-  glm::vec3 directional_light = {-1.0, -4.0, -1.0};
 
   float delta_time;
   while (!glfwWindowShouldClose(window)) {
     Timer timer{};
+
     InputContext::Update(window);
+
     if (InputContext::GetInputPressed(Input::ESCAPE)) {
       glfwSetWindowShouldClose(window, true);
       should_close = true;
@@ -709,6 +821,7 @@ void Engine::Run() {
         InputContext::droped_file_queue.pop();
 
         std::thread([this, file_path]() {
+          SCOPED_TIMER("model load");
           auto gltf_data = ParseModel(file_path.string());
 
           for (auto &mesh : gltf_data) {
@@ -720,19 +833,18 @@ void Engine::Run() {
                 vulkan_context, mesh.material_data);
             scene_manager.AddObject(vulkan_context, mesh, material);
           }
-          fmt::println("done!");
         }).detach();
       }
     }
 
-    light_manager.UpdateDirectionalLight(vulkan_context, directional_light, 0,
+    bool ui_layer_used = ui_context.Update();
+
+    light_manager.UpdateDirectionalLight(vulkan_context, sun_direction, 0,
                                          immediate_submit);
 
     camera.Update(vulkan_context, immediate_submit, window, delta_time);
     light_manager.UpdateMatrices(vulkan_context, immediate_submit,
                                  camera.position);
-
-    bool ui_layer_used = UpdateUi(window, &directional_light);
 
     int32_t selected_instance_index;
     memcpy(&selected_instance_index,
@@ -789,6 +901,7 @@ void Engine::Run() {
     scene_manager.UpdateInstances(vulkan_context);
 
     render_graph.Render(vulkan_context);
+
     if (render_graph.resize_requested == true) {
       render_graph.Resize(vulkan_context, window);
     }
@@ -814,7 +927,7 @@ void Engine::Destroy() {
   transformation_widget.Destroy(vulkan_context);
 
   DestroyPhysicsContext(vulkan_context, physics_context);
-  DestroyUiContext();
+  ui_context.Destroy();
 
   main_draw_command.Destroy(vulkan_context);
   shadow_draw_command.Destroy(vulkan_context);
@@ -824,6 +937,8 @@ void Engine::Destroy() {
                                nullptr);
   vkDestroyDescriptorSetLayout(vulkan_context.device,
                                ray_tracing_descriptor_layout, nullptr);
+  vkDestroyDescriptorSetLayout(vulkan_context.device, skybox_descriptor_layout,
+                               nullptr);
 
   DestroyImageSampler(vulkan_context, sampler);
 
@@ -833,6 +948,7 @@ void Engine::Destroy() {
   DestroyAllocatedImage(vulkan_context, main_image);
   DestroyAllocatedImage(vulkan_context, mr_normal_image);
   DestroyAllocatedImage(vulkan_context, ao_image);
+  DestroyAllocatedImage(vulkan_context, skybox_image);
 
   DestroyPipeline(vulkan_context, main_pipeline);
   DestroyPipeline(vulkan_context, shadow_pipeline);
@@ -844,6 +960,8 @@ void Engine::Destroy() {
   DestroyPipeline(vulkan_context, upscale_ao_pipeline);
   DestroyPipeline(vulkan_context, depth_pipeline);
   DestroyPipeline(vulkan_context, outline_pipeline);
+  DestroyPipeline(vulkan_context, atmosphere_pipeline);
+  DestroyPipeline(vulkan_context, skybox_pipeline);
 
   DestroyVulkanContext(vulkan_context);
 

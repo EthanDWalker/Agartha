@@ -45,10 +45,10 @@ void InputContext::Update(GLFWwindow *window) {
   for (uint8_t i = 0; i < Input::KEYBOARD_COUNT; i++) {
     __uint128_t input_down = glfwGetKey(window, KEY_TO_GLFW_KEY[i]);
 
-    _pressed_input |= __uint128_t(!GetInputHeld((Input)i) && bool(input_down))
+    _pressed_input |= __uint128_t(!GetInputHeld((Input::Input)i) && bool(input_down))
                       << i;
 
-    _released_input |= __uint128_t(GetInputHeld((Input)i) && !bool(input_down))
+    _released_input |= __uint128_t(GetInputHeld((Input::Input)i) && !bool(input_down))
                        << i;
   }
 
@@ -56,10 +56,10 @@ void InputContext::Update(GLFWwindow *window) {
     __uint128_t input_down = glfwGetMouseButton(
         window, MOUSE_TO_GLFW_MOUSE[i - Input::KEYBOARD_COUNT]);
 
-    _pressed_input |= __uint128_t(!GetInputHeld((Input)i) && bool(input_down))
+    _pressed_input |= __uint128_t(!GetInputHeld((Input::Input)i) && bool(input_down))
                       << i;
 
-    _released_input |= __uint128_t(GetInputHeld((Input)i) && !bool(input_down))
+    _released_input |= __uint128_t(GetInputHeld((Input::Input)i) && !bool(input_down))
                        << i;
   }
 

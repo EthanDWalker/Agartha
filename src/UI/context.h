@@ -1,8 +1,17 @@
 #pragma once
 
 #include "Backend/context.h"
+#include <functional>
 
-void CreateUiContext(VulkanContext &vulkan_context, GLFWwindow *window,
-                     VkFormat *color_format);
+struct UiContext {
+  std::vector<std::function<void()>> panels;
 
-void DestroyUiContext();
+  void Create(VulkanContext &vulkan_context, GLFWwindow *window,
+              VkFormat *draw_format);
+
+  bool Update();
+
+  void Render(VkCommandBuffer cmd);
+
+  void Destroy();
+};
