@@ -4,8 +4,11 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
+#include "Managers/texture_manager.h"
+#include "Parsers/asset.h"
 #include "Parsers/model.h"
 #include "types.h"
+#include <filesystem>
 #include <glm/vec3.hpp>
 #include <queue>
 #include <vector>
@@ -13,30 +16,6 @@
 const uint32_t SCENE_MAX_OBJECTS = 2048;
 const uint32_t SCENE_MAX_INSTANCES = 4096;
 const uint32_t SCENE_MAX_INDICES = 10'000'000;
-
-struct Object {
-  Material material;
-};
-
-struct SphereBounds {
-  float radius;
-};
-
-struct AabbBounds {
-  glm::vec4 min;
-  glm::vec4 max;
-};
-
-struct GpuMesh {
-  VkDeviceAddress vertex_address;
-  uint32_t first_index;
-  uint32_t index_count;
-};
-
-struct Instance {
-  glm::mat4 matrix;
-  uint32_t object_index;
-};
 
 struct SceneManager {
   AllocatedBuffer object_buffer;
@@ -48,11 +27,11 @@ struct SceneManager {
 
   std::vector<Mesh> meshes;
   std::vector<AccelerationStructure> bottom_level_as_vector;
-  std::vector<glm::mat4> instance_matrices;
+  std::vector<Instance> instances;
+  std::vector<MaterialData> materials;
+  std::queue<uint32_t> changed_instances;
 
   AccelerationStructure top_level_as;
-
-  std::queue<uint32_t> changed_instances;
 
   VkDescriptorSet object_descriptor_set;
   VkDescriptorSetLayout object_descriptor_layout;
@@ -73,7 +52,10 @@ struct SceneManager {
 
   void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
 
-  uint32_t AddObject(VulkanContext &context, MeshData &data, Material material);
+  uint32_t AddObject(VulkanContext &context, MeshData &mesh_data,
+                     Material material);
+  uint32_t AddObject(VulkanContext &context, AssetData &asset_data,
+                     Material material);
 
   uint32_t AddInstance(VulkanContext &context, Instance &instance);
 
@@ -82,6 +64,13 @@ struct SceneManager {
   void UpdateInstances(VulkanContext &context);
 
   void RecreateTopLevelAS(VulkanContext &context);
+
+  void Serialize(VulkanContext &vulkan_context,
+                 std::filesystem::path file_path);
+
+  void Deserialize(VulkanContext &vulkan_context,
+                   TextureManager &texture_manager,
+                   std::filesystem::path file_path);
 
   void Destroy(VulkanContext &context);
 };

@@ -7,7 +7,6 @@
 #include "GLFW/glfw3.h"
 #include "Parsers/model.h"
 #include "camera.h"
-#include "fmt/base.h"
 #include "input.h"
 #include <cassert>
 #include <cstdint>
@@ -32,8 +31,8 @@ void TransformationWidget::Create(VulkanContext &vulkan_context,
                    sizeof(Vertex) * mesh_data.vertices.size(),
                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, vertex_buffer);
 
-  bounds_min = mesh_data.aabb_bounds.first * 2.0f;
-  bounds_max = mesh_data.aabb_bounds.second * 2.0f;
+  bounds_min = mesh_data.aabb_bounds.min * 2.0f;
+  bounds_max = mesh_data.aabb_bounds.max * 2.0f;
 
   CreateBufferData(vulkan_context, immediate_submit,
                    (void *)DIRECTION_INSTANCES,

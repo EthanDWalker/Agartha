@@ -2,7 +2,6 @@
 #include "Backend/context.h"
 #include "Backend/immediate_submit.h"
 #include "Backend/util.h"
-#include "fmt/base.h"
 
 #define VMA_IMPLEMENTATION
 #include <vma/vk_mem_alloc.h>

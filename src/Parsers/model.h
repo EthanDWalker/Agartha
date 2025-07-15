@@ -1,6 +1,8 @@
 #pragma once
 
 #include "types.h"
+#include <glm/vec3.hpp>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -17,8 +19,11 @@ struct MeshData {
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   std::vector<glm::mat4> instances;
-  std::pair<glm::vec3, glm::vec3> aabb_bounds;
-  float bounds_radius;
+  AabbBounds aabb_bounds;
+  SphereBounds sphere_bounds;
 };
 
 std::vector<MeshData> ParseModel(std::string path);
+
+void GetMeshBounds(std::span<Vertex> vertices, SphereBounds &sphere_bounds,
+                   AabbBounds &aabb_bounds);

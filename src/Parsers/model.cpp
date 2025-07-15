@@ -1,6 +1,5 @@
 #include "model.h"
 #include "fastgltf/types.hpp"
-#include "timer.h"
 #include "types.h"
 #include <fastgltf/core.hpp>
 #include <fastgltf/glm_element_traits.hpp>
@@ -16,18 +15,18 @@
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 
-void GetMeshBounds(std::span<Vertex> vertices, float &sphere_bounds,
-                   std::pair<glm::vec3, glm::vec3> &aabb_bounds) {
-  aabb_bounds.first = glm::vec3(std::numeric_limits<float>::max());
-  aabb_bounds.second = glm::vec3(std::numeric_limits<float>::min());
+void GetMeshBounds(std::span<Vertex> vertices, SphereBounds &sphere_bounds,
+                   AabbBounds &aabb_bounds) {
+  aabb_bounds.min = glm::vec3(std::numeric_limits<float>::max());
+  aabb_bounds.max = glm::vec3(std::numeric_limits<float>::min());
   for (const auto &vertex : vertices) {
     glm::vec3 position = vertex.position;
     float length = glm::length(position);
-    if (length > sphere_bounds) {
-      sphere_bounds = length;
+    if (length > sphere_bounds.radius) {
+      sphere_bounds.radius = length;
     }
-    aabb_bounds.first = glm::min(aabb_bounds.first, position);
-    aabb_bounds.second = glm::max(aabb_bounds.second, position);
+    aabb_bounds.min = glm::min(aabb_bounds.min, position);
+    aabb_bounds.max = glm::max(aabb_bounds.max, position);
   }
 }
 
@@ -207,9 +206,9 @@ std::vector<MeshData> ParseModel(std::string path) {
           vertex.position -= centroid;
         }
 
-        float bounds_radius;
-        std::pair<glm::vec3, glm::vec3> aabb_bounds;
-        GetMeshBounds(vertices, bounds_radius, aabb_bounds);
+        SphereBounds sphere_bounds;
+        AabbBounds aabb_bounds;
+        GetMeshBounds(vertices, sphere_bounds, aabb_bounds);
 
         std::vector<glm::mat4> instances = {new_instance};
 
@@ -219,7 +218,7 @@ std::vector<MeshData> ParseModel(std::string path) {
             .indices = indices,
             .instances = instances,
             .aabb_bounds = aabb_bounds,
-            .bounds_radius = bounds_radius,
+            .sphere_bounds = sphere_bounds,
         });
       }
     }

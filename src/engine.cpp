@@ -27,6 +27,7 @@
 #include <vector>
 #include <volk.h>
 #define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 
@@ -796,6 +797,22 @@ void Engine::Init() {
     ImGui::End();
   });
 
+  ui_context.panels.push_back([&]() {
+    if (ImGui::Begin("Transform")) {
+      glm::vec3 scale;
+      scale.x = glm::length(glm::vec3(transformation_widget.matrix[0]));
+      scale.y = glm::length(glm::vec3(transformation_widget.matrix[1]));
+      scale.z = glm::length(glm::vec3(transformation_widget.matrix[2]));
+      glm::vec3 rotation =
+          glm::eulerAngles(glm::toQuat(transformation_widget.matrix));
+      ImGui::InputFloat3("translation",
+                         (float *)&transformation_widget.matrix[3]);
+      ImGui::InputFloat3("scale", (float *)&scale);
+      ImGui::InputFloat3("rotation", (float *)&rotation);
+    }
+    ImGui::End();
+  });
+
   CreateRenderGraph();
 }
 
@@ -837,6 +854,21 @@ void Engine::Run() {
       }
     }
 
+    if (InputContext::GetInputHeld(Input::LEFT_CONTROL) &&
+        InputContext::GetInputPressed(Input::S)) {
+      fmt::println("saviing");
+      scene_manager.Serialize(vulkan_context, "../assets/scenes/test.scene");
+    }
+    if (InputContext::GetInputHeld(Input::LEFT_CONTROL) &&
+        InputContext::GetInputPressed(Input::R)) {
+      fmt::println("loading scene");
+      std::thread([&]() {
+        scene_manager.Deserialize(vulkan_context, texture_manager,
+                                  "../assets/scenes/test.scene");
+      }).detach();
+      fmt::println("finished loading");
+    }
+
     bool ui_layer_used = ui_context.Update();
 
     light_manager.UpdateDirectionalLight(vulkan_context, sun_direction, 0,
@@ -854,16 +886,15 @@ void Engine::Run() {
         selected_instance_index < scene_manager.instance_index) {
       transformation_widget.matrix = glm::mat4(1.0f);
       transformation_widget.matrix[3] = glm::vec4(
-          glm::vec3(
-              scene_manager.instance_matrices[selected_instance_index][3]),
+          glm::vec3(scene_manager.instances[selected_instance_index].matrix[3]),
           transformation_widget.matrix[3][3]);
       transformation_widget.matrix =
-          scene_manager.instance_matrices[selected_instance_index];
+          scene_manager.instances[selected_instance_index].matrix;
 
       transformation_widget.Update(window, camera);
 
       glm::mat4 new_matrix =
-          scene_manager.instance_matrices[selected_instance_index];
+          scene_manager.instances[selected_instance_index].matrix;
       new_matrix[3] = glm::vec4(glm::vec3(transformation_widget.matrix[3]),
                                 new_matrix[3][3]);
       new_matrix = transformation_widget.matrix;
@@ -896,7 +927,7 @@ void Engine::Run() {
                               scene_manager.as_descriptor_set);
             });
       }).detach();
-    }
+    };
 
     scene_manager.UpdateInstances(vulkan_context);
 

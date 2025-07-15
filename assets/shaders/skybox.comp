@@ -10,10 +10,8 @@ layout(set = 1, binding = 1) readonly buffer DirectionalLightBuffer {
     DirectionalLight directionalLight;
 };
 
-const vec3 BETA_MEI = vec3(5.8, 13.5, 33.1);
-const vec3 BETA_RAYLEIGH = vec3(21.0) * 0.01;
-
-const uint SUN_DIRECTIONAL_LIGHT_INDEX = 0;
+const vec3 BETA_MEI = vec3(.005, .013, .05);
+const vec3 BETA_RAYLEIGH = vec3(.021);
 
 const float PI = 3.14159265359;
 
@@ -21,7 +19,7 @@ float CalculateRayleigh(float cosTheta) {
     return (3.0 / (16.0 * PI)) * (1.0 + cosTheta * cosTheta);
 }
 
-const float G = 0.56;
+const float G = 0.8;
 const float G2 = G * G;
 
 float CalculateMei(float cosTheta) {
@@ -76,7 +74,7 @@ void main() {
     vec3 rColor = pr * BETA_RAYLEIGH * sunColor;
     vec3 mColor = pm * BETA_MEI * sunColor;
 
-    vec3 finalColor = (rColor + mColor) * 0.01;
+    vec3 finalColor = (rColor + mColor) * 6.0;
 
     imageStore(skyboxImage, ivec3(coord, cubeFace), vec4(vec3(finalColor), 1.0));
 }

@@ -21,3 +21,29 @@ struct Mesh {
   uint32_t first_index;
   uint32_t index_count;
 };
+
+struct Object {
+  Material material;
+};
+
+struct SphereBounds {
+  float radius;
+};
+
+struct AabbBounds {
+  glm::vec3 min;
+  float _pad0;
+  glm::vec3 max;
+  float _pad1;
+};
+
+struct GpuMesh {
+  VkDeviceAddress vertex_address;
+  uint32_t first_index;
+  uint32_t index_count;
+};
+
+struct Instance {
+  glm::mat4 matrix;
+  uint32_t object_index;
+};

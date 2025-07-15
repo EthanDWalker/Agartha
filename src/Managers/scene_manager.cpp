@@ -3,11 +3,17 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/util.h"
+#include "Managers/texture_manager.h"
+#include "Parsers/asset.h"
+#include "Parsers/model.h"
+#include "fmt/format.h"
+#include "types.h"
 #include <cassert>
 #include <fmt/base.h>
+#include <fstream>
+#include <mutex>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
-#include <mutex>
 
 void SceneManager::Init(VulkanContext &context,
                         DescriptorBuilder &descriptor_builder) {
@@ -38,6 +44,7 @@ void SceneManager::Init(VulkanContext &context,
   CreateBuffer(
       context, sizeof(uint32_t) * SCENE_MAX_INDICES,
       VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+          VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
           VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
           VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -63,12 +70,84 @@ void SceneManager::Init(VulkanContext &context,
                            as_descriptor_layout);
 }
 
+uint32_t SceneManager::AddObject(VulkanContext &context, AssetData &asset_data,
+                                 Material material) {
+  uint32_t index;
+  uint32_t indice_index;
+  {
+    std::lock_guard<std::mutex> lock(object_mutex);
+    materials.push_back(asset_data.material_data);
+    index = object_index;
+    object_index++;
+    indice_index = last_index;
+    last_index += asset_data.indices.size();
+  }
+  assert(index < SCENE_MAX_OBJECTS && "Reached max object for the scene");
+
+  const size_t index_buffer_size = asset_data.indices.size() * sizeof(uint32_t);
+  UpdateBufferAsync(context, asset_data.indices.data(), index_buffer_size,
+                    sizeof(uint32_t) * indice_index, index_buffer);
+
+  Object object{};
+  object.material = material;
+  UpdateBufferAsync(context, &object, sizeof(Object), index * sizeof(Object),
+                    object_buffer);
+
+  SphereBounds sphere_bounds{};
+  AabbBounds aabb_bounds{};
+  GetMeshBounds(asset_data.vertices, sphere_bounds, aabb_bounds);
+
+  UpdateBufferAsync(context, &sphere_bounds, sizeof(SphereBounds),
+                    index * sizeof(SphereBounds), sphere_bounds_buffer);
+
+  UpdateBufferAsync(context, &aabb_bounds, sizeof(AabbBounds),
+                    index * sizeof(AabbBounds), aabb_bounds_buffer);
+
+  Mesh mesh{};
+  const size_t vertex_buffer_size = asset_data.vertices.size() * sizeof(Vertex);
+  CreateBufferDataAsync(
+      context, asset_data.vertices.data(), vertex_buffer_size,
+      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+          VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+          VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+      mesh.vertex_buffer);
+  mesh.index_count = asset_data.indices.size();
+  mesh.first_index = indice_index;
+
+  GpuMesh gpu_mesh{};
+  gpu_mesh.index_count = asset_data.indices.size();
+  gpu_mesh.first_index = indice_index;
+
+  VkBufferDeviceAddressInfo device_address_info{};
+  device_address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+  device_address_info.buffer = mesh.vertex_buffer.buffer;
+  gpu_mesh.vertex_address =
+      vkGetBufferDeviceAddress(context.device, &device_address_info);
+
+  UpdateBufferAsync(context, &gpu_mesh, sizeof(GpuMesh),
+                    index * sizeof(GpuMesh), mesh_buffer);
+
+  AccelerationStructure as;
+  CreateBottomLevelAS(
+      context, mesh, GetDeviceAddress(context, index_buffer.buffer),
+      VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, as);
+  {
+    std::lock_guard<std::mutex> lock(as_mutex);
+    bottom_level_as_vector.push_back(as);
+  }
+
+  std::lock_guard<std::mutex> lock(object_mutex);
+  meshes.push_back(mesh);
+  return index;
+}
+
 uint32_t SceneManager::AddObject(VulkanContext &context, MeshData &mesh_data,
                                  Material material) {
   uint32_t index;
   uint32_t indice_index;
   {
     std::lock_guard<std::mutex> lock(object_mutex);
+    materials.push_back(mesh_data.material_data);
     index = object_index;
     object_index++;
     indice_index = last_index;
@@ -85,15 +164,10 @@ uint32_t SceneManager::AddObject(VulkanContext &context, MeshData &mesh_data,
   UpdateBufferAsync(context, &object, sizeof(Object), index * sizeof(Object),
                     object_buffer);
 
-  SphereBounds sphere_bounds{};
-  sphere_bounds.radius = mesh_data.bounds_radius;
-  UpdateBufferAsync(context, &sphere_bounds, sizeof(SphereBounds),
+  UpdateBufferAsync(context, &mesh_data.sphere_bounds, sizeof(SphereBounds),
                     index * sizeof(SphereBounds), sphere_bounds_buffer);
 
-  AabbBounds aabb_bounds{};
-  aabb_bounds.min = glm::vec4(mesh_data.aabb_bounds.first, 0.0);
-  aabb_bounds.max = glm::vec4(mesh_data.aabb_bounds.second, 0.0);
-  UpdateBufferAsync(context, &aabb_bounds, sizeof(AabbBounds),
+  UpdateBufferAsync(context, &mesh_data.aabb_bounds, sizeof(AabbBounds),
                     index * sizeof(AabbBounds), aabb_bounds_buffer);
 
   Mesh mesh{};
@@ -145,7 +219,7 @@ uint32_t SceneManager::AddInstance(VulkanContext &context, Instance &instance) {
   uint32_t index;
   {
     std::lock_guard<std::mutex> lock(instance_mutex);
-    instance_matrices.push_back(instance.matrix);
+    instances.push_back(instance);
     index = instance_index;
   }
 
@@ -174,7 +248,7 @@ void SceneManager::RecreateTopLevelAS(VulkanContext &context) {
   std::lock_guard<std::mutex> lock(as_mutex);
   DestroyAccelerationStructure(context, top_level_as);
   CreateTopLevelAS(context, GetDeviceAddress(context, instance_buffer.buffer),
-                   instance_matrices.size(),
+                   instances.size(),
                    VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR,
                    top_level_as);
 
@@ -196,7 +270,7 @@ void SceneManager::RecreateTopLevelAS(VulkanContext &context) {
 }
 
 void SceneManager::UpdateInstance(glm::mat4 new_matrix, uint32_t index) {
-  instance_matrices[index] = new_matrix;
+  instances[index].matrix = new_matrix;
   changed_instances.push(index);
 }
 
@@ -208,7 +282,7 @@ void SceneManager::UpdateInstances(VulkanContext &context) {
       uint32_t instance_index = changed_instances.front();
 
       VkTransformMatrixKHR transform_matrix =
-          Mat4ToVkTransform(instance_matrices[instance_index]);
+          Mat4ToVkTransform(instances[instance_index].matrix);
 
       UpdateBufferAsync(
           context, &transform_matrix, sizeof(VkTransformMatrixKHR),
@@ -222,10 +296,116 @@ void SceneManager::UpdateInstances(VulkanContext &context) {
   }).detach();
 }
 
+struct SceneLut {
+  size_t object_files_offset;
+  size_t instance_offset;
+};
+
+void SceneManager::Serialize(VulkanContext &vulkan_context,
+                             std::filesystem::path file_path) {
+  std::ofstream file(file_path.string(),
+                     std::ios::ate | std::ios::out | std::ios::binary);
+
+  if (!file) {
+    fmt::println("[ERROR] failed to open file {}... trying again",
+                 file_path.string());
+    file.open(file_path.string(),
+              std::ios::ate | std::ios::out | std::ios::binary);
+    if (!file) {
+      fmt::println("[ERROR] failed to open file again {}... returning",
+                   file_path.string());
+      return;
+    }
+  }
+
+  std::vector<std::string> object_files;
+  object_files.resize(object_index);
+
+  for (uint32_t i = 0; i < object_index; i++) {
+    object_files[i] = fmt::format("Meshes/{}.mesh", i);
+    SerializeAsset(vulkan_context, index_buffer, meshes[i], materials[i],
+                   object_files[i]);
+  }
+
+  SceneLut scene_lut;
+  scene_lut.object_files_offset = sizeof(SceneLut);
+  size_t object_files_size = 0;
+  for (auto &object_file : object_files) {
+    object_files_size += object_file.size() + 1;
+  }
+  scene_lut.instance_offset = scene_lut.object_files_offset + object_files_size;
+
+  file.write((const char *)&scene_lut, sizeof(SceneLut));
+
+  for (auto &object_file : object_files) {
+    file.write(object_file.data(), object_file.size() + 1);
+  }
+
+  const size_t instance_count = instances.size();
+  file.write((const char *)&instance_count, sizeof(size_t));
+
+  file.write((const char *)instances.data(), instance_count * sizeof(Instance));
+
+  file.close();
+}
+
+void SceneManager::Deserialize(VulkanContext &vulkan_context,
+                               TextureManager &texture_manager,
+                               std::filesystem::path file_path) {
+  std::ifstream file(file_path.string(), std::ios::ate | std::ios::binary);
+  if (!file.is_open()) {
+    fmt::println("[ERROR], failed to desrialize scene");
+    return;
+  }
+  size_t file_size = (size_t)file.tellg();
+
+  std::vector<char> buffer(file_size);
+
+  file.seekg(0);
+  file.read((char *)buffer.data(), file_size);
+  file.close();
+
+  std::vector<std::string> asset_files;
+  asset_files.push_back("");
+  SceneLut scene_lut = *(SceneLut *)buffer.data();
+
+  for (size_t i = scene_lut.object_files_offset; i < scene_lut.instance_offset;
+       i++) {
+    asset_files.back() += buffer[i];
+    if (buffer[i] == '\0') {
+      asset_files.push_back("");
+    }
+  }
+  asset_files.pop_back();
+
+  std::vector<AssetData> asset_datas;
+  asset_datas.reserve(asset_files.size());
+  for (auto &asset_file : asset_files) {
+    asset_datas.push_back(ParseAsset(asset_file));
+  }
+
+  for (auto &asset_data : asset_datas) {
+    Material material = texture_manager.UploadMaterial(
+        vulkan_context, asset_data.material_data);
+    AddObject(vulkan_context, asset_data, material);
+  }
+
+  size_t instance_count = *(size_t *)&buffer[scene_lut.instance_offset];
+  fmt::println("{}", instance_count);
+
+  for (size_t i = 0; i < instance_count; i++) {
+    Instance instance =
+        *(Instance *)&buffer[i * sizeof(Instance) + scene_lut.instance_offset +
+                             sizeof(size_t)];
+    AddInstance(vulkan_context, instance);
+  }
+}
+
 void SceneManager::Destroy(VulkanContext &context) {
   std::lock_guard<std::mutex> as_lock(as_mutex);
   std::lock_guard<std::mutex> instance_lock(instance_mutex);
   std::lock_guard<std::mutex> object_lock(object_mutex);
+
   for (auto &mesh : meshes) {
     DestroyBuffer(context, mesh.vertex_buffer);
   }
