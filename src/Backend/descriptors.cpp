@@ -13,9 +13,7 @@
 #include <stdlib.h>
 #include <vector>
 
-void UpdateDescriptorSetStorageImage(VulkanContext &vulkan_context,
-                                     AllocatedImage &image,
-                                     VkDescriptorSet descriptor_set,
+void UpdateDescriptorSetStorageImage(AllocatedImage &image, VkDescriptorSet descriptor_set,
                                      uint32_t binding, uint32_t index) {
   VkDescriptorImageInfo image_info{};
   image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -30,20 +28,20 @@ void UpdateDescriptorSetStorageImage(VulkanContext &vulkan_context,
   write.dstArrayElement = index;
   write.dstSet = descriptor_set;
 
-  vkUpdateDescriptorSets(vulkan_context.device, 1, &write, 0, nullptr);
+  vkUpdateDescriptorSets(VulkanContext::device, 1, &write, 0, nullptr);
 }
 
-void DescriptorBuilder::Init(VulkanContext &context) { pool.Init(context); }
+void DescriptorBuilder::Init() { pool.Init(); }
 
-void DescriptorBuilder::Destroy(VulkanContext &context) {
-  pool.Destroy(context);
+void DescriptorBuilder::Destroy() {
+  pool.Destroy();
   for (auto *write : writes) {
     free(write);
   }
 }
 
-void DescriptorBuilder::BindAccelerationStructure(
-    uint32_t binding, VkAccelerationStructureKHR &as) {
+void DescriptorBuilder::BindAccelerationStructure(uint32_t binding,
+                                                  VkAccelerationStructureKHR &as) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
@@ -55,8 +53,7 @@ void DescriptorBuilder::BindAccelerationStructure(
       (VkWriteDescriptorSetAccelerationStructureKHR *)malloc(
           sizeof(VkWriteDescriptorSetAccelerationStructureKHR));
   memset(as_write, 0, sizeof(VkWriteDescriptorSetAccelerationStructureKHR));
-  as_write->sType =
-      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+  as_write->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
   as_write->accelerationStructureCount = 1;
   as_write->pAccelerationStructures = &as;
 
@@ -99,8 +96,7 @@ void DescriptorBuilder::BindStorageBuffer(uint32_t binding, VkBuffer buffer) {
   writes.push_back(buffer_write);
 }
 
-void DescriptorBuilder::BindStorageBuffers(uint32_t binding,
-                                           std::span<AllocatedBuffer> buffers) {
+void DescriptorBuilder::BindStorageBuffers(uint32_t binding, std::span<AllocatedBuffer> buffers) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -108,8 +104,8 @@ void DescriptorBuilder::BindStorageBuffers(uint32_t binding,
 
   bindings.push_back(new_binding);
 
-  VkDescriptorBufferInfo *buffer_write_array = (VkDescriptorBufferInfo *)malloc(
-      sizeof(VkDescriptorBufferInfo) * buffers.size());
+  VkDescriptorBufferInfo *buffer_write_array =
+      (VkDescriptorBufferInfo *)malloc(sizeof(VkDescriptorBufferInfo) * buffers.size());
 
   for (uint32_t i = 0; i < buffers.size(); i++) {
     VkDescriptorBufferInfo buffer_write{};
@@ -122,8 +118,7 @@ void DescriptorBuilder::BindStorageBuffers(uint32_t binding,
   writes.push_back(buffer_write_array);
 };
 
-void DescriptorBuilder::BindCombinedImage(uint32_t binding,
-                                          VkImageView image_view,
+void DescriptorBuilder::BindCombinedImage(uint32_t binding, VkImageView image_view,
                                           VkSampler sampler) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
@@ -159,8 +154,7 @@ void DescriptorBuilder::BindImage(uint32_t binding, VkImageView image_view) {
   writes.push_back(image_write);
 }
 
-void DescriptorBuilder::BindImages(uint32_t binding,
-                                   std::span<AllocatedImage> images) {
+void DescriptorBuilder::BindImages(uint32_t binding, std::span<AllocatedImage> images) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorCount = images.size();
@@ -168,8 +162,8 @@ void DescriptorBuilder::BindImages(uint32_t binding,
 
   bindings.push_back(new_binding);
 
-  VkDescriptorImageInfo *image_write_array = (VkDescriptorImageInfo *)malloc(
-      sizeof(VkDescriptorImageInfo) * images.size());
+  VkDescriptorImageInfo *image_write_array =
+      (VkDescriptorImageInfo *)malloc(sizeof(VkDescriptorImageInfo) * images.size());
 
   for (uint32_t i = 0; i < images.size(); i++) {
     VkDescriptorImageInfo image_write{};
@@ -182,8 +176,7 @@ void DescriptorBuilder::BindImages(uint32_t binding,
   writes.push_back(image_write_array);
 }
 
-void DescriptorBuilder::BindStorageImages(
-    uint32_t binding, std::vector<VkImageView> image_views) {
+void DescriptorBuilder::BindStorageImages(uint32_t binding, std::vector<VkImageView> image_views) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorCount = image_views.size();
@@ -191,8 +184,8 @@ void DescriptorBuilder::BindStorageImages(
 
   bindings.push_back(new_binding);
 
-  VkDescriptorImageInfo *image_write_array = (VkDescriptorImageInfo *)malloc(
-      sizeof(VkDescriptorImageInfo) * image_views.size());
+  VkDescriptorImageInfo *image_write_array =
+      (VkDescriptorImageInfo *)malloc(sizeof(VkDescriptorImageInfo) * image_views.size());
 
   for (uint32_t i = 0; i < image_views.size(); i++) {
     VkDescriptorImageInfo image_write{};
@@ -205,8 +198,7 @@ void DescriptorBuilder::BindStorageImages(
   writes.push_back(image_write_array);
 }
 
-void DescriptorBuilder::BindStorageImage(uint32_t binding,
-                                         VkImageView image_view) {
+void DescriptorBuilder::BindStorageImage(uint32_t binding, VkImageView image_view) {
   VkDescriptorSetLayoutBinding new_binding{};
   new_binding.binding = binding;
   new_binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -246,10 +238,11 @@ void DescriptorBuilder::Reset() {
   writes.clear();
 }
 
-void DescriptorBuilder::Build(VulkanContext &context,
-                              VkShaderStageFlags stage_flags,
-                              VkDescriptorSet &set,
+void DescriptorBuilder::Build(VkShaderStageFlags stage_flags, VkDescriptorSet &set,
                               VkDescriptorSetLayout &layout) {
+  if (layout != VK_NULL_HANDLE) {
+    vkDestroyDescriptorSetLayout(VulkanContext::device, layout, nullptr);
+  }
   for (auto &binding : bindings) {
     binding.stageFlags = stage_flags;
   }
@@ -262,8 +255,7 @@ void DescriptorBuilder::Build(VulkanContext &context,
   }
 
   VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags_info{};
-  binding_flags_info.sType =
-      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+  binding_flags_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
   binding_flags_info.bindingCount = binding_flags.size();
   binding_flags_info.pBindingFlags = binding_flags.data();
 
@@ -271,14 +263,15 @@ void DescriptorBuilder::Build(VulkanContext &context,
   ds_layout_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   ds_layout_ci.bindingCount = bindings.size();
   ds_layout_ci.pBindings = bindings.data();
-  ds_layout_ci.flags =
-      VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+  ds_layout_ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
   ds_layout_ci.pNext = &binding_flags_info;
 
-  VK_CHECK(vkCreateDescriptorSetLayout(context.device, &ds_layout_ci, nullptr,
-                                       &layout));
+  VK_CHECK(vkCreateDescriptorSetLayout(VulkanContext::device, &ds_layout_ci, nullptr, &layout));
 
-  pool.Allocate(context, layout, set);
+  if (set != VK_NULL_HANDLE) {
+    vkFreeDescriptorSets(VulkanContext::device, pool.current_pool, 1, &set);
+  }
+  pool.Allocate(layout, set);
 
   std::vector<VkWriteDescriptorSet> binding_writes;
 
@@ -313,20 +306,20 @@ void DescriptorBuilder::Build(VulkanContext &context,
     }
     binding_writes.push_back(write);
   }
-  vkUpdateDescriptorSets(context.device, binding_writes.size(),
-                         binding_writes.data(), 0, nullptr);
+  vkUpdateDescriptorSets(VulkanContext::device, binding_writes.size(), binding_writes.data(), 0,
+                         nullptr);
   Reset();
 }
 
-void DescriptorPool::Init(VulkanContext &context) { NewPool(context); }
+void DescriptorPool::Init() { NewPool(); }
 
-void DescriptorPool::Destroy(VulkanContext &context) {
+void DescriptorPool::Destroy() {
   for (auto pool : used_pools) {
-    vkDestroyDescriptorPool(context.device, pool, nullptr);
+    vkDestroyDescriptorPool(VulkanContext::device, pool, nullptr);
   }
 }
 
-void DescriptorPool::NewPool(VulkanContext &context) {
+void DescriptorPool::NewPool() {
   std::array<VkDescriptorPoolSize, pool_ratios.size()> pool_sizes{};
 
   for (uint32_t i = 0; i < pool_ratios.size(); i++) {
@@ -341,17 +334,16 @@ void DescriptorPool::NewPool(VulkanContext &context) {
   descriptor_pool_ci.pPoolSizes = pool_sizes.data();
   descriptor_pool_ci.poolSizeCount = pool_sizes.size();
   descriptor_pool_ci.maxSets = 256;
-  descriptor_pool_ci.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+  descriptor_pool_ci.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT |
+                             VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
-  VK_CHECK(vkCreateDescriptorPool(context.device, &descriptor_pool_ci, nullptr,
-                                  &current_pool));
+  VK_CHECK(
+      vkCreateDescriptorPool(VulkanContext::device, &descriptor_pool_ci, nullptr, &current_pool));
 
   used_pools.push_back(current_pool);
 }
 
-void DescriptorPool::Allocate(VulkanContext &context,
-                              VkDescriptorSetLayout &layout,
-                              VkDescriptorSet &set, void *pNext) {
+void DescriptorPool::Allocate(VkDescriptorSetLayout &layout, VkDescriptorSet &set, void *pNext) {
   VkDescriptorSetAllocateInfo ds_alloc_info{};
   ds_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
   ds_alloc_info.descriptorPool = current_pool;
@@ -359,8 +351,7 @@ void DescriptorPool::Allocate(VulkanContext &context,
   ds_alloc_info.descriptorSetCount = 1;
   ds_alloc_info.pNext = pNext;
 
-  VkResult result =
-      vkAllocateDescriptorSets(context.device, &ds_alloc_info, &set);
+  VkResult result = vkAllocateDescriptorSets(VulkanContext::device, &ds_alloc_info, &set);
 
   switch (result) {
   case VK_ERROR_OUT_OF_POOL_MEMORY:
@@ -376,7 +367,7 @@ void DescriptorPool::Allocate(VulkanContext &context,
 
   fmt::println("creating new pool..");
 
-  NewPool(context);
+  NewPool();
 
-  VK_CHECK(vkAllocateDescriptorSets(context.device, &ds_alloc_info, &set));
+  VK_CHECK(vkAllocateDescriptorSets(VulkanContext::device, &ds_alloc_info, &set));
 }

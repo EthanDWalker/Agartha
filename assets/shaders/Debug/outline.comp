@@ -1,5 +1,5 @@
 #version 450
-layout(local_size_x = 1) in;
+layout(local_size_x = 16) in;
 
 #extension GL_GOOGLE_include_directive : require
 #include "../common.glsl"
@@ -12,16 +12,17 @@ layout(set = 0, binding = 1) buffer DrawCount {
     uint drawCount;
 };
 
-layout(set = 1, binding = 1) readonly buffer RayCastQueryResults {
-    uint results[];
-};
-
-layout(set = 2, binding = 0) readonly buffer InstanceBuffer {
+layout(set = 1, binding = 0) readonly buffer InstanceBuffer {
     Instance instances[];
 };
 
-layout(set = 3, binding = 1) readonly buffer GpuMeshes {
+layout(set = 2, binding = 1) readonly buffer GpuMeshes {
     GpuMesh gpuMeshes[];
+};
+
+layout(set = 3, binding = 0) readonly buffer SelectedInstancesBuffer {
+    uint selectedInstanceCount;
+    uint selectedInstances[];
 };
 
 void main() {
@@ -31,11 +32,9 @@ void main() {
 
     barrier();
 
-    if (gl_GlobalInvocationID.x != 0) return;
+    if (gl_GlobalInvocationID.x >= selectedInstanceCount) return;
 
-    uint instanceIndex  = results[0];
-
-    if (instanceIndex == -1) return;
+    uint instanceIndex = selectedInstances[gl_GlobalInvocationID.x];
 
     uint drawIndex = atomicAdd(drawCount, 1);
 

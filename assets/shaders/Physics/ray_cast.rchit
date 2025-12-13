@@ -4,7 +4,7 @@
 #include "../common.glsl"
 
 struct Payload {
-    int outInstanceIndex;
+    uint outInstanceIndex;
 };
 
 layout(location = 0) rayPayloadInEXT Payload payload;

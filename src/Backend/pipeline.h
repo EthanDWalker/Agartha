@@ -1,5 +1,5 @@
 #pragma once
-#include "context.h"
+#include <volk.h>
 #include <optional>
 #include <string>
 #include <vector>
@@ -22,18 +22,17 @@ struct RaytracingPipelineBuilder {
   std::vector<VkPushConstantRange> push_constant_ranges{};
   std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};
 
-  VkRayTracingShaderGroupCreateInfoKHR
-      shader_groups[ShaderStages::SHADER_STAGE_COUNT];
+  VkRayTracingShaderGroupCreateInfoKHR shader_groups[ShaderStages::SHADER_STAGE_COUNT];
 
   VkShaderModule shader_modules[ShaderStages::SHADER_STAGE_COUNT];
 
-  void SetShaders(VulkanContext &context, std::string ray_gen, std::string miss,
+  void SetShaders(std::string ray_gen, std::string miss,
                   std::string closest_hit);
 
   void AddPushConstantRange(uint32_t size);
   void AddDescriptorSetLayout(VkDescriptorSetLayout layout);
 
-  void Build(VulkanContext &context, uint8_t max_recursion, Pipeline &pipeline);
+  void Build(uint8_t max_recursion, Pipeline &pipeline);
 };
 
 struct ComputePipelineBuilder {
@@ -41,12 +40,12 @@ struct ComputePipelineBuilder {
   std::vector<VkDescriptorSetLayout> descriptor_set_layouts{};
   VkShaderModule shader;
 
-  void SetShader(VulkanContext &context, std::string comp);
+  void SetShader(std::string comp);
 
   void AddPushConstantRange(uint32_t size);
   void AddDescriptorSetLayout(VkDescriptorSetLayout layout);
 
-  void Build(VulkanContext &context, Pipeline &pipeline);
+  void Build(Pipeline &pipeline);
 };
 
 struct GraphicsPipelineBuilder {
@@ -69,21 +68,16 @@ struct GraphicsPipelineBuilder {
 
   GraphicsPipelineBuilder() {
     render_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    input_assembly.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    tessellation.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+    input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    tessellation.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
     viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    rasterization.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    multisample.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    depth_stencil.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
   }
 
-  void SetShaders(VulkanContext &context, std::string vert, std::string frag,
+  void SetShaders(std::string vert, std::string frag,
                   std::string geom = "");
 
   void Default();
@@ -118,7 +112,7 @@ struct GraphicsPipelineBuilder {
 
   void AddDescriptorSetLayout(VkDescriptorSetLayout layout);
 
-  void Build(VulkanContext &context, Pipeline &pipeline);
+  void Build(Pipeline &pipeline);
 };
 
-void DestroyPipeline(VulkanContext &context, Pipeline &pipeline);
+void DestroyPipeline(Pipeline &pipeline);

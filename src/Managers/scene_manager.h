@@ -2,7 +2,6 @@
 
 #include "Backend/acceleration_structure.h"
 #include "Backend/buffer.h"
-#include "Backend/context.h"
 #include "Backend/descriptors.h"
 #include "Managers/texture_manager.h"
 #include "Parsers/asset.h"
@@ -10,12 +9,19 @@
 #include "types.h"
 #include <filesystem>
 #include <glm/vec3.hpp>
+#include <limits>
 #include <queue>
 #include <vector>
 
 const uint32_t SCENE_MAX_OBJECTS = 2048;
 const uint32_t SCENE_MAX_INSTANCES = 4096;
 const uint32_t SCENE_MAX_INDICES = 10'000'000;
+
+struct SceneNode {
+  std::string name;
+  std::vector<SceneNode> children;
+  uint32_t instance_index{std::numeric_limits<uint32_t>::max()};
+};
 
 struct SceneManager {
   AllocatedBuffer object_buffer;
@@ -28,6 +34,7 @@ struct SceneManager {
   std::vector<Mesh> meshes;
   std::vector<AccelerationStructure> bottom_level_as_vector;
   std::vector<Instance> instances;
+  std::vector<SceneNode> root_scene_nodes;
   std::vector<MaterialData> materials;
   std::queue<uint32_t> changed_instances;
 
@@ -50,27 +57,28 @@ struct SceneManager {
   uint32_t instance_index;
   uint32_t last_index;
 
-  void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
+  void Init(DescriptorBuilder &descriptor_builder);
 
-  uint32_t AddObject(VulkanContext &context, MeshData &mesh_data,
-                     Material material);
-  uint32_t AddObject(VulkanContext &context, AssetData &asset_data,
-                     Material material);
+  void AddSceneNode(SceneNodeData &root_node, TextureManager &texture_manager);
 
-  uint32_t AddInstance(VulkanContext &context, Instance &instance);
+  void AddChildSceneNode(SceneNodeData &root_node, TextureManager &texture_manager,
+                         SceneNode &parent);
+
+  uint32_t AddObject(PrimitiveData &mesh_data, Material material);
+
+  uint32_t _AddObject(AssetData &asset_data, Material material);
+
+  uint32_t AddInstance(Instance &instance);
 
   void UpdateInstance(glm::mat4 new_matrix, uint32_t index);
 
-  void UpdateInstances(VulkanContext &context);
+  void UpdateInstances();
 
-  void RecreateTopLevelAS(VulkanContext &context);
+  void RecreateTopLevelAS();
 
-  void Serialize(VulkanContext &vulkan_context,
-                 std::filesystem::path file_path);
+  void Serialize(std::filesystem::path file_path);
 
-  void Deserialize(VulkanContext &vulkan_context,
-                   TextureManager &texture_manager,
-                   std::filesystem::path file_path);
+  void Deserialize(TextureManager &texture_manager, std::filesystem::path file_path);
 
-  void Destroy(VulkanContext &context);
+  void Destroy();
 };

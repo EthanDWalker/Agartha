@@ -45,21 +45,17 @@ bool LoadShaderModule(std::string_view file_path, VkDevice device,
 
   // check that the creation goes well.
   VkShaderModule shader_module;
-  if (vkCreateShaderModule(device, &ci, nullptr, &shader_module) !=
-      VK_SUCCESS) {
+  if (vkCreateShaderModule(device, &ci, nullptr, &shader_module) != VK_SUCCESS) {
     return false;
   }
   *out_shader_module = shader_module;
   return true;
 }
 
-void RaytracingPipelineBuilder::SetShaders(VulkanContext &context,
-                                           std::string ray_gen,
-                                           std::string miss,
+void RaytracingPipelineBuilder::SetShaders(std::string ray_gen, std::string miss,
                                            std::string closest_hit) {
   VkRayTracingShaderGroupCreateInfoKHR shader_group{};
-  shader_group.sType =
-      VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+  shader_group.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
   shader_group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
   shader_group.generalShader = ShaderStages::RAY_GEN;
   shader_group.closestHitShader = VK_SHADER_UNUSED_KHR;
@@ -75,24 +71,23 @@ void RaytracingPipelineBuilder::SetShaders(VulkanContext &context,
   shader_group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
   shader_groups[ShaderStages::CLOSEST_HIT] = shader_group;
 
-  if (!LoadShaderModule(shader_file_path + ray_gen, context.device,
+  if (!LoadShaderModule(shader_file_path + ray_gen, VulkanContext::device,
                         &shader_modules[ShaderStages::RAY_GEN])) {
     fmt::println("[ERROR] failed to load {}", ray_gen);
   }
 
-  if (!LoadShaderModule(shader_file_path + miss, context.device,
+  if (!LoadShaderModule(shader_file_path + miss, VulkanContext::device,
                         &shader_modules[ShaderStages::MISS])) {
     fmt::println("[ERROR] failed to load {}", miss);
   }
 
-  if (!LoadShaderModule(shader_file_path + closest_hit, context.device,
+  if (!LoadShaderModule(shader_file_path + closest_hit, VulkanContext::device,
                         &shader_modules[ShaderStages::CLOSEST_HIT])) {
     fmt::println("[ERROR] failed to load {}", closest_hit);
   }
 }
 
-void RaytracingPipelineBuilder::AddDescriptorSetLayout(
-    VkDescriptorSetLayout layout) {
+void RaytracingPipelineBuilder::AddDescriptorSetLayout(VkDescriptorSetLayout layout) {
   descriptor_set_layouts.push_back(layout);
 }
 
@@ -108,9 +103,7 @@ void RaytracingPipelineBuilder::AddPushConstantRange(uint32_t size) {
   push_constant_ranges.push_back(range);
 }
 
-void RaytracingPipelineBuilder::Build(VulkanContext &context,
-                                      uint8_t max_recursion,
-                                      Pipeline &pipeline) {
+void RaytracingPipelineBuilder::Build(uint8_t max_recursion, Pipeline &pipeline) {
   VkPipelineLayoutCreateInfo pipeline_layout_ci{};
   pipeline_layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipeline_layout_ci.pPushConstantRanges = push_constant_ranges.data();
@@ -118,15 +111,13 @@ void RaytracingPipelineBuilder::Build(VulkanContext &context,
   pipeline_layout_ci.pSetLayouts = descriptor_set_layouts.data();
   pipeline_layout_ci.setLayoutCount = descriptor_set_layouts.size();
 
-  VK_CHECK(vkCreatePipelineLayout(context.device, &pipeline_layout_ci, nullptr,
+  VK_CHECK(vkCreatePipelineLayout(VulkanContext::device, &pipeline_layout_ci, nullptr,
                                   &pipeline.layout));
 
-  VkPipelineShaderStageCreateInfo
-      shader_stage_cis[ShaderStages::SHADER_STAGE_COUNT] = {};
+  VkPipelineShaderStageCreateInfo shader_stage_cis[ShaderStages::SHADER_STAGE_COUNT] = {};
 
   for (uint8_t i = 0; i < ShaderStages::SHADER_STAGE_COUNT; i++) {
-    shader_stage_cis[i].sType =
-        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shader_stage_cis[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shader_stage_cis[i].module = shader_modules[i];
     shader_stage_cis[i].pName = "main";
   }
@@ -143,17 +134,16 @@ void RaytracingPipelineBuilder::Build(VulkanContext &context,
   pipeline_ci.maxPipelineRayRecursionDepth = max_recursion;
   pipeline_ci.layout = pipeline.layout;
 
-  vkCreateRayTracingPipelinesKHR(context.device, {}, VK_NULL_HANDLE, 1,
-                                 &pipeline_ci, nullptr, &pipeline.obj);
+  vkCreateRayTracingPipelinesKHR(VulkanContext::device, {}, VK_NULL_HANDLE, 1, &pipeline_ci,
+                                 nullptr, &pipeline.obj);
 
   for (uint8_t i = 0; i < ShaderStages::SHADER_STAGE_COUNT; i++) {
-    vkDestroyShaderModule(context.device, shader_modules[i], nullptr);
+    vkDestroyShaderModule(VulkanContext::device, shader_modules[i], nullptr);
   }
 }
 
-void ComputePipelineBuilder::SetShader(VulkanContext &context,
-                                       std::string comp) {
-  if (!LoadShaderModule(shader_file_path + comp, context.device, &shader)) {
+void ComputePipelineBuilder::SetShader(std::string comp) {
+  if (!LoadShaderModule(shader_file_path + comp, VulkanContext::device, &shader)) {
     fmt::println("[ERROR] failed to load {}", comp);
   }
 }
@@ -170,12 +160,11 @@ void ComputePipelineBuilder::AddPushConstantRange(uint32_t size) {
   push_constant_ranges.push_back(range);
 }
 
-void ComputePipelineBuilder::AddDescriptorSetLayout(
-    VkDescriptorSetLayout layout) {
+void ComputePipelineBuilder::AddDescriptorSetLayout(VkDescriptorSetLayout layout) {
   descriptor_set_layouts.push_back(layout);
 }
 
-void ComputePipelineBuilder::Build(VulkanContext &context, Pipeline &pipeline) {
+void ComputePipelineBuilder::Build(Pipeline &pipeline) {
   VkPipelineLayoutCreateInfo pipeline_layout_ci{};
   pipeline_layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipeline_layout_ci.pPushConstantRanges = push_constant_ranges.data();
@@ -183,7 +172,7 @@ void ComputePipelineBuilder::Build(VulkanContext &context, Pipeline &pipeline) {
   pipeline_layout_ci.pSetLayouts = descriptor_set_layouts.data();
   pipeline_layout_ci.setLayoutCount = descriptor_set_layouts.size();
 
-  VK_CHECK(vkCreatePipelineLayout(context.device, &pipeline_layout_ci, nullptr,
+  VK_CHECK(vkCreatePipelineLayout(VulkanContext::device, &pipeline_layout_ci, nullptr,
                                   &pipeline.layout));
 
   VkPipelineShaderStageCreateInfo shader_ci{};
@@ -197,27 +186,22 @@ void ComputePipelineBuilder::Build(VulkanContext &context, Pipeline &pipeline) {
   info.layout = pipeline.layout;
   info.stage = shader_ci;
 
-  VK_CHECK(vkCreateComputePipelines(context.device, VK_NULL_HANDLE, 1, &info,
-                                    nullptr, &pipeline.obj));
+  VK_CHECK(vkCreateComputePipelines(VulkanContext::device, VK_NULL_HANDLE, 1, &info, nullptr,
+                                    &pipeline.obj));
 
-  vkDestroyShaderModule(context.device, shader, nullptr);
+  vkDestroyShaderModule(VulkanContext::device, shader, nullptr);
 }
 
-void GraphicsPipelineBuilder::SetShaders(VulkanContext &context,
-                                         std::string vert, std::string frag,
-                                         std::string geom) {
-  if (!LoadShaderModule(shader_file_path + vert, context.device,
-                        &vert_shader)) {
+void GraphicsPipelineBuilder::SetShaders(std::string vert, std::string frag, std::string geom) {
+  if (!LoadShaderModule(shader_file_path + vert, VulkanContext::device, &vert_shader)) {
     fmt::println("[ERROR] failed to load {}", vert);
   }
-  if (!LoadShaderModule(shader_file_path + frag, context.device,
-                        &frag_shader)) {
+  if (!LoadShaderModule(shader_file_path + frag, VulkanContext::device, &frag_shader)) {
     fmt::println("[ERROR] failed to load {}", frag);
   }
   if (!geom.empty()) {
     geom_shader.emplace();
-    if (!LoadShaderModule(shader_file_path + geom, context.device,
-                          &geom_shader.value())) {
+    if (!LoadShaderModule(shader_file_path + geom, VulkanContext::device, &geom_shader.value())) {
       fmt::println("[ERROR] failed to load {}", geom);
     }
   }
@@ -244,14 +228,12 @@ void GraphicsPipelineBuilder::SetPolygonMode(VkPolygonMode mode) {
   rasterization.lineWidth = 1.0f;
 }
 
-void GraphicsPipelineBuilder::SetCullMode(VkCullModeFlags cull_mode,
-                                          VkFrontFace front_face) {
+void GraphicsPipelineBuilder::SetCullMode(VkCullModeFlags cull_mode, VkFrontFace front_face) {
   rasterization.cullMode = cull_mode;
   rasterization.frontFace = front_face;
 }
 
-void GraphicsPipelineBuilder::SetMultisampling(
-    VkSampleCountFlagBits sample_count) {
+void GraphicsPipelineBuilder::SetMultisampling(VkSampleCountFlagBits sample_count) {
   multisample.sampleShadingEnable = VK_FALSE;
   multisample.rasterizationSamples = sample_count;
   multisample.minSampleShading = 0.2f;
@@ -267,9 +249,8 @@ void GraphicsPipelineBuilder::SetNoMultisampling() {
 }
 
 void GraphicsPipelineBuilder::SetBlendingAdditive(uint8_t index) {
-  color_attachments[index].colorWriteMask =
-      VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  color_attachments[index].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
   color_attachments[index].blendEnable = VK_TRUE;
   color_attachments[index].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
   color_attachments[index].dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
@@ -280,13 +261,11 @@ void GraphicsPipelineBuilder::SetBlendingAdditive(uint8_t index) {
 }
 
 void GraphicsPipelineBuilder::SetBlendingAlpha(uint8_t index) {
-  color_attachments[index].colorWriteMask =
-      VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  color_attachments[index].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
   color_attachments[index].blendEnable = VK_TRUE;
   color_attachments[index].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-  color_attachments[index].dstColorBlendFactor =
-      VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  color_attachments[index].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
   color_attachments[index].colorBlendOp = VK_BLEND_OP_ADD;
   color_attachments[index].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
   color_attachments[index].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
@@ -294,9 +273,8 @@ void GraphicsPipelineBuilder::SetBlendingAlpha(uint8_t index) {
 }
 
 void GraphicsPipelineBuilder::SetNoBlending(uint8_t index) {
-  color_attachments[index].colorWriteMask =
-      VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  color_attachments[index].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
   color_attachments[index].blendEnable = VK_FALSE;
 }
 
@@ -320,8 +298,7 @@ void GraphicsPipelineBuilder::SetNoDepthTest() {
   depth_stencil.maxDepthBounds = 1.f;
 }
 
-void GraphicsPipelineBuilder::SetDepthTest(bool depth_write_enable,
-                                           VkCompareOp op) {
+void GraphicsPipelineBuilder::SetDepthTest(bool depth_write_enable, VkCompareOp op) {
   depth_stencil.depthTestEnable = VK_TRUE;
   depth_stencil.depthWriteEnable = depth_write_enable;
   depth_stencil.depthCompareOp = op;
@@ -337,8 +314,7 @@ void GraphicsPipelineBuilder::SetDepthFormat(VkFormat format) {
   render_info.depthAttachmentFormat = format;
 }
 
-void GraphicsPipelineBuilder::AddPushConstantRange(
-    VkShaderStageFlags stage_flags, uint32_t size) {
+void GraphicsPipelineBuilder::AddPushConstantRange(VkShaderStageFlags stage_flags, uint32_t size) {
   VkPushConstantRange range{};
   uint32_t offset = 0;
   for (auto range : push_constant_ranges) {
@@ -350,8 +326,7 @@ void GraphicsPipelineBuilder::AddPushConstantRange(
   push_constant_ranges.push_back(range);
 }
 
-void GraphicsPipelineBuilder::AddDescriptorSetLayout(
-    VkDescriptorSetLayout layout) {
+void GraphicsPipelineBuilder::AddDescriptorSetLayout(VkDescriptorSetLayout layout) {
   descriptor_set_layouts.push_back(layout);
 }
 
@@ -363,8 +338,7 @@ void GraphicsPipelineBuilder::SetViewportCount(uint32_t count) {
   viewport_state.scissorCount = count;
 }
 
-void GraphicsPipelineBuilder::Build(VulkanContext &context,
-                                    Pipeline &pipeline) {
+void GraphicsPipelineBuilder::Build(Pipeline &pipeline) {
   VkPipelineLayoutCreateInfo pipeline_layout_ci{};
   pipeline_layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipeline_layout_ci.pPushConstantRanges = push_constant_ranges.data();
@@ -372,19 +346,17 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
   pipeline_layout_ci.pSetLayouts = descriptor_set_layouts.data();
   pipeline_layout_ci.setLayoutCount = descriptor_set_layouts.size();
 
-  VK_CHECK(vkCreatePipelineLayout(context.device, &pipeline_layout_ci, nullptr,
+  VK_CHECK(vkCreatePipelineLayout(VulkanContext::device, &pipeline_layout_ci, nullptr,
                                   &pipeline.layout));
 
   VkPipelineColorBlendStateCreateInfo color_blending = {};
-  color_blending.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
   color_blending.logicOpEnable = VK_FALSE;
   color_blending.pAttachments = color_attachments.data();
   color_blending.attachmentCount = color_attachments.size();
 
   VkPipelineVertexInputStateCreateInfo vertex_input_info{};
-  vertex_input_info.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
   VkGraphicsPipelineCreateInfo pipeline_ci = {};
   pipeline_ci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -404,8 +376,7 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
 
   if (geom_shader.has_value()) {
     shader_stages.resize(3);
-    shader_stages[2].sType =
-        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shader_stages[2].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shader_stages[2].stage = VK_SHADER_STAGE_GEOMETRY_BIT;
     shader_stages[2].module = geom_shader.value();
     shader_stages[2].pName = "main";
@@ -422,8 +393,7 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
   pipeline_ci.pDepthStencilState = &depth_stencil;
   pipeline_ci.layout = pipeline.layout;
 
-  VkDynamicState state[] = {VK_DYNAMIC_STATE_VIEWPORT,
-                            VK_DYNAMIC_STATE_SCISSOR};
+  VkDynamicState state[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
   VkPipelineDynamicStateCreateInfo dynamic_info{};
   dynamic_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -431,19 +401,19 @@ void GraphicsPipelineBuilder::Build(VulkanContext &context,
   dynamic_info.dynamicStateCount = 2;
 
   pipeline_ci.pDynamicState = &dynamic_info;
-  if (vkCreateGraphicsPipelines(context.device, VK_NULL_HANDLE, 1, &pipeline_ci,
-                                nullptr, &pipeline.obj) != VK_SUCCESS) {
+  if (vkCreateGraphicsPipelines(VulkanContext::device, VK_NULL_HANDLE, 1, &pipeline_ci, nullptr,
+                                &pipeline.obj) != VK_SUCCESS) {
     fmt::println("[ERROR] failed to create pipeline");
   }
 
-  vkDestroyShaderModule(context.device, vert_shader, nullptr);
-  vkDestroyShaderModule(context.device, frag_shader, nullptr);
+  vkDestroyShaderModule(VulkanContext::device, vert_shader, nullptr);
+  vkDestroyShaderModule(VulkanContext::device, frag_shader, nullptr);
   if (geom_shader.has_value()) {
-    vkDestroyShaderModule(context.device, geom_shader.value(), nullptr);
+    vkDestroyShaderModule(VulkanContext::device, geom_shader.value(), nullptr);
   }
 }
 
-void DestroyPipeline(VulkanContext &context, Pipeline &pipeline) {
-  vkDestroyPipelineLayout(context.device, pipeline.layout, nullptr);
-  vkDestroyPipeline(context.device, pipeline.obj, nullptr);
+void DestroyPipeline(Pipeline &pipeline) {
+  vkDestroyPipelineLayout(VulkanContext::device, pipeline.layout, nullptr);
+  vkDestroyPipeline(VulkanContext::device, pipeline.obj, nullptr);
 }

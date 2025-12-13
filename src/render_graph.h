@@ -2,7 +2,6 @@
 
 #include "Backend/allocated_image.h"
 #include "Backend/buffer.h"
-#include "Backend/context.h"
 #include "Backend/frame_data.h"
 #include "Backend/swapchain.h"
 #include <cstdint>
@@ -27,44 +26,39 @@ struct DependencyBuilder {
   Dependency dependency;
 
   void AddImageDependency(AllocatedImage image, VkAccessFlagBits2 src_access,
-                          VkAccessFlagBits2 dst_access,
-                          VkPipelineStageFlagBits2 src_stage,
-                          VkPipelineStageFlagBits2 dst_stage,
-                          VkImageLayout old_layout, VkImageLayout new_layout,
-                          bool depth = false);
+                          VkAccessFlagBits2 dst_access, VkPipelineStageFlagBits2 src_stage,
+                          VkPipelineStageFlagBits2 dst_stage, VkImageLayout old_layout,
+                          VkImageLayout new_layout, bool depth = false);
 
   void AddBufferDependency(AllocatedBuffer buffer, VkAccessFlagBits2 src_access,
-                           VkAccessFlagBits2 dst_access,
-                           VkPipelineStageFlagBits2 src_stage,
+                           VkAccessFlagBits2 dst_access, VkPipelineStageFlagBits2 src_stage,
                            VkPipelineStageFlagBits2 dst_stage);
 
   void AddDependency(VkAccessFlagBits2 src_access, VkAccessFlagBits2 dst_access,
-                     VkPipelineStageFlagBits2 src_stage,
-                     VkPipelineStageFlagBits2 dst_stage);
+                     VkPipelineStageFlagBits2 src_stage, VkPipelineStageFlagBits2 dst_stage);
 };
 
 struct RenderGraphBuilder {
   std::vector<std::vector<RenderPass>> render_graph;
 
-  void AddPass(uint32_t level, Dependency dependency,
-               std::function<void(VkCommandBuffer)> callback,
+  void AddPass(uint32_t level, Dependency dependency, std::function<void(VkCommandBuffer)> callback,
                bool *condition = nullptr);
 };
 
 struct RenderGraph {
   std::vector<std::vector<RenderPass>> render_graph;
   Dependency root_dep;
-  std::function<void(VkCommandBuffer, VkImage, VkExtent2D)> root_callback;
+  std::function<void(VkCommandBuffer, VkImage, VkImageView, VkExtent2D)> root_callback;
   Swapchain swapchain;
   FrameData frame_data[FRAME_OVERLAP];
   size_t frame_number;
   bool resize_requested;
 
-  void Init(VulkanContext &context, GLFWwindow *window);
+  void Init(GLFWwindow *window);
 
-  void Render(VulkanContext &context);
+  void Render();
 
-  void Resize(VulkanContext &context, GLFWwindow *window);
+  void Resize(GLFWwindow *window);
 
-  void Destroy(VulkanContext &context);
+  void Destroy();
 };

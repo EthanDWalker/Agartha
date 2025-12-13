@@ -74,18 +74,18 @@ AssetData ParseAsset(std::filesystem::path file_path) {
   return asset_data;
 }
 
-void SerializeAsset(VulkanContext &vulkan_context, AllocatedBuffer index_buffer,
+void SerializeAsset(AllocatedBuffer index_buffer,
                     Mesh &mesh, MaterialData &material_data,
                     std::filesystem::path file_path) {
   VkDeviceSize vertex_size = mesh.vertex_buffer.info.size;
   VkDeviceSize index_size = sizeof(uint32_t) * mesh.index_count;
 
   AllocatedBuffer mesh_buffer;
-  CreateBuffer(vulkan_context, vertex_size + index_size,
+  CreateBuffer(vertex_size + index_size,
                VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_TO_CPU,
                mesh_buffer);
 
-  ImmediateSubmit::SubmitAsync(vulkan_context, [&](VkCommandBuffer cmd) {
+  ImmediateSubmit::Submit([&](VkCommandBuffer cmd) {
     {
       VkBufferCopy2 copy_region{};
       copy_region.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
@@ -164,5 +164,5 @@ void SerializeAsset(VulkanContext &vulkan_context, AllocatedBuffer index_buffer,
 
   file.close();
 
-  DestroyBuffer(vulkan_context, mesh_buffer);
+  DestroyBuffer(mesh_buffer);
 }

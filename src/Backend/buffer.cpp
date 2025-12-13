@@ -6,8 +6,8 @@
 #define VMA_IMPLEMENTATION
 #include <vma/vk_mem_alloc.h>
 
-void CreateBuffer(VulkanContext &context, size_t size, VkBufferUsageFlags usage,
-                  VmaMemoryUsage memory_usage, AllocatedBuffer &buffer) {
+void CreateBuffer(size_t size, VkBufferUsageFlags usage, VmaMemoryUsage memory_usage,
+                  AllocatedBuffer &buffer) {
   VkBufferCreateInfo buffer_ci{};
   buffer_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   buffer_ci.size = size;
@@ -16,29 +16,24 @@ void CreateBuffer(VulkanContext &context, size_t size, VkBufferUsageFlags usage,
   VmaAllocationCreateInfo alloc_ci{};
   alloc_ci.usage = memory_usage;
   alloc_ci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-  if (memory_usage == VMA_MEMORY_USAGE_AUTO) {
+  if (memory_usage == VMA_MEMORY_USAGE_AUTO || memory_usage == VMA_MEMORY_USAGE_AUTO_PREFER_HOST) {
     alloc_ci.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
   }
 
-  VK_CHECK(vmaCreateBuffer(context.allocator, &buffer_ci, &alloc_ci,
-                           &buffer.buffer, &buffer.allocation, &buffer.info));
+  VK_CHECK(vmaCreateBuffer(VulkanContext::allocator, &buffer_ci, &alloc_ci, &buffer.buffer,
+                           &buffer.allocation, &buffer.info));
 }
 
-void CreateBufferData(VulkanContext &context, ImmediateSubmit immediate_submit,
-                      void *data, size_t size, VkBufferUsageFlags usage,
-                      AllocatedBuffer &buffer) {
+void CreateBufferData(void *data, size_t size, VkBufferUsageFlags usage, AllocatedBuffer &buffer) {
   AllocatedBuffer upload_buffer;
-  CreateBuffer(context, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-               VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
+  CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
 
   memcpy(upload_buffer.allocation->GetMappedData(), data, size);
 
-  CreateBuffer(context, size,
-               VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
-                   VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
+  CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
                VMA_MEMORY_USAGE_GPU_ONLY, buffer);
 
-  immediate_submit.Submit(context, [&](VkCommandBuffer cmd) {
+  ImmediateSubmit::Submit([&](VkCommandBuffer cmd) {
     VkBufferCopy buffer_copy{};
     buffer_copy.size = size;
     buffer_copy.dstOffset = 0;
@@ -47,23 +42,20 @@ void CreateBufferData(VulkanContext &context, ImmediateSubmit immediate_submit,
     vkCmdCopyBuffer(cmd, upload_buffer.buffer, buffer.buffer, 1, &buffer_copy);
   });
 
-  DestroyBuffer(context, upload_buffer);
+  DestroyBuffer(upload_buffer);
 }
 
-void CreateBufferDataAsync(VulkanContext &context, void *data, size_t size,
-                           VkBufferUsageFlags usage, AllocatedBuffer &buffer) {
+void CreateBufferDataAsync(void *data, size_t size, VkBufferUsageFlags usage,
+                           AllocatedBuffer &buffer) {
   AllocatedBuffer upload_buffer;
-  CreateBuffer(context, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-               VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
+  CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
 
   memcpy(upload_buffer.allocation->GetMappedData(), data, size);
 
-  CreateBuffer(context, size,
-               VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
-                   VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
+  CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
                VMA_MEMORY_USAGE_GPU_ONLY, buffer);
 
-  ImmediateSubmit::SubmitAsync(context, [&](VkCommandBuffer cmd) {
+  ImmediateSubmit::Submit([&](VkCommandBuffer cmd) {
     VkBufferCopy buffer_copy{};
     buffer_copy.size = size;
     buffer_copy.dstOffset = 0;
@@ -72,20 +64,18 @@ void CreateBufferDataAsync(VulkanContext &context, void *data, size_t size,
     vkCmdCopyBuffer(cmd, upload_buffer.buffer, buffer.buffer, 1, &buffer_copy);
   });
 
-  DestroyBuffer(context, upload_buffer);
+  DestroyBuffer(upload_buffer);
 }
 
 // Size is the size of the new data not the entire buffer
-void UpdateBuffer(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                  void *data, size_t size, size_t offset,
+void UpdateBuffer(void *data, size_t size, size_t offset,
                   AllocatedBuffer &buffer) {
   AllocatedBuffer upload_buffer;
-  CreateBuffer(context, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-               VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
+  CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
 
   memcpy(upload_buffer.info.pMappedData, data, size);
 
-  immediate_submit.Submit(context, [&](VkCommandBuffer cmd) {
+  ImmediateSubmit::Submit([&](VkCommandBuffer cmd) {
     VkBufferCopy buffer_copy{};
     buffer_copy.size = size;
     buffer_copy.dstOffset = offset;
@@ -94,18 +84,16 @@ void UpdateBuffer(VulkanContext &context, ImmediateSubmit &immediate_submit,
     vkCmdCopyBuffer(cmd, upload_buffer.buffer, buffer.buffer, 1, &buffer_copy);
   });
 
-  DestroyBuffer(context, upload_buffer);
+  DestroyBuffer(upload_buffer);
 }
 
-void UpdateBufferAsync(VulkanContext &context, void *data, size_t size,
-                       size_t offset, AllocatedBuffer &buffer) {
+void UpdateBufferAsync(void *data, size_t size, size_t offset, AllocatedBuffer &buffer) {
   AllocatedBuffer upload_buffer;
-  CreateBuffer(context, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-               VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
+  CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, upload_buffer);
 
   memcpy(upload_buffer.info.pMappedData, data, size);
 
-  ImmediateSubmit::SubmitAsync(context, [&](VkCommandBuffer cmd) {
+  ImmediateSubmit::Submit([&](VkCommandBuffer cmd) {
     VkBufferCopy buffer_copy{};
     buffer_copy.size = size;
     buffer_copy.dstOffset = offset;
@@ -114,9 +102,9 @@ void UpdateBufferAsync(VulkanContext &context, void *data, size_t size,
     vkCmdCopyBuffer(cmd, upload_buffer.buffer, buffer.buffer, 1, &buffer_copy);
   });
 
-  DestroyBuffer(context, upload_buffer);
+  DestroyBuffer(upload_buffer);
 }
 
-void DestroyBuffer(VulkanContext &context, AllocatedBuffer &buffer) {
-  vmaDestroyBuffer(context.allocator, buffer.buffer, buffer.allocation);
+void DestroyBuffer(AllocatedBuffer &buffer) {
+  vmaDestroyBuffer(VulkanContext::allocator, buffer.buffer, buffer.allocation);
 }

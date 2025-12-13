@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Backend/buffer.h"
-#include "Backend/context.h"
 #include "Parsers/model.h"
 #include <filesystem>
 
@@ -13,6 +12,6 @@ struct AssetData {
 
 AssetData ParseAsset(std::filesystem::path file_path);
 
-void SerializeAsset(VulkanContext &vulkan_context, AllocatedBuffer index_buffer,
+void SerializeAsset(AllocatedBuffer index_buffer,
                     Mesh &mesh, MaterialData &material_data,
                     std::filesystem::path file_path);

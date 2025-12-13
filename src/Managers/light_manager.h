@@ -52,22 +52,15 @@ struct LightManager {
   uint32_t directional_light_index;
   uint32_t matrix_index;
 
-  void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
+  void Init(DescriptorBuilder &descriptor_builder);
 
-  uint32_t AddDirectionalLight(VulkanContext &context, glm::vec3 color,
-                               glm::vec3 direction, float intensity,
-                               ImmediateSubmit &immediate_submit);
+  uint32_t AddDirectionalLight(glm::vec3 color, glm::vec3 direction, float intensity);
 
-  uint32_t AddPointLight(VulkanContext &context, glm::vec3 color,
-                         glm::vec3 position, float intensity,
-                         ImmediateSubmit &immediate_submit);
+  uint32_t AddPointLight(glm::vec3 color, glm::vec3 position, float intensity);
 
-  void UpdateDirectionalLight(VulkanContext &context, glm::vec3 direction,
-                              uint32_t index,
-                              ImmediateSubmit &immediate_submit);
+  void UpdateDirectionalLight(glm::vec3 direction, uint32_t index);
 
-  void UpdateMatrices(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                      glm::vec3 camera_position);
+  void UpdateMatrices(glm::vec3 camera_position);
 
-  void Destroy(VulkanContext &context);
+  void Destroy();
 };

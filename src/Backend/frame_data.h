@@ -9,6 +9,6 @@ struct FrameData {
   VkFence render_fence;
 };
 
-void CreateFrameData(VulkanContext &context, FrameData &frame_data);
+void CreateFrameData(FrameData &frame_data);
 
-void DestroyFrameData(VulkanContext &context, FrameData &frame_data);
+void DestroyFrameData(FrameData &frame_data);

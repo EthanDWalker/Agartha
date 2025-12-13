@@ -1,10 +1,9 @@
 #pragma once
 
-#include "Backend/buffer.h"
-#include "Backend/context.h"
-#include "Backend/pipeline.h"
-#include <volk.h>
+#include "buffer.h"
+#include "pipeline.h"
 #include <span>
+#include <volk.h>
 
 struct ShaderBindingTable {
   AllocatedBuffer ray_gen;
@@ -16,13 +15,10 @@ struct ShaderBindingTable {
   VkDeviceAddress closest_hit_address;
 };
 
-VkPhysicalDeviceRayTracingPipelinePropertiesKHR
-GetRaytracingPipelineProperties(VulkanContext &context);
+VkPhysicalDeviceRayTracingPipelinePropertiesKHR GetRaytracingPipelineProperties();
 
-void CreateShaderBindingTable(
-    VulkanContext &context, Pipeline &pipeline,
-    std::span<VkRayTracingShaderGroupCreateInfoKHR> shader_groups,
-    ShaderBindingTable &binding_table);
+void CreateShaderBindingTable(Pipeline &pipeline,
+                              std::span<VkRayTracingShaderGroupCreateInfoKHR> shader_groups,
+                              ShaderBindingTable &binding_table);
 
-void DestroyShaderBindingTable(VulkanContext &context,
-                               ShaderBindingTable &binding_table);
+void DestroyShaderBindingTable(ShaderBindingTable &binding_table);

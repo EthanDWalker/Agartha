@@ -11,7 +11,7 @@ struct RayCastQuery {
 };
 
 struct Payload {
-  int inInstanceIndex; 
+  uint inInstanceIndex; 
 };
 
 layout(location = 0) rayPayloadEXT Payload payload;
@@ -23,7 +23,7 @@ layout(set = 1, binding = 0) readonly buffer RayCastQueryBuffer {
 };
 
 layout(set = 1, binding = 1) writeonly buffer RayCastResultBuffer {
-    int results[];
+    uint results[];
 };
 
 void main() {

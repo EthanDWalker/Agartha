@@ -2,7 +2,6 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
-#include "Backend/immediate_submit.h"
 #include "GLFW/glfw3.h"
 #include "input.h"
 #include <fmt/base.h>
@@ -13,26 +12,25 @@
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 
-void Camera::Create(VulkanContext &context,
-                    DescriptorBuilder &descriptor_builder) {
-  CreateBuffer(context, sizeof(CameraBuffer),
-               VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                   VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+void Camera::Create(DescriptorBuilder &descriptor_builder, glm::vec2 window_size) {
+  CreateBuffer(sizeof(CameraBuffer),
+               VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                VMA_MEMORY_USAGE_GPU_ONLY, buffer);
 
   descriptor_builder.Reset();
   descriptor_builder.BindUniformBuffer(0, buffer.buffer);
-  descriptor_builder.Build(context, VK_SHADER_STAGE_ALL, descriptor_set,
-                           descriptor_layout);
+  descriptor_builder.Build(VK_SHADER_STAGE_ALL, descriptor_set, descriptor_layout);
+  aspect_ratio = window_size.x / window_size.y;
 };
 
-void Camera::Destroy(VulkanContext &context) {
-  DestroyBuffer(context, buffer);
-  vkDestroyDescriptorSetLayout(context.device, descriptor_layout, nullptr);
+void Camera::Resize(glm::vec2 window_size) { aspect_ratio = window_size.x / window_size.y; }
+
+void Camera::Destroy() {
+  DestroyBuffer(buffer);
+  vkDestroyDescriptorSetLayout(VulkanContext::device, descriptor_layout, nullptr);
 }
 
-void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
-                    GLFWwindow *window, float delta_time) {
+void Camera::Update(GLFWwindow *window, float delta_time) {
 
   const double sensitivity = 3.0f;
   if (InputContext::GetInputHeld(Input::MOUSE_RIGHT)) {
@@ -71,14 +69,11 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
   {
     const float z_near = 0.01f;
     const float z_far = 10000.0f;
-    const float aspect_ratio =
-        InputContext::window_size.x / InputContext::window_size.y;
     const float fov_y = glm::radians(70.0f);
 
     glm::quat pitch_rotation = glm::angleAxis(pitch, glm::vec3{1.f, 0.f, 0.f});
     glm::quat yaw_rotation = glm::angleAxis(yaw, glm::vec3{0.f, -1.f, 0.f});
-    glm::mat4 rotation_matrix =
-        glm::toMat4(yaw_rotation) * glm::toMat4(pitch_rotation);
+    glm::mat4 rotation_matrix = glm::toMat4(yaw_rotation) * glm::toMat4(pitch_rotation);
 
     glm::mat4 camera_translation = glm::translate(glm::mat4(1.f), position);
 
@@ -114,7 +109,6 @@ void Camera::Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
     buffer_data.near = z_near;
     buffer_data.far = z_far;
 
-    UpdateBuffer(context, immediate_submit, &buffer_data, sizeof(CameraBuffer),
-                 0, buffer);
+    UpdateBuffer(&buffer_data, sizeof(CameraBuffer), 0, buffer);
   }
 }

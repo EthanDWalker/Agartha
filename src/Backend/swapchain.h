@@ -1,5 +1,5 @@
 #pragma once
-#include "Backend/context.h"
+#include <volk.h>
 #include <vector>
 
 struct Swapchain {
@@ -10,8 +10,6 @@ struct Swapchain {
   VkExtent2D extent;
 };
 
-void CreateVulkanSwapchain(VulkanContext &vulkan_context, uint32_t width,
-                           uint32_t height, Swapchain &swapchain);
+void CreateVulkanSwapchain(uint32_t width, uint32_t height, Swapchain &swapchain);
 
-void DestroyVulkanSwapchain(VulkanContext &vulkan_context,
-                            Swapchain &swapchain);
+void DestroyVulkanSwapchain(Swapchain &swapchain);

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "buffer.h"
-#include "context.h"
 #include "descriptors.h"
 #include "pipeline.h"
 
@@ -16,18 +15,20 @@ struct IndirectDrawIndexedCommand {
 
   uint32_t max_draw_count;
 
-  void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder,
+  void Init(DescriptorBuilder &descriptor_builder,
             std::string shader, uint32_t max_draw_count,
             VkDescriptorSetLayout *descriptor_layouts,
-            uint32_t descriptor_layout_count);
+            uint32_t descriptor_layout_count, uint32_t push_constant_range = 0);
 
   void BuildDraw(VkCommandBuffer cmd, VkDescriptorSet *descriptor_sets,
                  uint32_t descriptor_set_count,
-                 std::array<uint32_t, 3> dispatch);
+                 std::array<uint32_t, 3> dispatch,
+                 uint32_t push_constant_size = 0,
+                 void *push_constant_data = nullptr);
 
   uint32_t GetDrawCount();
 
   void Draw(VkCommandBuffer cmd);
 
-  void Destroy(VulkanContext &context);
+  void Destroy();
 };

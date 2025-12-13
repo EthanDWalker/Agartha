@@ -1,6 +1,5 @@
 #pragma once
 #include "Backend/buffer.h"
-#include "Backend/context.h"
 #include "Backend/descriptors.h"
 #include <GLFW/glfw3.h>
 #include <glm/mat4x4.hpp>
@@ -31,18 +30,20 @@ struct Camera {
   CameraBuffer buffer_data;
   AllocatedBuffer buffer;
 
-  VkDescriptorSet descriptor_set;
-  VkDescriptorSetLayout descriptor_layout;
   glm::vec3 velocity;
   glm::vec3 position;
+  VkDescriptorSet descriptor_set;
+  VkDescriptorSetLayout descriptor_layout;
+  float aspect_ratio;
 
   float pitch{0.0f};
   float yaw{0.0f};
 
-  void Create(VulkanContext &context, DescriptorBuilder &descriptor_builder);
+  void Create(DescriptorBuilder &descriptor_builder, glm::vec2 window_size);
 
-  void Update(VulkanContext &context, ImmediateSubmit &immediate_submit,
-              GLFWwindow *window, float delta_time);
+  void Resize(glm::vec2 window_size);
 
-  void Destroy(VulkanContext &context);
+  void Update(GLFWwindow *window, float delta_time);
+
+  void Destroy();
 };

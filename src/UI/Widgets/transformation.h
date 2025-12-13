@@ -44,13 +44,13 @@ struct TransformationWidget {
 
   const glm::mat4 DIRECTION_INSTANCES[TRANSFORMATION_DIRECTION_COUNT] = {
       glm::translate(glm::mat4(1.0f), DIRECTION_VECTORS[0] * 3.0f),
-      glm::rotate(glm::translate(glm::mat4(1.0f), DIRECTION_VECTORS[1] * 3.0f),
-                  glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+      glm::rotate(glm::translate(glm::mat4(1.0f), DIRECTION_VECTORS[1] * 3.0f), glm::radians(90.0f),
+                  glm::vec3(0.0f, 0.0f, 1.0f)),
       glm::rotate(glm::translate(glm::mat4(1.0f), DIRECTION_VECTORS[2] * 3.0f),
                   glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
   };
 
-  glm::mat4 matrix;
+  glm::mat4 matrix{glm::mat4(0.0f)};
 
   AllocatedBuffer instance_buffer;
   AllocatedBuffer vertex_buffer;
@@ -69,13 +69,15 @@ struct TransformationWidget {
 
   TransformationMode selected_mode{TransformationMode::MOVE};
 
-  void Create(VulkanContext &vulkan_context, ImmediateSubmit &immediate_submit,
-              DescriptorBuilder &descriptor_builder, Camera &camera,
-              VkFormat draw_format);
+  void Create(DescriptorBuilder &descriptor_builder, Camera &camera, VkFormat draw_format);
 
-  void Update(GLFWwindow *window, Camera &camera);
+  void Hide();
+
+  bool Using();
+
+  void Update(Camera &camera, glm::vec2 mouse_pos);
 
   void Draw(VkCommandBuffer cmd, Camera &camera);
 
-  void Destroy(VulkanContext &vulkan_context);
+  void Destroy();
 };

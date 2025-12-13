@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Backend/allocated_image.h"
-#include "Backend/context.h"
 #include "Backend/descriptors.h"
 #include "Backend/pipeline.h"
 #include "Parsers/model.h"
@@ -32,12 +31,13 @@ struct TextureManager {
 
   uint32_t texture_index;
 
-  void Init(VulkanContext &context, DescriptorBuilder &descriptor_builder);
-  uint32_t UploadTexture(VulkanContext &context, std::string filename);
-  uint32_t AddAllocatedImage(VulkanContext &context, AllocatedImage &image);
-  Material UploadMaterial(VulkanContext &context,
-                          MaterialData &data);
-  void LoadTexture(VulkanContext &context, std::string filename,
-                   AllocatedImage &image);
-  void Destroy(VulkanContext &context);
+  static void LoadTexture(std::string filename,
+                          AllocatedImage &image,
+                          glm::ivec2 forced_extent = glm::ivec2(0));
+
+  void Init(DescriptorBuilder &descriptor_builder);
+  uint32_t UploadTexture(std::string filename);
+  uint32_t AddAllocatedImage(AllocatedImage &image);
+  Material UploadMaterial(MaterialData &data);
+  void Destroy();
 };

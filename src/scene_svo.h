@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Backend/buffer.h"
-#include "Backend/context.h"
 #include "Backend/descriptors.h"
 #include "Backend/pipeline.h"
 #include "Managers/light_manager.h"
@@ -10,7 +9,7 @@
 #include "camera.h"
 
 const VkExtent3D SVO_EXTENT = {100, 100, 100};
-const float VOXEL_SIZE = 0.5;
+const float VOXEL_SIZE = 1.0f;
 
 struct SceneSvo {
   AllocatedImage radiance_image;
@@ -34,19 +33,17 @@ struct SceneSvo {
 
   VkSampler radiance_sampler;
 
-  void Create(VulkanContext &context, SceneManager &scene_manager,
-              LightManager &light_manager, TextureManager &texture_manager,
-              Camera &camera, DescriptorBuilder &descriptor_builder);
+  void Create(SceneManager &scene_manager, LightManager &light_manager,
+              TextureManager &texture_manager, Camera &camera,
+              DescriptorBuilder &descriptor_builder);
 
   void BuildDrawCommands(VkCommandBuffer cmd, SceneManager &scene_manager);
 
-  void Build(VkCommandBuffer cmd, SceneManager &scene_manager,
-             TextureManager &texture_manager, LightManager &light_manager,
-             Camera &camera);
+  void Build(VkCommandBuffer cmd, SceneManager &scene_manager, TextureManager &texture_manager,
+             LightManager &light_manager, Camera &camera);
 
-  void DrawDebugView(VkCommandBuffer cmd, Camera &camera,
-                     AllocatedImage &draw_image, AllocatedImage &depth_image,
-                     uint32_t mip_level);
+  void DrawDebugView(VkCommandBuffer cmd, Camera &camera, AllocatedImage &draw_image,
+                     AllocatedImage &depth_image, uint32_t mip_level);
 
-  void Destroy(VulkanContext &context);
+  void Destroy();
 };

@@ -2,7 +2,6 @@
 
 #include "Backend/allocated_image.h"
 #include "Backend/binding_table.h"
-#include "Backend/context.h"
 #include "Backend/descriptors.h"
 #include "Backend/immediate_submit.h"
 #include "Backend/indirect_draw.h"
@@ -12,16 +11,14 @@
 #include "Managers/scene_manager.h"
 #include "Managers/texture_manager.h"
 #include "Physics/context.h"
-#include "UI/Widgets/transformation.h"
-#include "UI/context.h"
+#include "UI/editor.h"
 #include "camera.h"
 #include "render_graph.h"
 #include "scene_svo.h"
 
 struct Engine {
-  VulkanContext vulkan_context;
+  ui::Editor editor;
   PhysicsContext physics_context;
-  UiContext ui_context;
 
   LightManager light_manager;
   SceneManager scene_manager;
@@ -31,9 +28,6 @@ struct Engine {
 
   DescriptorBuilder descriptor_builder;
 
-  TransformationWidget transformation_widget;
-
-  ImmediateSubmit immediate_submit;
   Camera camera;
   RenderGraph render_graph;
 
@@ -47,7 +41,6 @@ struct Engine {
 
   IndirectDrawIndexedCommand main_draw_command;
   IndirectDrawIndexedCommand shadow_draw_command;
-  IndirectDrawIndexedCommand outline_draw_command;
 
   glm::vec3 sun_direction{-1.0f, -4.0f, -1.0f};
 
@@ -60,7 +53,6 @@ struct Engine {
   Pipeline ambient_occlusion_pipeline;
   Pipeline upscale_ao_pipeline;
   Pipeline depth_pipeline;
-  Pipeline outline_pipeline;
   Pipeline atmosphere_pipeline;
   Pipeline skybox_pipeline;
 
@@ -77,11 +69,13 @@ struct Engine {
 
   GLFWwindow *window;
 
-  bool test_bool;
+  float delta_time;
 
   void Init();
 
   void CreateRenderGraph();
+
+  void Resize(glm::vec2 new_size);
 
   void Run();
 

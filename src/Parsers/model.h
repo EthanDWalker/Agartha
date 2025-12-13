@@ -14,7 +14,7 @@ struct MaterialData {
   std::string ambient_occlusion;
 };
 
-struct MeshData {
+struct PrimitiveData {
   MaterialData material_data;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
@@ -23,7 +23,17 @@ struct MeshData {
   SphereBounds sphere_bounds;
 };
 
-std::vector<MeshData> ParseModel(std::string path);
+struct MeshData {
+  std::vector<PrimitiveData> primitives;
+};
+
+struct SceneNodeData {
+  MeshData mesh_data;
+  std::string name;
+  std::vector<SceneNodeData> children;
+};
 
 void GetMeshBounds(std::span<Vertex> vertices, SphereBounds &sphere_bounds,
                    AabbBounds &aabb_bounds);
+
+std::vector<SceneNodeData> ParseModel(std::string path);

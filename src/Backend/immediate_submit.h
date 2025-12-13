@@ -1,20 +1,16 @@
 #pragma once
 
-#include "Backend/context.h"
 #include <functional>
+#include <volk.h>
 
 struct ImmediateSubmit {
-  VkCommandPool command_pool;
-  VkCommandBuffer command_buffer;
-  VkFence fence;
+  struct ThreadData {
+    VkCommandPool command_pool;
+    VkCommandBuffer command_buffer;
+    VkFence fence;
+  };
 
-  void Create(VulkanContext &context);
+  static thread_local ThreadData thread_data;
 
-  void Submit(VulkanContext &context,
-              std::function<void(VkCommandBuffer cmd)> &&function);
-
-  static void SubmitAsync(VulkanContext &context,
-                          std::function<void(VkCommandBuffer cmd)> &&function);
-
-  void Destroy(VulkanContext &context);
+  static void Submit(std::function<void(VkCommandBuffer cmd)> &&function);
 };

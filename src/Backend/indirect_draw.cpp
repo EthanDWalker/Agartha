@@ -3,33 +3,38 @@
 #include "context.h"
 #include "descriptors.h"
 #include "pipeline.h"
+#include <cstdint>
 #include <cstring>
 
-void IndirectDrawIndexedCommand::Init(VulkanContext &context,
+void IndirectDrawIndexedCommand::Init(
                                       DescriptorBuilder &descriptor_builder,
                                       std::string shader,
                                       uint32_t max_draw_count,
                                       VkDescriptorSetLayout *descriptor_layouts,
-                                      uint32_t descriptor_layout_count) {
-  CreateBuffer(context, sizeof(VkDrawIndexedIndirectCommand) * max_draw_count,
+                                      uint32_t descriptor_layout_count,
+                                      uint32_t push_constant_range) {
+  CreateBuffer(sizeof(VkDrawIndexedIndirectCommand) * max_draw_count,
                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                    VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
                VMA_MEMORY_USAGE_GPU_ONLY, draw_buffer);
-  CreateBuffer(context, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+  CreateBuffer(sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                VMA_MEMORY_USAGE_AUTO, draw_count_buffer);
 
   descriptor_builder.BindStorageBuffer(0, draw_buffer.buffer);
   descriptor_builder.BindStorageBuffer(1, draw_count_buffer.buffer);
-  descriptor_builder.Build(context, VK_SHADER_STAGE_COMPUTE_BIT,
+  descriptor_builder.Build(VK_SHADER_STAGE_COMPUTE_BIT,
                            draw_descriptor_set, draw_descriptor_layout);
 
   ComputePipelineBuilder pipeline_builder{};
-  pipeline_builder.SetShader(context, shader);
+  pipeline_builder.SetShader(shader);
   pipeline_builder.AddDescriptorSetLayout(draw_descriptor_layout);
+  if (push_constant_range != 0) {
+    pipeline_builder.AddPushConstantRange(push_constant_range);
+  }
   for (uint32_t i = 0; i < descriptor_layout_count; i++) {
     pipeline_builder.AddDescriptorSetLayout(descriptor_layouts[i]);
   }
-  pipeline_builder.Build(context, build_pipeline);
+  pipeline_builder.Build(build_pipeline);
 
   this->max_draw_count = max_draw_count;
 }
@@ -37,7 +42,9 @@ void IndirectDrawIndexedCommand::Init(VulkanContext &context,
 void IndirectDrawIndexedCommand::BuildDraw(VkCommandBuffer cmd,
                                            VkDescriptorSet *descriptor_sets,
                                            uint32_t descriptor_set_count,
-                                           std::array<uint32_t, 3> dispatch) {
+                                           std::array<uint32_t, 3> dispatch,
+                                           uint32_t push_constant_size,
+                                           void *push_constant_data) {
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, build_pipeline.obj);
 
   std::vector<VkDescriptorSet> ds;
@@ -50,6 +57,10 @@ void IndirectDrawIndexedCommand::BuildDraw(VkCommandBuffer cmd,
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                           build_pipeline.layout, 0, ds.size(), ds.data(), 0,
                           nullptr);
+  if (push_constant_size != 0) {
+    vkCmdPushConstants(cmd, build_pipeline.layout, VK_SHADER_STAGE_COMPUTE_BIT,
+                       0, push_constant_size, push_constant_data);
+  }
 
   vkCmdDispatch(cmd, dispatch[0], dispatch[1], dispatch[2]);
 }
@@ -70,11 +81,11 @@ void IndirectDrawIndexedCommand::Draw(VkCommandBuffer cmd) {
       static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand)));
 }
 
-void IndirectDrawIndexedCommand::Destroy(VulkanContext &context) {
-  DestroyBuffer(context, draw_buffer);
-  DestroyBuffer(context, draw_count_buffer);
+void IndirectDrawIndexedCommand::Destroy() {
+  DestroyBuffer(draw_buffer);
+  DestroyBuffer(draw_count_buffer);
 
-  DestroyPipeline(context, build_pipeline);
+  DestroyPipeline(build_pipeline);
 
-  vkDestroyDescriptorSetLayout(context.device, draw_descriptor_layout, nullptr);
+  vkDestroyDescriptorSetLayout(VulkanContext::device, draw_descriptor_layout, nullptr);
 }

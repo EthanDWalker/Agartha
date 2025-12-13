@@ -1,25 +1,25 @@
 #pragma once
+#include <volk.h>
+
+#include <GLFW/glfw3.h>
 #include <cstdint>
 #include <mutex>
-#include <volk.h>
-#include <GLFW/glfw3.h>
 #include <vma/vk_mem_alloc.h>
 
 struct VulkanContext {
-  std::mutex graphics_queue_mutex;
-  std::mutex compute_queue_mutex;
-  VkInstance instance;
-  VkDevice device;
-  VkPhysicalDevice physical_device;
-  VkSurfaceKHR surface;
-  VmaAllocator allocator;
-  VkDebugUtilsMessengerEXT debug_messenger;
-  VkQueue graphics_queue;
-  VkQueue compute_queue;
-  uint32_t graphics_queue_index;
-  uint32_t compute_queue_index;
+  static std::mutex graphics_queue_mutex;
+  static std::mutex compute_queue_mutex;
+  static VkInstance instance;
+  static VkDevice device;
+  static VkPhysicalDevice physical_device;
+  static VkSurfaceKHR surface;
+  static VmaAllocator allocator;
+  static VkDebugUtilsMessengerEXT debug_messenger;
+  static VkQueue graphics_queue;
+  static VkQueue compute_queue;
+  static uint32_t graphics_queue_index;
+  static uint32_t compute_queue_index;
+
+  static void Init(GLFWwindow *window);
+  static void Destroy();
 };
-
-void InitVulkanContext(GLFWwindow *window, VulkanContext &context);
-
-void DestroyVulkanContext(VulkanContext &context);

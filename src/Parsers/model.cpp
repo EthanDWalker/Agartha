@@ -1,5 +1,6 @@
 #include "model.h"
 #include "fastgltf/types.hpp"
+#include "fmt/format.h"
 #include "types.h"
 #include <fastgltf/core.hpp>
 #include <fastgltf/glm_element_traits.hpp>
@@ -14,6 +15,32 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
+
+void PrintSceneGraph(SceneNodeData &parent_node, uint32_t level = 0) {
+  for (uint32_t i = 0; i < level; i++) {
+    fmt::print("--");
+  }
+  fmt::println("Node: (primitives :{})", parent_node.mesh_data.primitives.size());
+  for (auto &child : parent_node.children) {
+    PrintSceneGraph(child, level + 1);
+  }
+}
+
+void BuildSceneGraph(SceneNodeData &parent_node, const fastgltf::Node &gltf_node,
+                     const fastgltf::Asset &asset, std::span<MeshData> mesh_data) {
+  SceneNodeData new_node{};
+  if (!gltf_node.meshIndex.has_value()) {
+    return;
+  }
+  new_node.name = fmt::format("Instance: {}", gltf_node.meshIndex.value());
+  new_node.mesh_data = mesh_data[gltf_node.meshIndex.value()];
+  parent_node.children.push_back(new_node);
+
+  SceneNodeData &new_parent_node = parent_node.children.back();
+  for (auto child_node_index : gltf_node.children) {
+    BuildSceneGraph(new_parent_node, asset.nodes[child_node_index], asset, mesh_data);
+  }
+}
 
 void GetMeshBounds(std::span<Vertex> vertices, SphereBounds &sphere_bounds,
                    AabbBounds &aabb_bounds) {
@@ -30,35 +57,29 @@ void GetMeshBounds(std::span<Vertex> vertices, SphereBounds &sphere_bounds,
   }
 }
 
-MaterialData ParseMaterialData(fastgltf::Material &material,
-                               std::span<size_t> textures,
+MaterialData ParseMaterialData(fastgltf::Material &material, std::span<size_t> textures,
                                std::span<std::string> images) {
   MaterialData new_material;
-  new_material.albedo =
-      material.pbrData.baseColorTexture.has_value()
-          ? images[textures[material.pbrData.baseColorTexture->textureIndex]]
-          : "";
-  new_material.ambient_occlusion =
-      material.occlusionTexture.has_value()
-          ? images[textures[material.occlusionTexture->textureIndex]]
-          : "";
-  new_material.normal =
-      material.normalTexture.has_value()
-          ? images[textures[material.normalTexture->textureIndex]]
-          : "";
-  new_material.emissive =
-      material.emissiveTexture.has_value()
-          ? images[textures[material.emissiveTexture->textureIndex]]
-          : "";
+  new_material.albedo = material.pbrData.baseColorTexture.has_value()
+                            ? images[textures[material.pbrData.baseColorTexture->textureIndex]]
+                            : "";
+  new_material.ambient_occlusion = material.occlusionTexture.has_value()
+                                       ? images[textures[material.occlusionTexture->textureIndex]]
+                                       : "";
+  new_material.normal = material.normalTexture.has_value()
+                            ? images[textures[material.normalTexture->textureIndex]]
+                            : "";
+  new_material.emissive = material.emissiveTexture.has_value()
+                              ? images[textures[material.emissiveTexture->textureIndex]]
+                              : "";
   new_material.metal_roughness =
       material.pbrData.metallicRoughnessTexture.has_value()
-          ? images[textures[material.pbrData.metallicRoughnessTexture
-                                ->textureIndex]]
+          ? images[textures[material.pbrData.metallicRoughnessTexture->textureIndex]]
           : "";
   return new_material;
 }
 
-std::vector<MeshData> ParseModel(std::string path) {
+std::vector<SceneNodeData> ParseModel(std::string path) {
   std::filesystem::path file_path = path;
 
   fastgltf::Parser parser;
@@ -71,11 +92,9 @@ std::vector<MeshData> ParseModel(std::string path) {
   }
 
   fastgltf::Options load_options =
-      fastgltf::Options::LoadExternalBuffers |
-      fastgltf::Options::DontRequireValidAssetMember;
+      fastgltf::Options::LoadExternalBuffers | fastgltf::Options::DontRequireValidAssetMember;
 
-  auto asset =
-      parser.loadGltf(data.get(), file_path.parent_path(), load_options);
+  auto asset = parser.loadGltf(data.get(), file_path.parent_path(), load_options);
 
   if (asset.error() != fastgltf::Error::None) {
     fmt::println("[ERROR] gltf model {} failed to parse asset", path);
@@ -92,12 +111,10 @@ std::vector<MeshData> ParseModel(std::string path) {
                      assert(image_file_path.fileByteOffset == 0);
                      assert(image_file_path.uri.isLocalPath());
 
-                     const std::string image_path(
-                         image_file_path.uri.path().begin(),
-                         image_file_path.uri.path().end());
+                     const std::string image_path(image_file_path.uri.path().begin(),
+                                                  image_file_path.uri.path().end());
 
-                     images.push_back(file_path.parent_path().string() + "/" +
-                                      image_path);
+                     images.push_back(file_path.parent_path().string() + "/" + image_path);
                    },
                },
                image.data);
@@ -117,12 +134,13 @@ std::vector<MeshData> ParseModel(std::string path) {
   }
 
   std::vector<MeshData> mesh_data;
-  std::vector<size_t> unique_check_sums;
+  mesh_data.reserve(asset->meshes.size());
 
   for (fastgltf::Mesh &mesh : asset->meshes) {
-    mesh_data.reserve(mesh.primitives.size() + mesh_data.size());
-    unique_check_sums.reserve(mesh.primitives.size() +
-                              unique_check_sums.size());
+    mesh_data.push_back({});
+    std::vector<size_t> unique_check_sums;
+    mesh_data.back().primitives.reserve(mesh.primitives.size());
+    unique_check_sums.reserve(mesh.primitives.size());
 
     for (auto &&p : mesh.primitives) {
       size_t check_sum = 0;
@@ -138,37 +156,34 @@ std::vector<MeshData> ParseModel(std::string path) {
                                                  check_sum += index;
                                                });
 
-      auto &position_accessor =
-          asset->accessors[p.findAttribute("POSITION")->accessorIndex];
+      auto &position_accessor = asset->accessors[p.findAttribute("POSITION")->accessorIndex];
 
       vertices.resize(vertices.size() + position_accessor.count);
 
-      fastgltf::iterateAccessorWithIndex<glm::vec3>(
-          asset.get(), position_accessor,
-          [&](glm::vec3 position, size_t index) {
-            Vertex vertex;
-            vertex.position = position;
-            vertex.normal = {1, 0, 0};
-            vertex.uv_x = 0;
-            vertex.uv_y = 0;
-            vertices[index] = vertex;
-          });
+      fastgltf::iterateAccessorWithIndex<glm::vec3>(asset.get(), position_accessor,
+                                                    [&](glm::vec3 position, size_t index) {
+                                                      Vertex vertex;
+                                                      vertex.position = position;
+                                                      vertex.normal = {1, 0, 0};
+                                                      vertex.uv_x = 0;
+                                                      vertex.uv_y = 0;
+                                                      vertices[index] = vertex;
+                                                    });
 
       auto normals = p.findAttribute("NORMAL");
       if (normals != p.attributes.end()) {
-        fastgltf::iterateAccessorWithIndex<glm::vec3>(
-            asset.get(), asset->accessors[normals->accessorIndex],
-            [&](glm::vec3 normal, std::size_t index) {
-              check_sum += normal.x + normal.y + normal.z;
-              vertices[index].normal = normal;
-            });
+        fastgltf::iterateAccessorWithIndex<glm::vec3>(asset.get(),
+                                                      asset->accessors[normals->accessorIndex],
+                                                      [&](glm::vec3 normal, std::size_t index) {
+                                                        check_sum += normal.x + normal.y + normal.z;
+                                                        vertices[index].normal = normal;
+                                                      });
       }
 
       auto uv = p.findAttribute("TEXCOORD_0");
       if (uv != p.attributes.end()) {
         fastgltf::iterateAccessorWithIndex<glm::vec2>(
-            asset.get(), asset->accessors[uv->accessorIndex],
-            [&](glm::vec2 uv, std::size_t index) {
+            asset.get(), asset->accessors[uv->accessorIndex], [&](glm::vec2 uv, std::size_t index) {
               vertices[index].uv_x = uv.x;
               vertices[index].uv_y = uv.y;
             });
@@ -180,10 +195,7 @@ std::vector<MeshData> ParseModel(std::string path) {
         check_sum += p.materialIndex.value();
       }
 
-      assert(unique_check_sums.size() == mesh_data.size());
-
-      auto it = std::find(unique_check_sums.begin(), unique_check_sums.end(),
-                          check_sum);
+      auto it = std::find(unique_check_sums.begin(), unique_check_sums.end(), check_sum);
 
       glm::vec3 centroid = glm::vec3(0.0);
 
@@ -198,7 +210,7 @@ std::vector<MeshData> ParseModel(std::string path) {
       if (it != unique_check_sums.end()) {
         size_t mesh_index = std::distance(unique_check_sums.begin(), it);
 
-        mesh_data[mesh_index].instances.push_back(new_instance);
+        mesh_data.back().primitives[mesh_index].instances.push_back(new_instance);
       } else {
         unique_check_sums.push_back(check_sum);
 
@@ -212,7 +224,7 @@ std::vector<MeshData> ParseModel(std::string path) {
 
         std::vector<glm::mat4> instances = {new_instance};
 
-        mesh_data.push_back({
+        mesh_data.back().primitives.push_back({
             .material_data = material_data,
             .vertices = vertices,
             .indices = indices,
@@ -224,5 +236,17 @@ std::vector<MeshData> ParseModel(std::string path) {
     }
   }
 
-  return mesh_data;
+  std::vector<SceneNodeData> scene_graph;
+  const fastgltf::Scene &scene = asset->scenes.front();
+  scene_graph.resize(scene.nodeIndices.size());
+  for (size_t i = 0; i < scene.nodeIndices.size(); i++) {
+    BuildSceneGraph(scene_graph[i], asset->nodes[scene.nodeIndices[i]], asset.get(),
+                    mesh_data);
+  }
+
+  for (auto &node : scene_graph) {
+    PrintSceneGraph(node);
+  }
+
+  return scene_graph;
 }
