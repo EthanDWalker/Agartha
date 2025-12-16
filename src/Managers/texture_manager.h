@@ -11,6 +11,11 @@
 
 const uint32_t MAX_TEXTURES = 1024;
 
+const std::string DEFAULT_ALBEDO_MAP = "../assets/textures/default_albedo.png";
+const std::string DEFAULT_NORMAL_MAP = "../assets/textures/default_normal.png";
+const std::string DEFAULT_METALLIC_ROUGHNESS_MAP =
+    "../assets/textures/default_metallic_roughness.png";
+
 struct TextureManager {
   VkDescriptorSet descriptor_set;
   VkDescriptorSetLayout descriptor_set_layout;
@@ -29,10 +34,11 @@ struct TextureManager {
 
   VkSampler sampler;
 
+  Material default_material;
+
   uint32_t texture_index;
 
-  static void LoadTexture(std::string filename,
-                          AllocatedImage &image,
+  static void LoadTexture(std::string filename, AllocatedImage &image,
                           glm::ivec2 forced_extent = glm::ivec2(0));
 
   void Init(DescriptorBuilder &descriptor_builder);

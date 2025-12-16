@@ -12,8 +12,9 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
 #include "input.h"
-#include "timer.h"
+#include "primitives.h"
 #include <cstdint>
+#include <cstdlib>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/vector_float4.hpp>
@@ -83,6 +84,7 @@ void Editor::UpdateSelectedInstances(SceneManager &scene_manager, uint32_t selec
       selected_instances.clear();
     }
     selected_instances.push_back(selected_instance);
+
     // average matrix
     transformation_widget.matrix =
         (transformation_widget.matrix * static_cast<float>(selected_instances.size() - 1));
@@ -92,14 +94,34 @@ void Editor::UpdateSelectedInstances(SceneManager &scene_manager, uint32_t selec
 
     {
       uint32_t selected_instances_size = selected_instances.size();
-      ImmediateSubmit::Submit([](VkCommandBuffer cmd) {});
-      UpdateBufferAsync(&selected_instances_size, sizeof(uint32_t), 0, selected_instances_buffer);
-      UpdateBufferAsync(selected_instances.data(), selected_instances.size() * sizeof(uint32_t),
-                        sizeof(uint32_t), selected_instances_buffer);
+
+      size_t size = sizeof(uint32_t) * (selected_instances.size() + 1);
+
+      AllocatedBuffer upload_buffer;
+      CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU,
+                   upload_buffer);
+
+      memcpy(upload_buffer.info.pMappedData, &selected_instances_size, sizeof(uint32_t));
+      memcpy(((uint32_t *)upload_buffer.info.pMappedData) + 1, selected_instances.data(),
+             selected_instances.size() * sizeof(uint32_t));
+
+      ImmediateSubmit::Submit([&](VkCommandBuffer cmd) {
+        VkBufferCopy buffer_copy{};
+        buffer_copy.size = size;
+        buffer_copy.dstOffset = 0;
+        buffer_copy.srcOffset = 0;
+
+        vkCmdCopyBuffer(cmd, upload_buffer.buffer, selected_instances_buffer.buffer, 1,
+                        &buffer_copy);
+      });
+
+      DestroyBuffer(upload_buffer);
     }
+
     can_move_transformation_widget = false;
   } else {
     transformation_widget.Hide();
+    selected_instances.clear();
     ImmediateSubmit::Submit([this](VkCommandBuffer cmd) {
       vkCmdFillBuffer(cmd, selected_instances_buffer.buffer, 0, selected_instances_buffer.info.size,
                       0);
@@ -118,7 +140,7 @@ void Editor::BuildDraw(VkCommandBuffer cmd, SceneManager &scene_manager,
 
     outline_draw_command.BuildDraw(
         cmd, ds.data(), ds.size(),
-        {static_cast<uint32_t>(selected_instances.size() / 16) + 1, 1, 1});
+        {static_cast<uint32_t>(glm::ceil(selected_instances.size() / 16.0f)), 1, 1});
   }
 }
 
@@ -143,9 +165,9 @@ void Editor::Draw(VkCommandBuffer cmd, SceneManager &scene_manager, Camera &came
   VkRenderingInfo rendering_info =
       vkinit::RenderingInfo(main_image.extent, attachments, &depth_att);
 
-  vkCmdBeginRendering(cmd, &rendering_info);
+  if (!selected_instances.empty()) {
+    vkCmdBeginRendering(cmd, &rendering_info);
 
-  {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, outline_pipeline.obj);
 
     std::array<VkDescriptorSet, 3> ds = {
@@ -160,11 +182,11 @@ void Editor::Draw(VkCommandBuffer cmd, SceneManager &scene_manager, Camera &came
     vkCmdBindIndexBuffer(cmd, scene_manager.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
     outline_draw_command.Draw(cmd);
+
+    transformation_widget.Draw(cmd, camera);
+
+    vkCmdEndRendering(cmd);
   }
-
-  transformation_widget.Draw(cmd, camera);
-
-  vkCmdEndRendering(cmd);
 }
 
 void Editor::DrawUI(VkCommandBuffer cmd, VkImage image, VkImageView image_view, VkExtent3D extent) {
@@ -274,7 +296,8 @@ void Editor::SceneList(SceneManager &scene_manager) {
   }
 }
 
-void Editor::Update(PhysicsContext &physics_context, SceneManager &scene_manager, Camera &camera) {
+void Editor::Update(PhysicsContext &physics_context, SceneManager &scene_manager,
+                    TextureManager &texture_manager, Camera &camera) {
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplGlfw_NewFrame();
 
@@ -284,18 +307,30 @@ void Editor::Update(PhysicsContext &physics_context, SceneManager &scene_manager
   if (ImGui::Begin("Inspector")) {
     if (transformation_widget.matrix != glm::mat4(0.0f)) {
       Transform();
-      /*
+
+      scene_manager.changed_instances.reserve(selected_instances.size());
+
+      glm::mat4 average_matrix = glm::mat4(0.0f);
       for (uint32_t instance_index : selected_instances) {
-        scene_manager.instances[instance_index].matrix = transformation_widget.matrix;
-        scene_manager.changed_instances.push(instance_index);
+        average_matrix += scene_manager.instances[instance_index].matrix;
       }
-      scene_manager.UpdateInstances(vulkan_context);
-      */
+      average_matrix /= selected_instances.size();
+      glm::mat4 delta_matrix = transformation_widget.matrix - average_matrix;
+
+      for (uint32_t instance_index : selected_instances) {
+        scene_manager.instances[instance_index].matrix += delta_matrix;
+        scene_manager.changed_instances.push_back(instance_index);
+      }
+      scene_manager.UpdateInstances();
     }
   }
   ImGui::End();
 
   if (ImGui::Begin("Scene Manager")) {
+    if (ImGui::Button("Add Cube")) {
+      SceneNodeData cube_data = Primitives::GetCubeData();
+      scene_manager.AddSceneNode(cube_data, texture_manager);
+    }
     SceneList(scene_manager);
   }
   ImGui::End();

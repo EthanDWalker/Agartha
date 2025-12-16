@@ -36,7 +36,8 @@ struct Editor {
             GLFWwindow *window, AllocatedImage &main_image, VkFormat depth_format,
             VkFormat swapchain_format);
 
-  void Update(PhysicsContext &physics_context, SceneManager &scene_manager, Camera &camera);
+  void Update(PhysicsContext &physics_context, SceneManager &scene_manager,
+              TextureManager &texture_manager, Camera &camera);
 
   void Resize(AllocatedImage &main_image);
 

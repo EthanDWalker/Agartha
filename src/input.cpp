@@ -1,6 +1,5 @@
 #include "input.h"
 #include <GLFW/glfw3.h>
-#include <queue>
 
 __uint128_t InputContext::_pressed_input = 0;
 __uint128_t InputContext::_held_input = 0;
@@ -9,12 +8,12 @@ glm::vec2 InputContext::window_size = glm::vec2(1.0f);
 
 glm::vec2 InputContext::mouse_position = glm::vec2(0.0f);
 glm::vec2 InputContext::delta_mouse_position = glm::vec2(0.0f);
-std::queue<std::filesystem::path> InputContext::droped_file_queue = {};
+std::vector<std::filesystem::path> InputContext::dropped_file_queue = {};
 
 void InputContext::_DropCallback(GLFWwindow *window, int32_t path_count,
                                  const char *paths[]) {
   for (int32_t i = 0; i < path_count; i++) {
-    droped_file_queue.push(paths[i]);
+    dropped_file_queue.push_back(paths[i]);
   }
 }
 

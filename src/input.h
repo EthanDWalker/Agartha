@@ -163,7 +163,7 @@ struct InputContext {
   static glm::vec2 mouse_position;
   static glm::vec2 delta_mouse_position;
 
-  static std::queue<std::filesystem::path> droped_file_queue;
+  static std::vector<std::filesystem::path> dropped_file_queue;
 
   static void _DropCallback(GLFWwindow *window, int32_t path_count,
                             const char *paths[]);

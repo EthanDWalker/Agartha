@@ -42,6 +42,8 @@ struct TransformationWidget {
       glm::vec4(0.0f, 0.0f, 1.0f, 1.0f),
   };
 
+  const glm::vec4 SELECTED_COLOR = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+
   const glm::mat4 DIRECTION_INSTANCES[TRANSFORMATION_DIRECTION_COUNT] = {
       glm::translate(glm::mat4(1.0f), DIRECTION_VECTORS[0] * 3.0f),
       glm::rotate(glm::translate(glm::mat4(1.0f), DIRECTION_VECTORS[1] * 3.0f), glm::radians(90.0f),
@@ -51,11 +53,13 @@ struct TransformationWidget {
   };
 
   glm::mat4 matrix{glm::mat4(0.0f)};
+  glm::mat4 draw_matrix{glm::mat4(1.0f)};
 
   AllocatedBuffer instance_buffer;
   AllocatedBuffer vertex_buffer;
   AllocatedBuffer index_buffer;
   AllocatedBuffer color_buffer;
+  AllocatedBuffer color_upload_buffer;
 
   glm::vec3 bounds_min;
   glm::vec3 bounds_max;
@@ -68,6 +72,8 @@ struct TransformationWidget {
   TransformationDirections selected_direction{TransformationDirections::COUNT};
 
   TransformationMode selected_mode{TransformationMode::MOVE};
+
+  void UpdateColorBuffer();
 
   void Create(DescriptorBuilder &descriptor_builder, Camera &camera, VkFormat draw_format);
 

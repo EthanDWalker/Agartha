@@ -638,7 +638,7 @@ void Engine::Init() {
 }
 
 void Engine::Run() {
-  InputContext::droped_file_queue.push(
+  InputContext::dropped_file_queue.push_back(
       std::filesystem::path("C:/Users/ethan/Developer/Agartha/assets/models/Sponza.gltf"));
 
   while (!glfwWindowShouldClose(window)) {
@@ -646,15 +646,11 @@ void Engine::Run() {
 
     InputContext::Update(window);
 
-    if (!InputContext::droped_file_queue.empty()) {
-      for (uint32_t i = 0; i < InputContext::droped_file_queue.size(); i++) {
-        std::filesystem::path file_path = InputContext::droped_file_queue.front();
+    if (!InputContext::dropped_file_queue.empty()) {
+      for (uint32_t i = 0; i < InputContext::dropped_file_queue.size(); i++) {
+        std::filesystem::path file_path = InputContext::dropped_file_queue[i];
 
         fmt::println("{}", file_path.string());
-
-        if (!InputContext::droped_file_queue.empty()) {
-          InputContext::droped_file_queue.pop();
-        }
 
         std::thread([this, file_path]() {
           SCOPED_TIMER("model load");
@@ -665,6 +661,7 @@ void Engine::Run() {
           }
         }).detach();
       }
+      InputContext::dropped_file_queue.clear();
     }
 
     camera.Update(window, delta_time);
@@ -673,11 +670,9 @@ void Engine::Run() {
       glfwSetWindowShouldClose(window, true);
     }
 
-    editor.Update(physics_context, scene_manager, camera);
+    editor.Update(physics_context, scene_manager, texture_manager, camera);
 
     light_manager.UpdateMatrices(camera.position);
-
-    scene_manager.UpdateInstances();
 
     UpdatePhysicsContext(scene_manager.as_descriptor_set, physics_context);
 

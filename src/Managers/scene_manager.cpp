@@ -6,6 +6,7 @@
 #include "Managers/texture_manager.h"
 #include "Parsers/asset.h"
 #include "Parsers/model.h"
+#include "UI/console.h"
 #include "fmt/format.h"
 #include "types.h"
 #include <cassert>
@@ -42,15 +43,13 @@ void SceneManager::Init(DescriptorBuilder &descriptor_builder) {
                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                VMA_MEMORY_USAGE_GPU_ONLY, index_buffer);
 
-  CreateTopLevelAS(0, 0, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR,
-                   top_level_as);
+  CreateTopLevelAS(0, 0, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR, top_level_as);
 
   descriptor_builder.BindStorageBuffer(0, object_buffer.buffer);
   descriptor_builder.BindStorageBuffer(1, mesh_buffer.buffer);
   descriptor_builder.BindStorageBuffer(2, sphere_bounds_buffer.buffer);
   descriptor_builder.BindStorageBuffer(3, index_buffer.buffer);
-  descriptor_builder.Build(VK_SHADER_STAGE_ALL, object_descriptor_set,
-                           object_descriptor_layout);
+  descriptor_builder.Build(VK_SHADER_STAGE_ALL, object_descriptor_set, object_descriptor_layout);
 
   descriptor_builder.BindStorageBuffer(0, instance_buffer.buffer);
   descriptor_builder.Build(VK_SHADER_STAGE_ALL, instance_descriptor_set,
@@ -60,18 +59,16 @@ void SceneManager::Init(DescriptorBuilder &descriptor_builder) {
   descriptor_builder.Build(VK_SHADER_STAGE_ALL, as_descriptor_set, as_descriptor_layout);
 }
 
-void SceneManager::AddSceneNode(SceneNodeData &root_node,
-                                TextureManager &texture_manager) {
+void SceneManager::AddSceneNode(SceneNodeData &root_node, TextureManager &texture_manager) {
   root_scene_nodes.push_back({});
-  SceneNode &new_node = root_scene_nodes.back(); 
+  SceneNode &new_node = root_scene_nodes.back();
   new_node.children.reserve(root_node.children.size() + root_node.mesh_data.primitives.size());
   new_node.name = fmt::format("Instance ({})", root_scene_nodes.size() - 1);
 
   for (auto &primitive_data : root_node.mesh_data.primitives) {
     SceneNode new_child_node{};
     new_child_node.instance_index =
-        AddObject(primitive_data,
-                  texture_manager.UploadMaterial(primitive_data.material_data));
+        AddObject(primitive_data, texture_manager.UploadMaterial(primitive_data.material_data));
     new_node.children.push_back(new_child_node);
     new_node.name = fmt::format("Primitive ({})", new_node.children.size() - 1);
   }
@@ -81,8 +78,8 @@ void SceneManager::AddSceneNode(SceneNodeData &root_node,
   }
 }
 
-void SceneManager::AddChildSceneNode(SceneNodeData &root_node,
-                                     TextureManager &texture_manager, SceneNode &parent) {
+void SceneManager::AddChildSceneNode(SceneNodeData &root_node, TextureManager &texture_manager,
+                                     SceneNode &parent) {
   parent.children.push_back({});
   SceneNode &new_node = parent.children.back();
   new_node.children.reserve(root_node.children.size() + root_node.mesh_data.primitives.size());
@@ -91,8 +88,7 @@ void SceneManager::AddChildSceneNode(SceneNodeData &root_node,
   for (auto &primitive_data : root_node.mesh_data.primitives) {
     SceneNode new_child_node{};
     new_child_node.instance_index =
-        AddObject(primitive_data,
-                  texture_manager.UploadMaterial(primitive_data.material_data));
+        AddObject(primitive_data, texture_manager.UploadMaterial(primitive_data.material_data));
     new_child_node.name = fmt::format("Primitive ({})", new_node.children.size());
     new_node.children.push_back(new_child_node);
   }
@@ -102,8 +98,7 @@ void SceneManager::AddChildSceneNode(SceneNodeData &root_node,
   }
 }
 
-uint32_t SceneManager::_AddObject(AssetData &asset_data,
-                                  Material material) {
+uint32_t SceneManager::_AddObject(AssetData &asset_data, Material material) {
   uint32_t index;
   uint32_t indice_index;
   {
@@ -117,8 +112,8 @@ uint32_t SceneManager::_AddObject(AssetData &asset_data,
   assert(index < SCENE_MAX_OBJECTS && "Reached max object for the scene");
 
   const size_t index_buffer_size = asset_data.indices.size() * sizeof(uint32_t);
-  UpdateBufferAsync(asset_data.indices.data(), index_buffer_size,
-                    sizeof(uint32_t) * indice_index, index_buffer);
+  UpdateBufferAsync(asset_data.indices.data(), index_buffer_size, sizeof(uint32_t) * indice_index,
+                    index_buffer);
 
   Object object{};
   object.material = material;
@@ -168,8 +163,7 @@ uint32_t SceneManager::_AddObject(AssetData &asset_data,
   return index;
 }
 
-uint32_t SceneManager::AddObject(PrimitiveData &mesh_data,
-                                 Material material) {
+uint32_t SceneManager::AddObject(PrimitiveData &mesh_data, Material material) {
   uint32_t index;
   uint32_t indice_index;
   {
@@ -183,15 +177,15 @@ uint32_t SceneManager::AddObject(PrimitiveData &mesh_data,
   assert(index < SCENE_MAX_OBJECTS && "Reached max object for the scene");
 
   const size_t index_buffer_size = mesh_data.indices.size() * sizeof(uint32_t);
-  UpdateBufferAsync(mesh_data.indices.data(), index_buffer_size,
-                    sizeof(uint32_t) * indice_index, index_buffer);
+  UpdateBufferAsync(mesh_data.indices.data(), index_buffer_size, sizeof(uint32_t) * indice_index,
+                    index_buffer);
 
   Object object{};
   object.material = material;
   UpdateBufferAsync(&object, sizeof(Object), index * sizeof(Object), object_buffer);
 
-  UpdateBufferAsync(&mesh_data.sphere_bounds, sizeof(SphereBounds),
-                    index * sizeof(SphereBounds), sphere_bounds_buffer);
+  UpdateBufferAsync(&mesh_data.sphere_bounds, sizeof(SphereBounds), index * sizeof(SphereBounds),
+                    sphere_bounds_buffer);
 
   UpdateBufferAsync(&mesh_data.aabb_bounds, sizeof(AabbBounds), index * sizeof(AabbBounds),
                     aabb_bounds_buffer);
@@ -290,25 +284,27 @@ void SceneManager::RecreateTopLevelAS() {
 }
 
 void SceneManager::UpdateInstance(glm::mat4 new_matrix, uint32_t index) {
+  std::lock_guard<std::mutex> lock(instance_mutex);
   instances[index].matrix = new_matrix;
-  changed_instances.push(index);
+  changed_instances.push_back(index);
 }
 
 void SceneManager::UpdateInstances() {
-  if (changed_instances.size() == 0)
+  if (changed_instances.empty())
     return;
   std::thread([&]() {
+    std::lock_guard<std::mutex> lock(instance_mutex);
     for (uint32_t i = 0; i < changed_instances.size(); i++) {
-      uint32_t instance_index = changed_instances.front();
+      uint32_t instance_index = changed_instances[i];
 
       VkTransformMatrixKHR transform_matrix = Mat4ToVkTransform(instances[instance_index].matrix);
 
       UpdateBufferAsync(&transform_matrix, sizeof(VkTransformMatrixKHR),
                         instance_index * sizeof(VkAccelerationStructureInstanceKHR),
                         instance_buffer);
-
-      changed_instances.pop();
     }
+
+    changed_instances.clear();
 
     RecreateTopLevelAS();
   }).detach();
@@ -361,8 +357,7 @@ void SceneManager::Serialize(std::filesystem::path file_path) {
   file.close();
 }
 
-void SceneManager::Deserialize(TextureManager &texture_manager,
-                               std::filesystem::path file_path) {
+void SceneManager::Deserialize(TextureManager &texture_manager, std::filesystem::path file_path) {
   std::ifstream file(file_path.string(), std::ios::ate | std::ios::binary);
   if (!file.is_open()) {
     fmt::println("[ERROR], failed to desrialize scene");

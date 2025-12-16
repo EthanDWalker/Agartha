@@ -2,12 +2,15 @@
 #include "Backend/buffer.h"
 #include "Backend/context.h"
 #include "Backend/descriptors.h"
+#include "Backend/immediate_submit.h"
 #include "Backend/pipeline.h"
 #include "Parsers/model.h"
 #include "camera.h"
 #include "input.h"
 #include <cassert>
+#include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/vec3.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -46,11 +49,32 @@ void TransformationWidget::Create(DescriptorBuilder &descriptor_builder, Camera 
   pipeline_builder.AddDescriptorSetLayout(camera.descriptor_layout);
   pipeline_builder.AddPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(glm::mat4));
   pipeline_builder.Build(draw_pipeline);
+
+  CreateBuffer(sizeof(glm::vec4) * TRANSFORMATION_DIRECTION_COUNT, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+               VMA_MEMORY_USAGE_CPU_TO_GPU, color_upload_buffer);
+  memcpy(color_upload_buffer.info.pMappedData, DIRECTION_COLORS, color_upload_buffer.info.size);
 }
 
 bool TransformationWidget::Using() { return selected_direction != TransformationDirections::COUNT; }
 
 void TransformationWidget::Hide() { matrix = glm::mat4(0.0f); }
+
+void TransformationWidget::UpdateColorBuffer() {
+  memcpy(color_upload_buffer.info.pMappedData, DIRECTION_COLORS,
+         sizeof(glm::vec4) * TRANSFORMATION_DIRECTION_COUNT);
+
+  if (selected_direction != TransformationDirections::COUNT) {
+    memcpy((glm::vec4 *)color_upload_buffer.info.pMappedData + selected_direction, &SELECTED_COLOR,
+           sizeof(glm::vec4));
+  }
+
+  ImmediateSubmit::Submit([&](VkCommandBuffer cmd) {
+    VkBufferCopy buffer_copy{};
+    buffer_copy.size = color_upload_buffer.info.size;
+
+    vkCmdCopyBuffer(cmd, color_upload_buffer.buffer, color_buffer.buffer, 1, &buffer_copy);
+  });
+}
 
 void TransformationWidget::Update(Camera &camera, glm::vec2 mouse_pos) {
   if (matrix == glm::mat4(0.0f))
@@ -63,27 +87,29 @@ void TransformationWidget::Update(Camera &camera, glm::vec2 mouse_pos) {
     selected_mode = TransformationMode::SCALE;
   }
 
-  if (!InputContext::GetInputHeld(Input::MOUSE_LEFT)) {
-    selected_direction = TransformationDirections::COUNT;
-    return;
-  }
-
   glm::mat4 view_proj = camera.buffer_data.projection_matrix * camera.buffer_data.view_matrix;
 
   if (selected_direction == TransformationDirections::COUNT) {
     float closest_z = 1.0f;
     for (uint32_t i = 0; i < TRANSFORMATION_DIRECTION_COUNT; i++) {
-      glm::vec4 bounds_world_min = matrix * (DIRECTION_INSTANCES[i] * glm::vec4(bounds_min, 1.0));
-
-      glm::vec4 bounds_world_max = matrix * (DIRECTION_INSTANCES[i] * glm::vec4(bounds_max, 1.0));
+      glm::vec4 bounds_world_min =
+          draw_matrix * (DIRECTION_INSTANCES[i] * glm::vec4(bounds_min, 1.0));
+      glm::vec4 bounds_world_max =
+          draw_matrix * (DIRECTION_INSTANCES[i] * glm::vec4(bounds_max, 1.0));
 
       glm::vec4 bounds_ndc_min = view_proj * bounds_world_min;
       bounds_ndc_min /= bounds_ndc_min.w;
       glm::vec4 bounds_ndc_max = view_proj * bounds_world_max;
       bounds_ndc_max /= bounds_ndc_max.w;
 
-      glm::vec3 pmin = glm::min(bounds_ndc_min, bounds_ndc_max);
-      glm::vec3 pmax = glm::max(bounds_ndc_min, bounds_ndc_max);
+      glm::vec3 pmin;
+      pmin.x = glm::min(bounds_ndc_min.x, bounds_ndc_max.x);
+      pmin.y = glm::min(bounds_ndc_min.y, bounds_ndc_max.y);
+      pmin.z = glm::min(bounds_ndc_min.z, bounds_ndc_max.z);
+      glm::vec3 pmax;
+      pmax.x = glm::max(bounds_ndc_min.x, bounds_ndc_max.x);
+      pmax.y = glm::max(bounds_ndc_min.y, bounds_ndc_max.y);
+      pmax.z = glm::max(bounds_ndc_min.z, bounds_ndc_max.z);
 
       if (glm::all(glm::lessThan(mouse_pos, glm::vec2(pmax))) &&
           glm::all(glm::greaterThan(mouse_pos, glm::vec2(pmin))) && closest_z > pmax.z) {
@@ -91,9 +117,17 @@ void TransformationWidget::Update(Camera &camera, glm::vec2 mouse_pos) {
         closest_z = pmax.z;
       }
     }
+
+    UpdateColorBuffer();
+
     if (selected_direction == TransformationDirections::COUNT) {
       return;
     }
+  }
+
+  if (!InputContext::GetInputHeld(Input::MOUSE_LEFT)) {
+    selected_direction = TransformationDirections::COUNT;
+    return;
   }
 
   switch (selected_mode) {
@@ -168,18 +202,41 @@ void TransformationWidget::Update(Camera &camera, glm::vec2 mouse_pos) {
     break;
   }
   case (TransformationMode::SCALE): {
-    glm::vec4 widget_pos =
-        view_proj * matrix *
-        (DIRECTION_INSTANCES[selected_direction] * glm::vec4(glm::vec3(0.0f), 1.0f));
-    widget_pos /= widget_pos.w;
+    glm::mat4 inv_view_proj = glm::inverse(view_proj);
+    glm::vec2 ndc = mouse_pos;
 
-    glm::vec2 direction = glm::vec2(widget_pos) - mouse_pos;
-    const float scale_factor =
-        glm::length(direction) *
-            glm::sign(abs(direction.x) > abs(direction.y) ? direction.x : direction.y) +
-        1.0f;
-    matrix[selected_direction][selected_direction] =
-        sqrt(matrix[selected_direction][selected_direction]) * scale_factor;
+    glm::vec4 near_clip = glm::vec4(ndc, 0.0f, 1.0f);
+    glm::vec4 far_clip = glm::vec4(ndc, 1.0f, 1.0f);
+
+    glm::vec4 near_world4 = inv_view_proj * near_clip;
+    glm::vec4 far_world4 = inv_view_proj * far_clip;
+
+    glm::vec3 near_world = glm::vec3(near_world4) / near_world4.w;
+    glm::vec3 far_world = glm::vec3(far_world4) / far_world4.w;
+
+    glm::vec3 ray_origin = near_world;
+    glm::vec3 ray_dir = glm::normalize(far_world - near_world);
+
+    glm::vec3 plane_normal = DIRECTION_PLANES[selected_direction];
+    glm::vec3 plane_point = matrix * glm::vec4(glm::vec3(0.0f), 1.0f);
+    glm::vec3 widget_offset =
+        DIRECTION_INSTANCES[selected_direction] * glm::vec4(glm::vec3(0.0f), 1.0f);
+
+    float denom = glm::dot(ray_dir, plane_normal);
+
+    float t = glm::dot(plane_point - ray_origin, plane_normal) / denom;
+    glm::vec3 intersection = ray_origin + t * ray_dir;
+
+    float scale_factor = intersection[selected_direction];
+
+    if (InputContext::GetInputHeld(Input::LEFT_SHIFT)) {
+      for (uint8_t i = 0; i < 3; i++) {
+        matrix[i][i] = plane_point[i] - intersection[i];
+      }
+    } else {
+      matrix[selected_direction][selected_direction] =
+          (plane_point[selected_direction] - intersection[selected_direction]);
+    }
     break;
   }
   default: {
@@ -204,8 +261,10 @@ void TransformationWidget::Draw(VkCommandBuffer cmd, Camera &camera) {
 
   vkCmdBindIndexBuffer(cmd, index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
+  draw_matrix[3] = matrix[3];
+
   vkCmdPushConstants(cmd, draw_pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
-                     &matrix);
+                     &draw_matrix);
 
   vkCmdDrawIndexed(cmd, index_buffer.info.size / sizeof(uint32_t), TRANSFORMATION_DIRECTION_COUNT,
                    0, 0, 0);
@@ -217,5 +276,6 @@ void TransformationWidget::Destroy() {
   DestroyBuffer(vertex_buffer);
   DestroyBuffer(index_buffer);
   DestroyBuffer(color_buffer);
+  DestroyBuffer(color_upload_buffer);
   vkDestroyDescriptorSetLayout(VulkanContext::device, descriptor_layout, nullptr);
 }

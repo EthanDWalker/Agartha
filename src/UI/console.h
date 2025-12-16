@@ -11,9 +11,11 @@ struct Console {
   static const uint32_t MAX_LOGS = 100;
   static std::mutex log_mutex;
   static std::queue<std::string> logs;
+  static size_t index;
 
   template <typename... T> static void Log(const fmt::format_string<T...> fmt_string, T &&...args) {
     std::lock_guard<std::mutex> lock(log_mutex);
+    index++;
     logs.push(fmt::format(fmt_string, std::forward<T>(args)...));
     if (logs.size() > MAX_LOGS) {
       logs.pop();
@@ -31,8 +33,8 @@ struct Console {
                             ImGuiChildFlags_NavFlattened | ImGuiChildFlags_FrameStyle,
                             ImGuiWindowFlags_HorizontalScrollbar)) {
         std::lock_guard<std::mutex> lock(log_mutex);
-        for (uint32_t i = 0; i < logs.size(); i++) {
-          ImGui::TextWrapped("%s", logs._Get_container().at(i).c_str());
+        for (int32_t i = logs.size() - 1; i >= 0; --i) {
+          ImGui::TextWrapped("%zu %s", index, logs._Get_container().at(i).c_str());
         }
       }
       ImGui::EndChild();

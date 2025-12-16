@@ -36,7 +36,7 @@ struct SceneManager {
   std::vector<Instance> instances;
   std::vector<SceneNode> root_scene_nodes;
   std::vector<MaterialData> materials;
-  std::queue<uint32_t> changed_instances;
+  std::vector<uint32_t> changed_instances;
 
   AccelerationStructure top_level_as;
 

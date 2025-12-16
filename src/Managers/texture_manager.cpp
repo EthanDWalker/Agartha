@@ -6,6 +6,7 @@
 #include "Backend/pipeline.h"
 #include "Parsers/image.h"
 #include "Parsers/model.h"
+#include "fmt/base.h"
 #include <cmath>
 #include <future>
 #include <mutex>
@@ -44,6 +45,10 @@ void TextureManager::Init(DescriptorBuilder &descriptor_builder) {
     pipeline_builder.AddDescriptorSetLayout(pack_output_descriptor_layout);
     pipeline_builder.Build(pack_pipeline);
   }
+
+  UploadTexture(DEFAULT_ALBEDO_MAP);
+  UploadTexture(DEFAULT_METALLIC_ROUGHNESS_MAP);
+  UploadTexture(DEFAULT_NORMAL_MAP);
 }
 
 void TextureManager::LoadTexture(std::string filename, AllocatedImage &image,
@@ -112,7 +117,8 @@ uint32_t TextureManager::UploadTexture(std::string filename) {
     vkUpdateDescriptorSets(VulkanContext::device, 1, &write, 0, nullptr);
   }).detach();
 
-  return texture_index++;
+  texture_index++;
+  return index;
 };
 
 uint32_t TextureManager::AddAllocatedImage(AllocatedImage &image) {
@@ -155,7 +161,8 @@ Material TextureManager::UploadMaterial(MaterialData &data) {
   {
     std::lock_guard<std::mutex> lock(texture_mutex);
     if (texture_indices.find(data.albedo) != texture_indices.end() &&
-        texture_indices.find(data.normal) != texture_indices.end()) {
+        texture_indices.find(data.normal) != texture_indices.end() && !data.albedo.empty() &&
+        !data.normal.empty()) {
       material.albedo_ao = texture_indices[data.albedo];
       material.mr_normal = texture_indices[data.normal];
       return material;
@@ -164,8 +171,10 @@ Material TextureManager::UploadMaterial(MaterialData &data) {
 
   std::vector<std::future<void>> futures{};
   futures.push_back(std::async(std::launch::async, [&]() {
-    if (data.albedo.empty())
+    if (data.albedo.empty()) {
+      albedo = texture_data[texture_indices[DEFAULT_ALBEDO_MAP]];
       return;
+    }
     LoadTexture(data.albedo, albedo);
   }));
   futures.push_back(std::async(std::launch::async, [&]() {
@@ -174,13 +183,17 @@ Material TextureManager::UploadMaterial(MaterialData &data) {
     LoadTexture(data.ambient_occlusion, ao);
   }));
   futures.push_back(std::async(std::launch::async, [&]() {
-    if (data.metal_roughness.empty())
+    if (data.metal_roughness.empty()) {
+      mr = texture_data[texture_indices[DEFAULT_METALLIC_ROUGHNESS_MAP]];
       return;
+    }
     LoadTexture(data.metal_roughness, mr);
   }));
   futures.push_back(std::async(std::launch::async, [&]() {
-    if (data.normal.empty())
+    if (data.normal.empty()) {
+      normal = texture_data[texture_indices[DEFAULT_NORMAL_MAP]];
       return;
+    }
     LoadTexture(data.normal, normal);
   }));
 
@@ -244,17 +257,25 @@ Material TextureManager::UploadMaterial(MaterialData &data) {
       GenerateMipmaps(cmd, mr_normal);
     });
 
-    vmaDestroyImage(VulkanContext::allocator, albedo.image, albedo.allocation);
-    vkDestroyImageView(VulkanContext::device, albedo.image_view, nullptr);
+    if (!data.albedo.empty()) {
+      vmaDestroyImage(VulkanContext::allocator, albedo.image, albedo.allocation);
+      vkDestroyImageView(VulkanContext::device, albedo.image_view, nullptr);
+    }
 
-    vmaDestroyImage(VulkanContext::allocator, ao.image, ao.allocation);
-    vkDestroyImageView(VulkanContext::device, ao.image_view, nullptr);
+    if (!data.ambient_occlusion.empty()) {
+      vmaDestroyImage(VulkanContext::allocator, ao.image, ao.allocation);
+      vkDestroyImageView(VulkanContext::device, ao.image_view, nullptr);
+    }
 
-    vmaDestroyImage(VulkanContext::allocator, normal.image, normal.allocation);
-    vkDestroyImageView(VulkanContext::device, normal.image_view, nullptr);
+    if (!data.normal.empty()) {
+      vmaDestroyImage(VulkanContext::allocator, normal.image, normal.allocation);
+      vkDestroyImageView(VulkanContext::device, normal.image_view, nullptr);
+    }
 
-    vmaDestroyImage(VulkanContext::allocator, mr.image, mr.allocation);
-    vkDestroyImageView(VulkanContext::device, mr.image_view, nullptr);
+    if (!data.metal_roughness.empty()) {
+      vmaDestroyImage(VulkanContext::allocator, mr.image, mr.allocation);
+      vkDestroyImageView(VulkanContext::device, mr.image_view, nullptr);
+    }
   }).detach();
 
   return material;
