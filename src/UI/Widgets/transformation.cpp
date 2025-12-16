@@ -18,7 +18,7 @@
 
 void TransformationWidget::Create(DescriptorBuilder &descriptor_builder, Camera &camera,
                                   VkFormat draw_format) {
-  std::vector<SceneNodeData> gltf_data = ParseModel("../assets/models/TransformationWidget.gltf");
+  std::vector<SceneNodeData> gltf_data = ParseModel("../assets/models/cube.gltf");
   PrimitiveData mesh_data = gltf_data.back().children.back().mesh_data.primitives.back();
 
   CreateBufferData(mesh_data.indices.data(), sizeof(uint32_t) * mesh_data.indices.size(),
