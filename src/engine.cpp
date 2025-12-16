@@ -639,7 +639,7 @@ void Engine::Init() {
 
 void Engine::Run() {
   InputContext::dropped_file_queue.push_back(
-      std::filesystem::path("C:/Users/ethan/Developer/Agartha/assets/models/Sponza.gltf"));
+      std::filesystem::path("../assets/models/Sponza.gltf"));
 
   while (!glfwWindowShouldClose(window)) {
     Timer timer{};
