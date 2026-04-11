@@ -5,6 +5,7 @@
 #include "Backend/immediate_submit.h"
 #include "Backend/init.h"
 #include "Backend/pipeline.h"
+#include "Managers/light_manager.h"
 #include "Managers/scene_manager.h"
 #include "Physics/context.h"
 #include "UI/console.h"
@@ -297,7 +298,7 @@ void Editor::SceneList(SceneManager &scene_manager) {
 }
 
 void Editor::Update(PhysicsContext &physics_context, SceneManager &scene_manager,
-                    TextureManager &texture_manager, Camera &camera) {
+                    TextureManager &texture_manager, LightManager &light_manager, Camera &camera) {
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplGlfw_NewFrame();
 
@@ -327,6 +328,9 @@ void Editor::Update(PhysicsContext &physics_context, SceneManager &scene_manager
   ImGui::End();
 
   if (ImGui::Begin("Scene Manager")) {
+    static glm::vec3 direction;
+    ImGui::DragFloat3("Directional Light", (float *)&direction);
+    light_manager.UpdateDirectionalLight(direction, 0);
     if (ImGui::Button("Add Cube")) {
       SceneNodeData cube_data = Primitives::GetCubeData();
       scene_manager.AddSceneNode(cube_data, texture_manager);

@@ -5,6 +5,7 @@
 #include "Backend/descriptors.h"
 #include "Backend/indirect_draw.h"
 #include "Managers/scene_manager.h"
+#include "Managers/light_manager.h"
 #include "Physics/context.h"
 #include "UI/Widgets/transformation.h"
 #include "UI/context.h"
@@ -37,7 +38,7 @@ struct Editor {
             VkFormat swapchain_format);
 
   void Update(PhysicsContext &physics_context, SceneManager &scene_manager,
-              TextureManager &texture_manager, Camera &camera);
+              TextureManager &texture_manager, LightManager &light_manager, Camera &camera);
 
   void Resize(AllocatedImage &main_image);
 

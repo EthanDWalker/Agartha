@@ -638,8 +638,7 @@ void Engine::Init() {
 }
 
 void Engine::Run() {
-  InputContext::dropped_file_queue.push_back(
-      std::filesystem::path("../assets/models/Sponza.gltf"));
+  InputContext::dropped_file_queue.push_back(std::filesystem::path("../assets/models/Sponza.gltf"));
 
   while (!glfwWindowShouldClose(window)) {
     Timer timer{};
@@ -670,7 +669,7 @@ void Engine::Run() {
       glfwSetWindowShouldClose(window, true);
     }
 
-    editor.Update(physics_context, scene_manager, texture_manager, camera);
+    editor.Update(physics_context, scene_manager, texture_manager, light_manager, camera);
 
     light_manager.UpdateMatrices(camera.position);
 
